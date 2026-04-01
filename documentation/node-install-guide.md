@@ -51,7 +51,7 @@ That build:
 Example output:
 
 ```text
-release/switchboard-0.1.1-py3-none-any.whl
+release/switchboard-0.1.2-py3-none-any.whl
 ```
 
 ## Publish The Release
@@ -65,9 +65,9 @@ Recommended path:
 Example:
 
 ```bash
-gh release create v0.1.1 release/switchboard-0.1.1-py3-none-any.whl \
-  --title "Switchboard v0.1.1" \
-  --notes "Runtime config and node-sync groundwork."
+gh release create v0.1.2 release/switchboard-0.1.2-py3-none-any.whl \
+  --title "Switchboard v0.1.2" \
+  --notes "Simple startup launcher and node runtime commands."
 ```
 
 ## Install A Node Tool On The Target Machine
@@ -82,7 +82,7 @@ Prerequisites:
 Install in one step:
 
 ```bash
-uv tool install /path/to/switchboard-0.1.1-py3-none-any.whl --force
+uv tool install /path/to/switchboard-0.1.2-py3-none-any.whl --force
 ```
 
 That installs the `switchboard` CLI and all Python dependencies. No `npm` install is needed on the node machine.

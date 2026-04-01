@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.2
+
+- added a single interactive startup entrypoint with `run.sh` / `start.sh`
+- added package-level node runtime commands:
+  - `switchboard node start`
+  - `switchboard node stop`
+  - `switchboard node status`
+  - `switchboard node logs`
+- added generated `switchboard/start.sh` and `switchboard/run.sh` inside node installs
+- changed node startup so background runtime state is stored under `switchboard/runtime/`
+- kept foreground `switchboard node serve` available only for direct terminal use
+
 ## 0.1.1
 
 - added per-location runtime config for expected ports, health-check commands, run-command hints, monitoring mode, and notes
