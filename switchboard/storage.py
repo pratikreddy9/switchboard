@@ -1,0 +1,370 @@
+"""Snapshot and private-state persistence."""
+
+from __future__ import annotations
+
+import json
+import shutil
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from .config import Settings
+from .manifests import ManifestStore
+
+
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def archive_token(timestamp: str) -> str:
+    return timestamp.replace(":", "-")
+
+
+def read_json(path: Path, default: Any) -> Any:
+    if not path.exists():
+        return default
+    with path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def write_json(path: Path, value: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(value, handle, indent=2, sort_keys=False)
+        handle.write("\n")
+
+
+class SnapshotStore:
+    def __init__(self, settings: Settings, manifests: ManifestStore) -> None:
+        self.settings = settings
+        self.manifests = manifests
+
+    def seed_flat_files(self) -> dict[str, Any]:
+        generated = utc_now_iso()
+        workspaces = self.manifests.load_workspaces()
+        services = self.manifests.load_services()
+        servers = self.manifests.load_servers()
+
+        workspace_registry = {
+            "generated": generated,
+            "workspaces": [
+                {
+                    **workspace.model_dump(mode="json"),
+                    "service_count": len([service for service in services if service.workspace_id == workspace.workspace_id]),
+                    "last_status": "unverified",
+                }
+                for workspace in workspaces
+            ],
+        }
+        server_registry = {
+            "generated": generated,
+            "servers": [
+                {**server.model_dump(mode="json"), "last_status": "unverified"}
+                for server in servers
+            ],
+        }
+        service_inventory = {
+            "generated": generated,
+            "services": [
+                {**service.model_dump(mode="json"), "last_status": "unverified"}
+                for service in services
+            ],
+        }
+        repo_inventory = {"generated": generated, "repos": []}
+        docs_index = {"generated": generated, "files": []}
+        logs_index = {"generated": generated, "files": []}
+        run_history = {"generated": generated, "runs": []}
+        pull_bundle_history = {"generated": generated, "bundles": []}
+        repo_safety_history = {"generated": generated, "checks": []}
+        secret_index = {"generated": generated, "entries": []}
+
+        write_json(self.settings.evidence_dir / "workspace-registry.json", workspace_registry)
+        write_json(self.settings.evidence_dir / "server-registry.json", server_registry)
+        write_json(self.settings.evidence_dir / "service-inventory.json", service_inventory)
+        write_json(self.settings.evidence_dir / "repo-inventory.json", repo_inventory)
+        write_json(self.settings.evidence_dir / "docs-index.json", docs_index)
+        write_json(self.settings.evidence_dir / "logs-index.json", logs_index)
+        write_json(self.settings.evidence_dir / "run-history.json", run_history)
+        write_json(self.settings.evidence_dir / "pull-bundle-history.json", pull_bundle_history)
+        write_json(self.settings.evidence_dir / "repo-safety-history.json", repo_safety_history)
+        write_json(self.settings.private_state_dir / "secret-path-index.json", secret_index)
+        write_json(self.settings.private_state_dir / "repo-safety-findings.json", {"generated": generated, "checks": []})
+        write_json(self.settings.private_state_dir / "runtime-cache.json", {"generated": generated, "cache": {}})
+        return {
+            "workspace_registry": workspace_registry,
+            "server_registry": server_registry,
+            "service_inventory": service_inventory,
+        }
+
+    def persist_collect_snapshot(self, snapshot: dict[str, Any]) -> dict[str, Any]:
+        generated = snapshot["generated"]
+        workspace_id = snapshot["workspace"]["workspace_id"]
+        token = archive_token(generated)
+        archive_root = self.settings.archive_dir / token
+        archive_root.mkdir(parents=True, exist_ok=True)
+
+        workspace_snapshot_path = archive_root / f"workspace-{workspace_id}.json"
+        write_json(workspace_snapshot_path, snapshot)
+
+        run_history_path = self.settings.evidence_dir / "run-history.json"
+        run_history = read_json(run_history_path, {"generated": generated, "runs": []})
+        run_history["generated"] = generated
+        run_history["runs"].insert(
+            0,
+            {
+                "workspace_id": workspace_id,
+                "generated": generated,
+                "archive_path": str(workspace_snapshot_path.relative_to(self.settings.evidence_dir.parent)),
+                "status": snapshot["summary"]["status"],
+                "service_count": snapshot["summary"]["service_count"],
+                "server_count": snapshot["summary"]["server_count"],
+            },
+        )
+        write_json(run_history_path, run_history)
+
+        repo_entries = snapshot.get("repo_inventory", [])
+        docs_entries = snapshot.get("docs_index", [])
+        logs_entries = snapshot.get("logs_index", [])
+        secret_entries = snapshot.get("secret_path_index", [])
+
+        write_json(
+            self.settings.evidence_dir / "repo-inventory.json",
+            {"generated": generated, "repos": repo_entries},
+        )
+        write_json(
+            self.settings.evidence_dir / "docs-index.json",
+            {"generated": generated, "files": docs_entries},
+        )
+        write_json(
+            self.settings.evidence_dir / "logs-index.json",
+            {"generated": generated, "files": logs_entries},
+        )
+        write_json(
+            self.settings.private_state_dir / "secret-path-index.json",
+            {"generated": generated, "entries": secret_entries},
+        )
+
+        latest_server_status = {item["server_id"]: item["status"] for item in snapshot["servers"]}
+        latest_service_status = {item["service_id"]: item["status"] for item in snapshot["services"]}
+
+        workspaces = self.manifests.load_workspaces()
+        services = self.manifests.load_services()
+        servers = self.manifests.load_servers()
+
+        write_json(
+            self.settings.evidence_dir / "workspace-registry.json",
+            {
+                "generated": generated,
+                "workspaces": [
+                    {
+                        **workspace.model_dump(mode="json"),
+                        "service_count": len(
+                            [service for service in services if service.workspace_id == workspace.workspace_id]
+                        ),
+                        "last_status": snapshot["summary"]["status"]
+                        if workspace.workspace_id == workspace_id
+                        else "unverified",
+                    }
+                    for workspace in workspaces
+                ],
+            },
+        )
+        write_json(
+            self.settings.evidence_dir / "server-registry.json",
+            {
+                "generated": generated,
+                "servers": [
+                    {
+                        **server.model_dump(mode="json"),
+                        "last_status": latest_server_status.get(server.server_id, "unverified"),
+                    }
+                    for server in servers
+                ],
+            },
+        )
+        write_json(
+            self.settings.evidence_dir / "service-inventory.json",
+            {
+                "generated": generated,
+                "services": [
+                    {
+                        **service.model_dump(mode="json"),
+                        "last_status": latest_service_status.get(service.service_id, "unverified"),
+                    }
+                    for service in services
+                ],
+            },
+        )
+        return snapshot
+
+    def get_workspace_runs(self, workspace_id: str) -> list[dict[str, Any]]:
+        history = read_json(self.settings.evidence_dir / "run-history.json", {"runs": []})
+        return [entry for entry in history.get("runs", []) if entry.get("workspace_id") == workspace_id]
+
+    def get_workspace_latest(self, workspace_id: str) -> dict[str, Any] | None:
+        runs = self.get_workspace_runs(workspace_id)
+        if not runs:
+            return None
+        archive_path = self.settings.evidence_dir.parent / runs[0]["archive_path"]
+        snapshot = read_json(archive_path, None)
+        if snapshot is None:
+            return None
+        current_services = self.manifests.get_workspace_services(workspace_id)
+        current_ids = sorted(service.service_id for service in current_services)
+        snapshot_ids = sorted(entry.get("service_id", "") for entry in snapshot.get("services", []))
+        if current_ids != snapshot_ids:
+            return None
+        return snapshot
+
+    def get_service_secret_paths(self, service_id: str) -> dict[str, Any]:
+        data = read_json(self.settings.private_state_dir / "secret-path-index.json", {"entries": []})
+        entries = [entry for entry in data.get("entries", []) if entry.get("service_id") == service_id]
+        return {
+            "generated": data.get("generated"),
+            "service_id": service_id,
+            "count": len(entries),
+            "entries": entries,
+        }
+
+    def append_pull_bundle(self, bundle_record: dict[str, Any]) -> dict[str, Any]:
+        path = self.settings.evidence_dir / "pull-bundle-history.json"
+        history = read_json(path, {"generated": bundle_record["created_at"], "bundles": []})
+        history["generated"] = bundle_record["created_at"]
+        history["bundles"].insert(0, bundle_record)
+        write_json(path, history)
+        return bundle_record
+
+    def list_pull_bundles(self, service_id: str) -> list[dict[str, Any]]:
+        data = read_json(self.settings.evidence_dir / "pull-bundle-history.json", {"bundles": []})
+        return [entry for entry in data.get("bundles", []) if entry.get("service_id") == service_id]
+
+    def append_repo_safety_check(self, summary: dict[str, Any], findings: list[dict[str, Any]]) -> dict[str, Any]:
+        public_path = self.settings.evidence_dir / "repo-safety-history.json"
+        private_path = self.settings.private_state_dir / "repo-safety-findings.json"
+
+        public_history = read_json(public_path, {"generated": summary["generated"], "checks": []})
+        public_history["generated"] = summary["generated"]
+        public_history["checks"].insert(0, summary)
+        write_json(public_path, public_history)
+
+        private_history = read_json(private_path, {"generated": summary["generated"], "checks": []})
+        private_history["generated"] = summary["generated"]
+        private_history["checks"].insert(
+            0,
+            {
+                **summary,
+                "findings": findings,
+            },
+        )
+        write_json(private_path, private_history)
+        return summary
+
+    def get_repo_safety_history(self, service_id: str) -> list[dict[str, Any]]:
+        data = read_json(self.settings.evidence_dir / "repo-safety-history.json", {"checks": []})
+        return [entry for entry in data.get("checks", []) if entry.get("service_id") == service_id]
+
+    def delete_service_data(self, service_id: str, workspace_id: str) -> dict[str, Any]:
+        generated = utc_now_iso()
+
+        def _filter_records(path: Path, key: str) -> None:
+            data = read_json(path, {"generated": generated, key: []})
+            data["generated"] = generated
+            data[key] = [entry for entry in data.get(key, []) if entry.get("service_id") != service_id]
+            write_json(path, data)
+
+        _filter_records(self.settings.evidence_dir / "service-inventory.json", "services")
+        _filter_records(self.settings.evidence_dir / "repo-inventory.json", "repos")
+        _filter_records(self.settings.evidence_dir / "docs-index.json", "files")
+        _filter_records(self.settings.evidence_dir / "logs-index.json", "files")
+        _filter_records(self.settings.evidence_dir / "pull-bundle-history.json", "bundles")
+        _filter_records(self.settings.evidence_dir / "repo-safety-history.json", "checks")
+        _filter_records(self.settings.private_state_dir / "secret-path-index.json", "entries")
+        _filter_records(self.settings.private_state_dir / "repo-safety-findings.json", "checks")
+
+        downloads_root = self.settings.downloads_dir / workspace_id / service_id
+        if downloads_root.exists():
+            shutil.rmtree(downloads_root)
+
+        history_path = self.settings.evidence_dir / "run-history.json"
+        history = read_json(history_path, {"generated": generated, "runs": []})
+        history["generated"] = generated
+        for run in history.get("runs", []):
+            if run.get("workspace_id") != workspace_id or not run.get("archive_path"):
+                continue
+            archive_path = self.settings.evidence_dir.parent / run["archive_path"]
+            snapshot = read_json(archive_path, None)
+            if snapshot is None:
+                continue
+            services = [entry for entry in snapshot.get("services", []) if entry.get("service_id") != service_id]
+            snapshot["services"] = services
+            snapshot["repo_inventory"] = [
+                entry for entry in snapshot.get("repo_inventory", []) if entry.get("service_id") != service_id
+            ]
+            snapshot["docs_index"] = [
+                entry for entry in snapshot.get("docs_index", []) if entry.get("service_id") != service_id
+            ]
+            snapshot["logs_index"] = [
+                entry for entry in snapshot.get("logs_index", []) if entry.get("service_id") != service_id
+            ]
+            snapshot["secret_path_index"] = [
+                entry for entry in snapshot.get("secret_path_index", []) if entry.get("service_id") != service_id
+            ]
+            summary = snapshot.setdefault("summary", {})
+            if isinstance(summary, dict):
+                summary["service_count"] = len(services)
+            write_json(archive_path, snapshot)
+            if run.get("service_count") is not None:
+                run["service_count"] = len(services)
+        write_json(history_path, history)
+
+        workspaces = self.manifests.load_workspaces()
+        services = self.manifests.load_services()
+        workspace_statuses = {
+            entry.get("workspace_id"): entry.get("last_status", "unverified")
+            for entry in read_json(self.settings.evidence_dir / "workspace-registry.json", {"workspaces": []}).get(
+                "workspaces", []
+            )
+        }
+        service_statuses = {
+            entry.get("service_id"): entry.get("last_status", "unverified")
+            for entry in read_json(self.settings.evidence_dir / "service-inventory.json", {"services": []}).get(
+                "services", []
+            )
+        }
+
+        write_json(
+            self.settings.evidence_dir / "workspace-registry.json",
+            {
+                "generated": generated,
+                "workspaces": [
+                    {
+                        **workspace.model_dump(mode="json"),
+                        "service_count": len(
+                            [service for service in services if service.workspace_id == workspace.workspace_id]
+                        ),
+                        "last_status": workspace_statuses.get(workspace.workspace_id, "unverified"),
+                    }
+                    for workspace in workspaces
+                ],
+            },
+        )
+        write_json(
+            self.settings.evidence_dir / "service-inventory.json",
+            {
+                "generated": generated,
+                "services": [
+                    {
+                        **service.model_dump(mode="json"),
+                        "last_status": service_statuses.get(service.service_id, "unverified"),
+                    }
+                    for service in services
+                ],
+            },
+        )
+
+        return {
+            "deleted": True,
+            "service_id": service_id,
+            "workspace_id": workspace_id,
+            "generated": generated,
+        }

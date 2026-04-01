@@ -1,0 +1,27 @@
+{
+  "generated": "2026-04-01T03:00:00Z",
+  "workspaces": [
+    {
+      "workspace_id": "zapp",
+      "name": "ZAPP",
+      "tags": ["umbrella", "seed"],
+      "favorite_tier": "primary",
+      "servers": ["local_mac", "zapp_test_114", "zapp_prod_253"],
+      "services": ["docgenerator", "lambdalogger", "lambdascripts"],
+      "notes": "Seed workspace for document generation, lambda logging, and lambda source lanes.",
+      "service_count": 3,
+      "last_status": "unverified"
+    },
+    {
+      "workspace_id": "pesu",
+      "name": "PESU",
+      "tags": ["umbrella", "seed"],
+      "favorite_tier": "primary",
+      "servers": ["local_mac", "pesu_dev_47"],
+      "services": ["aichat", "slp", "processchat", "emailagent"],
+      "notes": "Seed workspace for the first named PESU lanes only.",
+      "service_count": 4,
+      "last_status": "unverified"
+    }
+  ]
+}

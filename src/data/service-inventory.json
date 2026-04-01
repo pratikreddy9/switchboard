@@ -1,0 +1,75 @@
+{
+  "generated": "2026-04-01T03:00:00Z",
+  "services": [
+    {
+      "service_id": "docgenerator",
+      "workspace_id": "zapp",
+      "display_name": "Document Generator",
+      "kind": "service",
+      "ownership_tier": "owned",
+      "tags": ["docs", "generator", "zapp"],
+      "favorite_tier": "primary",
+      "last_status": "unverified"
+    },
+    {
+      "service_id": "lambdalogger",
+      "workspace_id": "zapp",
+      "display_name": "Lambda Logger",
+      "kind": "service",
+      "ownership_tier": "owned",
+      "tags": ["logger", "fastapi", "zapp"],
+      "favorite_tier": "primary",
+      "last_status": "unverified"
+    },
+    {
+      "service_id": "lambdascripts",
+      "workspace_id": "zapp",
+      "display_name": "Lambda Scripts",
+      "kind": "worker",
+      "ownership_tier": "owned",
+      "tags": ["lambda", "python", "zapp"],
+      "favorite_tier": "primary",
+      "last_status": "unverified"
+    },
+    {
+      "service_id": "aichat",
+      "workspace_id": "pesu",
+      "display_name": "AI Chat",
+      "kind": "service",
+      "ownership_tier": "owned",
+      "tags": ["chat", "rag", "pesu"],
+      "favorite_tier": "primary",
+      "last_status": "unverified"
+    },
+    {
+      "service_id": "slp",
+      "workspace_id": "pesu",
+      "display_name": "SLP",
+      "kind": "service",
+      "ownership_tier": "owned",
+      "tags": ["slp", "rag", "pesu"],
+      "favorite_tier": "primary",
+      "last_status": "unverified"
+    },
+    {
+      "service_id": "processchat",
+      "workspace_id": "pesu",
+      "display_name": "Process Chat",
+      "kind": "service",
+      "ownership_tier": "owned",
+      "tags": ["processchat", "chat", "pesu"],
+      "favorite_tier": "primary",
+      "last_status": "unverified"
+    },
+    {
+      "service_id": "emailagent",
+      "workspace_id": "pesu",
+      "display_name": "Email Agent",
+      "kind": "service",
+      "ownership_tier": "owned",
+      "tags": ["email", "automation", "pesu"],
+      "favorite_tier": "primary",
+      "last_status": "unverified"
+    }
+  ]
+}

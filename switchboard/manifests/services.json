@@ -1,0 +1,628 @@
+[
+  {
+    "service_id": "docgenerator",
+    "workspace_id": "zapp",
+    "display_name": "Document Generator",
+    "kind": "service",
+    "ownership_tier": "owned",
+    "tags": [
+      "docs",
+      "generator",
+      "zapp"
+    ],
+    "favorite_tier": "primary",
+    "locations": [
+      {
+        "location_id": "docgenerator_local",
+        "server_id": "local_mac",
+        "access_mode": "local",
+        "root": "/Users/p/Desktop/work/zapp/docgenerator",
+        "role": "control_source",
+        "is_primary": true,
+        "path_aliases": []
+      },
+      {
+        "location_id": "docgenerator_test",
+        "server_id": "zapp_test_114",
+        "access_mode": "ssh",
+        "root": "/home/zappadmin/python_service/docgenerator",
+        "role": "test_runtime",
+        "is_primary": false,
+        "path_aliases": []
+      },
+      {
+        "location_id": "docgenerator_prod",
+        "server_id": "zapp_prod_253",
+        "access_mode": "ssh",
+        "root": "/home/zappadmin/python_service/docgenerator",
+        "role": "prod_runtime",
+        "is_primary": false,
+        "path_aliases": []
+      }
+    ],
+    "repo_paths": [
+      "/Users/p/Desktop/work/zapp/docgenerator",
+      "/home/zappadmin/python_service/docgenerator"
+    ],
+    "docs_paths": [
+      "/Users/p/Desktop/work/zapp/docgenerator/README.md",
+      "/home/zappadmin/python_service/docgenerator/README.md"
+    ],
+    "log_paths": [
+      "/Users/p/Desktop/work/zapp/docgenerator/docgen.log",
+      "/Users/p/Desktop/work/zapp/docgenerator/server.log",
+      "/Users/p/Desktop/work/zapp/docgenerator/uvicorn.log",
+      "/home/zappadmin/python_service/docgenerator/docgen.log",
+      "/home/zappadmin/python_service/docgenerator/server.log",
+      "/home/zappadmin/python_service/docgenerator/uvicorn.log"
+    ],
+    "allowed_git_pull_paths": [
+      "/Users/p/Desktop/work/zapp/docgenerator",
+      "/home/zappadmin/python_service/docgenerator"
+    ],
+    "exclude_globs": [
+      "generated_docs",
+      "temp_images",
+      "__pycache__"
+    ],
+    "notes": "Initial seed for doc generation runtime and source paths.",
+    "path_aliases": []
+  },
+  {
+    "service_id": "lambdalogger",
+    "workspace_id": "zapp",
+    "display_name": "Lambda Logger",
+    "kind": "service",
+    "ownership_tier": "owned",
+    "tags": [
+      "logger",
+      "fastapi",
+      "zapp"
+    ],
+    "favorite_tier": "primary",
+    "locations": [
+      {
+        "location_id": "lambdalogger_local",
+        "server_id": "local_mac",
+        "access_mode": "local",
+        "root": "/Users/p/Desktop/work/zapp/lambdalogger",
+        "role": "control_source",
+        "is_primary": true,
+        "path_aliases": []
+      },
+      {
+        "location_id": "lambdalogger_test",
+        "server_id": "zapp_test_114",
+        "access_mode": "ssh",
+        "root": "/home/zappadmin/python_service/zapplambdalogger",
+        "role": "test_runtime",
+        "is_primary": false,
+        "path_aliases": []
+      }
+    ],
+    "repo_paths": [
+      "/Users/p/Desktop/work/zapp/lambdalogger",
+      "/home/zappadmin/python_service/zapplambdalogger"
+    ],
+    "docs_paths": [
+      "/Users/p/Desktop/work/zapp/lambdalogger/README.md",
+      "/home/zappadmin/python_service/zapplambdalogger/README.md"
+    ],
+    "log_paths": [
+      "/Users/p/Desktop/work/zapp/lambdalogger/logging_service.out",
+      "/Users/p/Desktop/work/zapp/lambdalogger/runtime/events.log",
+      "/home/zappadmin/python_service/zapplambdalogger/logging_service.out",
+      "/home/zappadmin/python_service/zapplambdalogger/runtime/events.log"
+    ],
+    "allowed_git_pull_paths": [
+      "/Users/p/Desktop/work/zapp/lambdalogger",
+      "/home/zappadmin/python_service/zapplambdalogger"
+    ],
+    "exclude_globs": [
+      "runtime",
+      "__pycache__"
+    ],
+    "notes": "Logger lane for the ZAPP umbrella.",
+    "path_aliases": []
+  },
+  {
+    "service_id": "e",
+    "workspace_id": "pesu",
+    "display_name": "emailagent",
+    "kind": "service",
+    "ownership_tier": "owned",
+    "tags": [],
+    "favorite_tier": "none",
+    "locations": [
+      {
+        "location_id": "e-pesu_dev_47-primary",
+        "server_id": "pesu_dev_47",
+        "access_mode": "ssh",
+        "root": "/home/pesu/emailagent",
+        "role": "primary",
+        "is_primary": true,
+        "path_aliases": []
+      }
+    ],
+    "repo_paths": [
+      "/home/pesu/emailagent"
+    ],
+    "docs_paths": [
+      "/home/pesu/emailagent/documentation",
+      "/home/pesu/emailagent/.env",
+      "/home/pesu/emailagent/.env.test",
+      "/home/pesu/emailagent/.gitignore",
+      "/home/pesu/emailagent/AGENTS.md",
+      "/home/pesu/emailagent/categories.csv",
+      "/home/pesu/emailagent/emailagent.pid",
+      "/home/pesu/emailagent/PLAN.md",
+      "/home/pesu/emailagent/README copy.md",
+      "/home/pesu/emailagent/README.md",
+      "/home/pesu/emailagent/requirements.txt",
+      "/home/pesu/emailagent/Screenshot 2026-03-31 at 6.16.30\u202fPM.png",
+      "/home/pesu/emailagent/Screenshot 2026-03-31 at 9.54.10\u202fAM.png"
+    ],
+    "log_paths": [
+      "/home/pesu/emailagent/logs"
+    ],
+    "allowed_git_pull_paths": [
+      "/home/pesu/emailagent"
+    ],
+    "exclude_globs": [
+      "/home/pesu/emailagent/.git",
+      "/home/pesu/emailagent/platform/node_modules",
+      "/home/pesu/emailagent/venv"
+    ],
+    "scope_entries": [
+      {
+        "entry_id": "repo-f35004b712cc",
+        "kind": "repo",
+        "path": "/home/pesu/emailagent",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-8d1232e1c679",
+        "kind": "exclude",
+        "path": "/home/pesu/emailagent/.git",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-7323e2a2222d",
+        "kind": "doc",
+        "path": "/home/pesu/emailagent/documentation",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "log-495d1218fb8a",
+        "kind": "log",
+        "path": "/home/pesu/emailagent/logs",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-11125df6de17",
+        "kind": "exclude",
+        "path": "/home/pesu/emailagent/platform/node_modules",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-98a7680e95e3",
+        "kind": "exclude",
+        "path": "/home/pesu/emailagent/venv",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-5bf68682d8ed",
+        "kind": "doc",
+        "path": "/home/pesu/emailagent/.env",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-d89f725f51d4",
+        "kind": "doc",
+        "path": "/home/pesu/emailagent/.env.test",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-4359941f9a91",
+        "kind": "doc",
+        "path": "/home/pesu/emailagent/.gitignore",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-161d4dc2a3ea",
+        "kind": "doc",
+        "path": "/home/pesu/emailagent/AGENTS.md",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-5ba64220d648",
+        "kind": "doc",
+        "path": "/home/pesu/emailagent/categories.csv",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-08434510cc7d",
+        "kind": "doc",
+        "path": "/home/pesu/emailagent/emailagent.pid",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-ef949061b9a6",
+        "kind": "doc",
+        "path": "/home/pesu/emailagent/PLAN.md",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-e0242131ff0a",
+        "kind": "doc",
+        "path": "/home/pesu/emailagent/README copy.md",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-dcd63147ded4",
+        "kind": "doc",
+        "path": "/home/pesu/emailagent/README.md",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-4343659176f3",
+        "kind": "doc",
+        "path": "/home/pesu/emailagent/requirements.txt",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-8cd418fe9c8b",
+        "kind": "doc",
+        "path": "/home/pesu/emailagent/Screenshot 2026-03-31 at 6.16.30\u202fPM.png",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-fb8b752a797e",
+        "kind": "doc",
+        "path": "/home/pesu/emailagent/Screenshot 2026-03-31 at 9.54.10\u202fAM.png",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      }
+    ],
+    "repo_policies": [
+      {
+        "repo_path": "/home/pesu/emailagent",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      }
+    ],
+    "notes": "",
+    "path_aliases": []
+  },
+  {
+    "service_id": "aichat",
+    "workspace_id": "pesu",
+    "display_name": "aichat",
+    "kind": "service",
+    "ownership_tier": "owned",
+    "tags": [],
+    "favorite_tier": "none",
+    "locations": [
+      {
+        "location_id": "aichat-pesu_dev_47-primary",
+        "server_id": "pesu_dev_47",
+        "access_mode": "ssh",
+        "root": "/home/pesu/aichat",
+        "role": "primary",
+        "is_primary": true,
+        "path_aliases": []
+      }
+    ],
+    "repo_paths": [
+      "/home/pesu/aichat"
+    ],
+    "docs_paths": [
+      "/home/pesu/aichat/backend/documentation",
+      "/home/pesu/aichat/backend/.env",
+      "/home/pesu/aichat/backend/backend_8506.log2",
+      "/home/pesu/aichat/backend/Pesu logo.png",
+      "/home/pesu/aichat/backend/pesu_logo_main.png",
+      "/home/pesu/aichat/backend/README.md",
+      "/home/pesu/aichat/backend/requirements.txt",
+      "/home/pesu/aichat/documentation",
+      "/home/pesu/aichat/.env"
+    ],
+    "log_paths": [
+      "/home/pesu/aichat/backend/server_v2.log",
+      "/home/pesu/aichat/backend/streamlit_8505.log",
+      "/home/pesu/aichat/backend.log",
+      "/home/pesu/aichat/backend_8506.log"
+    ],
+    "allowed_git_pull_paths": [
+      "/home/pesu/aichat"
+    ],
+    "exclude_globs": [
+      "/home/pesu/aichat/backend/__pycache__",
+      "/home/pesu/aichat/project",
+      "/home/pesu/aichat/storage"
+    ],
+    "scope_entries": [
+      {
+        "entry_id": "repo-a23b583e270d",
+        "kind": "repo",
+        "path": "/home/pesu/aichat",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-1065d5afaa12",
+        "kind": "exclude",
+        "path": "/home/pesu/aichat/backend/__pycache__",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-57175235c920",
+        "kind": "doc",
+        "path": "/home/pesu/aichat/backend/documentation",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-99ec44b03104",
+        "kind": "doc",
+        "path": "/home/pesu/aichat/backend/.env",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-1b5b29da2f10",
+        "kind": "doc",
+        "path": "/home/pesu/aichat/backend/backend_8506.log2",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-3a5f2cbd69b4",
+        "kind": "doc",
+        "path": "/home/pesu/aichat/backend/Pesu logo.png",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-1340b78cd31b",
+        "kind": "doc",
+        "path": "/home/pesu/aichat/backend/pesu_logo_main.png",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-b506db4bf04e",
+        "kind": "doc",
+        "path": "/home/pesu/aichat/backend/README.md",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-e55cfa3c77c9",
+        "kind": "doc",
+        "path": "/home/pesu/aichat/backend/requirements.txt",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "log-00969d3fb188",
+        "kind": "log",
+        "path": "/home/pesu/aichat/backend/server_v2.log",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "log-92fe235a4477",
+        "kind": "log",
+        "path": "/home/pesu/aichat/backend/streamlit_8505.log",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-19994bdd393e",
+        "kind": "doc",
+        "path": "/home/pesu/aichat/documentation",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-ba2e3ca67bf2",
+        "kind": "exclude",
+        "path": "/home/pesu/aichat/project",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-45ad9a36ecff",
+        "kind": "exclude",
+        "path": "/home/pesu/aichat/storage",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-2f1bd3a560ca",
+        "kind": "doc",
+        "path": "/home/pesu/aichat/.env",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "log-582c471d30a3",
+        "kind": "log",
+        "path": "/home/pesu/aichat/backend.log",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "log-d13fd533b902",
+        "kind": "log",
+        "path": "/home/pesu/aichat/backend_8506.log",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      }
+    ],
+    "repo_policies": [
+      {
+        "repo_path": "/home/pesu/aichat",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      }
+    ],
+    "notes": "",
+    "path_aliases": []
+  },
+  {
+    "service_id": "zapplambda",
+    "workspace_id": "zapp",
+    "display_name": "lambdascripts",
+    "kind": "service",
+    "ownership_tier": "owned",
+    "tags": [],
+    "favorite_tier": "none",
+    "locations": [
+      {
+        "location_id": "zapplambda-local_mac-primary",
+        "server_id": "local_mac",
+        "access_mode": "local",
+        "root": "/Users/p/Desktop/work/zapp/lambdascripts",
+        "role": "primary",
+        "is_primary": true,
+        "path_aliases": []
+      }
+    ],
+    "repo_paths": [
+      "/Users/p/Desktop/work/zapp/lambdascripts"
+    ],
+    "docs_paths": [
+      "/Users/p/Desktop/work/zapp/lambdascripts/API.md",
+      "/Users/p/Desktop/work/zapp/lambdascripts/CHANGELOG.md",
+      "/Users/p/Desktop/work/zapp/lambdascripts/README.md"
+    ],
+    "log_paths": [],
+    "allowed_git_pull_paths": [
+      "/Users/p/Desktop/work/zapp/lambdascripts"
+    ],
+    "exclude_globs": [
+      "/Users/p/Desktop/work/zapp/lambdascripts/__pycache__",
+      "/Users/p/Desktop/work/zapp/lambdascripts/.DS_Store"
+    ],
+    "scope_entries": [
+      {
+        "entry_id": "repo-e7c3f752c827",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-20f53d6c9559",
+        "kind": "exclude",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/__pycache__",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-24b78c8a97d6",
+        "kind": "exclude",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/.DS_Store",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-93be62aa71cb",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/API.md",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-584ccd543d30",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/CHANGELOG.md",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-418774b42ae0",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/README.md",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      }
+    ],
+    "repo_policies": [
+      {
+        "repo_path": "/Users/p/Desktop/work/zapp/lambdascripts",
+        "push_mode": "blocked",
+        "safety_profile": "secret_heavy",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      }
+    ],
+    "notes": "",
+    "path_aliases": []
+  }
+]

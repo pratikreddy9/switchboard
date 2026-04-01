@@ -1,0 +1,101 @@
+import { ArrowRight, FolderKanban, Server, Shield } from 'lucide-react'
+import type { Workspace, WorkspaceLatest } from '../types/switchboard'
+import { StatusBadge } from '../components/StatusBadge'
+
+interface Props {
+  workspaces: Workspace[]
+  latestResults: Record<string, WorkspaceLatest>
+  online: boolean | null
+  onOpenWorkspace: (workspaceId: string) => void
+}
+
+export function ControlCenterPage({
+  workspaces,
+  latestResults,
+  online,
+  onOpenWorkspace,
+}: Props) {
+  return (
+    <div className="space-y-8">
+      <section className="rounded-2xl border border-gray-800 bg-gradient-to-br from-gray-900 via-gray-950 to-slate-900 p-6">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="text-xs uppercase tracking-[0.2em] text-cyan-400">Framework</div>
+            <h1 className="mt-2 text-3xl font-semibold text-white">Switchboard Control Center</h1>
+            <p className="mt-2 max-w-2xl text-sm text-gray-400">
+              Central view for umbrella workspaces, server pulls, repo actions, docs, and logs.
+            </p>
+          </div>
+          <div className="rounded-xl border border-gray-800 bg-black/20 px-4 py-3 text-sm text-gray-300">
+            <div>Mode: control center</div>
+            <div className="mt-1 text-xs text-gray-500">
+              Backend: {online === null ? 'checking' : online ? 'live' : 'offline fallback'}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-2">
+        {workspaces.map((workspace) => {
+          const latest = latestResults[workspace.workspace_id]
+          const serverCount = workspace.server_count ?? workspace.server_ids.length
+          const serviceCount = workspace.service_count ?? workspace.services.length
+          const status = serviceCount === 0 ? 'unverified' : latest?.summary.status ?? 'unverified'
+          return (
+            <button
+              key={workspace.workspace_id}
+              onClick={() => onOpenWorkspace(workspace.workspace_id)}
+              className="group rounded-2xl border border-gray-800 bg-gray-900 p-5 text-left transition-colors hover:border-cyan-500/60 hover:bg-gray-900/80"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.18em] text-gray-500">
+                    {workspace.workspace_id}
+                  </div>
+                  <div className="mt-1 text-xl font-semibold text-white">{workspace.display_name}</div>
+                </div>
+                <StatusBadge status={status} />
+              </div>
+
+              <div className="mt-5 grid grid-cols-3 gap-3 text-sm">
+                <div className="rounded-xl border border-gray-800 bg-gray-950 px-3 py-3">
+                  <div className="flex items-center gap-2 text-gray-400">
+                    <FolderKanban className="h-4 w-4 text-cyan-400" />
+                    Services
+                  </div>
+                  <div className="mt-2 text-2xl font-semibold text-white">{serviceCount}</div>
+                </div>
+                <div className="rounded-xl border border-gray-800 bg-gray-950 px-3 py-3">
+                  <div className="flex items-center gap-2 text-gray-400">
+                    <Server className="h-4 w-4 text-cyan-400" />
+                    Servers
+                  </div>
+                  <div className="mt-2 text-2xl font-semibold text-white">{serverCount}</div>
+                </div>
+                <div className="rounded-xl border border-gray-800 bg-gray-950 px-3 py-3">
+                  <div className="flex items-center gap-2 text-gray-400">
+                    <Shield className="h-4 w-4 text-cyan-400" />
+                    State
+                  </div>
+                  <div className="mt-2 text-sm font-medium capitalize text-white">{status}</div>
+                </div>
+              </div>
+
+              <div className="mt-5 flex items-center justify-between text-sm">
+                <span className="text-gray-500">
+                  {latest?.summary.timestamp && serviceCount > 0
+                    ? `Last run ${new Date(latest.summary.timestamp).toLocaleString()}`
+                    : 'No live run captured yet'}
+                </span>
+                <span className="flex items-center gap-2 text-cyan-400 transition-transform group-hover:translate-x-0.5">
+                  Open workspace
+                  <ArrowRight className="h-4 w-4" />
+                </span>
+              </div>
+            </button>
+          )
+        })}
+      </section>
+    </div>
+  )
+}

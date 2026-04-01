@@ -1,0 +1,46 @@
+[
+  {
+    "server_id": "local_mac",
+    "name": "Local Mac Control Center",
+    "connection_type": "local",
+    "host": "localhost",
+    "username": "p",
+    "port": 22,
+    "tags": ["local", "control-center"],
+    "favorite_tier": "primary",
+    "notes": "Local control-center host. Only explicitly seeded paths should be indexed in v1."
+  },
+  {
+    "server_id": "pesu_dev_47",
+    "name": "PESU Dev Server",
+    "connection_type": "ssh",
+    "host": "192.168.3.47",
+    "username": "pesu",
+    "port": 22,
+    "tags": ["pesu", "dev", "ssh"],
+    "favorite_tier": "primary",
+    "notes": "Seeded PESU umbrella server. If VPN is needed, the operator must turn it on manually."
+  },
+  {
+    "server_id": "zapp_test_114",
+    "name": "ZAPP Test Server",
+    "connection_type": "ssh",
+    "host": "148.66.152.114",
+    "username": "zappadmin",
+    "port": 22,
+    "tags": ["zapp", "test", "ssh"],
+    "favorite_tier": "primary",
+    "notes": "ZAPP test host."
+  },
+  {
+    "server_id": "zapp_prod_253",
+    "name": "ZAPP Prod Server",
+    "connection_type": "ssh",
+    "host": "148.72.247.253",
+    "username": "zappadmin",
+    "port": 22,
+    "tags": ["zapp", "prod", "ssh"],
+    "favorite_tier": "primary",
+    "notes": "ZAPP production host."
+  }
+]
