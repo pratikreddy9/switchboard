@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.5
+
+- fixed node/control-center scope sync so seed-only node scope does not overwrite explicit control-center scope choices
+- added runtime parsing from `switchboard/local/tasks-completed.md` `Runtime:` blocks into node manifest snapshots
+- added pulled-file and missed-scope detail to bundle records
+- added mirrored pull-bundle history and latest pulled bundle detail to the node dashboard
+- changed scope suggestions so code files default to `repo` and plain directories default to `doc` unless they contain repo markers
+
 ## 0.1.4
 
 - fixed the node root HTML page crash caused by a local variable shadowing the `html` module

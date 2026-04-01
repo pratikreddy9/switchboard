@@ -122,7 +122,7 @@ export interface FileEntry {
   name: string
   size_bytes: number
   modified: string
-  kind: 'doc' | 'log'
+  kind: 'doc' | 'log' | 'repo'
 }
 
 export interface Workspace {
@@ -374,6 +374,22 @@ export interface PullBundleRecord {
   source_tree_path?: string
   manifest_path: string
   repo_commits: string[]
+  skipped_entry_count?: number
+  skipped_entries?: Array<{
+    path: string
+    kind: 'doc' | 'log' | 'repo' | 'exclude'
+    path_type: 'file' | 'dir' | 'glob'
+    reason: string
+  }>
+  files?: Array<{
+    kind: 'doc' | 'log' | 'repo'
+    source_path: string
+    target_path: string
+    relative_path: string
+    size: number
+    mtime: string
+    sha256: string
+  }>
 }
 
 export interface CreateServiceRequest {

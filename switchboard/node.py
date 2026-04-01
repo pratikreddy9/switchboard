@@ -137,6 +137,7 @@ def _core_templates(service_id: str, display_name: str) -> dict[str, str]:
             "- After editing `tasks-completed.md`, run `switchboard node snapshot --project-root <path>`.\n"
             "- Do not assume the node can push into the control center. Sync is manual and control-center initiated.\n"
             "- Keep project docs outside `switchboard/` untouched unless explicitly requested.\n"
+            "- If runtime config is known, record it in a `Runtime:` block in `switchboard/local/tasks-completed.md` so snapshot can mirror it into `switchboard/node.manifest.json`.\n"
         ),
         "bootstrap-standardize-prompt.md": (
             "# Bootstrap Standardize Prompt\n\n"
@@ -146,6 +147,7 @@ def _core_templates(service_id: str, display_name: str) -> dict[str, str]:
             "- Find existing readmes, changelogs, runbooks, handoff notes, agent instructions, and operational docs.\n"
             "- Preserve useful information, but rewrite it into the Switchboard standard files under `switchboard/`.\n"
             "- Do not overwrite unrelated project docs outside `switchboard/` unless explicitly asked.\n"
+            "- If the project has known ports, health checks, or run command hints, include them in the latest `tasks-completed.md` entry under a `Runtime:` block.\n"
             "- Record the standardization work in `switchboard/local/tasks-completed.md` using the required entry format.\n"
             "- Finish by running `switchboard node snapshot --project-root <path>`.\n"
         ),
@@ -157,6 +159,7 @@ def _core_templates(service_id: str, display_name: str) -> dict[str, str]:
             "- Include timestamp, title, summary, changed paths, and routing tags.\n"
             "- Use only these routing tags: `task`, `handoff`, `runbook`, `decision`, `scope`.\n"
             "- If scope changed, include a `Scope Entries` block in the entry.\n"
+            "- If runtime config changed, include a `Runtime:` block in the entry.\n"
             "- Finish by running `switchboard node snapshot --project-root <path>` so derived docs and JSON stay synchronized.\n\n"
             "Entry format:\n"
             "## 2026-04-01T12:00:00+00:00 | Example title\n"
@@ -168,6 +171,11 @@ def _core_templates(service_id: str, display_name: str) -> dict[str, str]:
             "- Scope Entries:\n"
             "  - doc | file | /abs/path/to/file.md\n"
             "  - exclude | glob | venv\n"
+            "- Runtime:\n"
+            "  - expected_ports: 8010, 8000\n"
+            "  - healthcheck_command: curl http://127.0.0.1:8010/api/health\n"
+            "  - run_command_hint: uvicorn main:app --port 8010\n"
+            "  - monitoring_mode: manual\n"
         ),
     }
 
@@ -182,7 +190,8 @@ def _tasks_completed_template() -> str:
         "- `Summary:`\n"
         "- `Changed Paths:` comma-separated\n"
         "- optional `Notes:` lines\n"
-        "- optional `Scope Entries:` lines in `kind | path_type | path` format\n\n"
+        "- optional `Scope Entries:` lines in `kind | path_type | path` format\n"
+        "- optional `Runtime:` lines for ports, health check, and run command hint\n\n"
         "Example format:\n\n"
         "```md\n"
         "    ## 2026-04-01T12:00:00+00:00 | Example update\n"
@@ -191,6 +200,9 @@ def _tasks_completed_template() -> str:
         "    - Changed Paths: switchboard/core/README.md, switchboard/local/tasks-completed.md\n"
         "    - Notes:\n"
         "      - Added the first standard handoff.\n"
+        "    - Runtime:\n"
+        "      - expected_ports: 8010\n"
+        "      - healthcheck_command: curl http://127.0.0.1:8010/api/health\n"
         "```\n"
     )
 
@@ -258,6 +270,11 @@ def _evidence_defaults(service_id: str, project_root: Path, manifest: dict[str, 
         "scope_entries": scope_entries,
         "scope_updates": [],
     }
+
+
+def load_pull_bundle_history(project_root: str | Path) -> dict[str, Any]:
+    paths = node_paths(Path(project_root).resolve())
+    return _read_json(paths["pull_bundle_history"], {"generated": "", "bundles": []})
 
 
 def _manifest_payload(project_root: Path, service_id: str, display_name: str, existing: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -331,6 +348,40 @@ def _normalize_scope_lines(lines: list[str]) -> list[dict[str, Any]]:
     return entries
 
 
+def _normalize_runtime_lines(lines: list[str]) -> dict[str, Any]:
+    runtime = {
+        "expected_ports": [],
+        "healthcheck_command": "",
+        "run_command_hint": "",
+        "monitoring_mode": "manual",
+        "notes": "",
+    }
+    notes: list[str] = []
+    for raw in lines:
+        payload = raw.strip()
+        if payload.startswith("- "):
+            payload = payload[2:].strip()
+        if ":" not in payload:
+            if payload:
+                notes.append(payload)
+            continue
+        key, value = payload.split(":", 1)
+        key = key.strip().lower()
+        value = value.strip()
+        if key == "expected_ports":
+            runtime["expected_ports"] = [int(token.strip()) for token in value.split(",") if token.strip().isdigit()]
+        elif key == "healthcheck_command":
+            runtime["healthcheck_command"] = value
+        elif key == "run_command_hint":
+            runtime["run_command_hint"] = value
+        elif key == "monitoring_mode" and value in {"manual", "detect", "node_managed"}:
+            runtime["monitoring_mode"] = value
+        elif key == "notes":
+            notes.append(value)
+    runtime["notes"] = "\n".join(note for note in notes if note).strip()
+    return runtime
+
+
 def parse_tasks_completed(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
@@ -348,6 +399,7 @@ def parse_tasks_completed(path: Path) -> list[dict[str, Any]]:
         changed_paths: list[str] = []
         notes: list[str] = []
         scope_lines: list[str] = []
+        runtime_lines: list[str] = []
         current_section: str | None = None
 
         for raw_line in block.splitlines():
@@ -379,11 +431,20 @@ def parse_tasks_completed(path: Path) -> list[dict[str, Any]]:
                 if payload:
                     scope_lines.append(payload)
                 continue
+            if stripped.startswith("- Runtime:"):
+                current_section = "runtime"
+                payload = stripped.split(":", 1)[1].strip()
+                if payload:
+                    runtime_lines.append(payload)
+                continue
             if current_section == "notes":
                 notes.append(stripped[2:].strip() if stripped.startswith("- ") else stripped)
                 continue
             if current_section == "scope":
                 scope_lines.append(stripped)
+                continue
+            if current_section == "runtime":
+                runtime_lines.append(stripped)
 
         entries.append(
             {
@@ -394,6 +455,7 @@ def parse_tasks_completed(path: Path) -> list[dict[str, Any]]:
                 "changed_paths": changed_paths,
                 "notes": notes,
                 "scope_entries": _normalize_scope_lines(scope_lines),
+                "runtime": _normalize_runtime_lines(runtime_lines),
             }
         )
     return entries
@@ -417,6 +479,18 @@ def _render_entry(entry: dict[str, Any]) -> str:
             lines.append(
                 f"  - {scope_entry['kind']} | {scope_entry['path_type']} | {scope_entry['path']} | {enabled}"
             )
+    runtime = entry.get("runtime") or {}
+    if any(runtime.get(key) for key in ("expected_ports", "healthcheck_command", "run_command_hint", "notes")):
+        lines.append("- Runtime:")
+        if runtime.get("expected_ports"):
+            lines.append(f"  - expected_ports: {', '.join(str(port) for port in runtime['expected_ports'])}")
+        if runtime.get("healthcheck_command"):
+            lines.append(f"  - healthcheck_command: {runtime['healthcheck_command']}")
+        if runtime.get("run_command_hint"):
+            lines.append(f"  - run_command_hint: {runtime['run_command_hint']}")
+        lines.append(f"  - monitoring_mode: {runtime.get('monitoring_mode', 'manual')}")
+        if runtime.get("notes"):
+            lines.append(f"  - notes: {runtime['notes']}")
     return "\n".join(lines)
 
 
@@ -494,6 +568,9 @@ def snapshot_node(project_root: str | Path) -> dict[str, Any]:
     runbook_entries = [entry for entry in tasks if "runbook" in entry.get("tags", [])]
     decision_entries = [entry for entry in tasks if "decision" in entry.get("tags", [])]
     scope_entries_from_tasks = [entry for entry in tasks if entry.get("scope_entries")]
+    runtime_entries_from_tasks = [
+        entry for entry in tasks if any(entry.get("runtime", {}).get(key) for key in ("expected_ports", "healthcheck_command", "run_command_hint", "notes"))
+    ]
 
     _write_text(
         paths["handoff"],
@@ -539,6 +616,9 @@ def snapshot_node(project_root: str | Path) -> dict[str, Any]:
         for entry in scope_entries_from_tasks
     ]
     _write_json(paths["scope_snapshot"], scope_snapshot)
+
+    if runtime_entries_from_tasks:
+        manifest["runtime"] = runtime_entries_from_tasks[-1]["runtime"]
 
     manifest["updated_at"] = utc_now_iso()
     _write_json(paths["manifest"], manifest)

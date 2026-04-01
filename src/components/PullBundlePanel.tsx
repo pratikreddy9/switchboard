@@ -212,6 +212,40 @@ export function PullBundlePanel({ service, disabled }: Props) {
               </div>
               <StatusBadge status="ok" />
             </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <div className="rounded-lg border border-green-900/40 bg-black/20 p-3">
+                <div className="text-xs uppercase tracking-[0.16em] text-green-300/80">Pulled files</div>
+                <div className="mt-2 max-h-56 space-y-1 overflow-auto">
+                  {(bundleResult.files ?? []).length === 0 ? (
+                    <div className="text-xs text-green-200/70">No copied files recorded.</div>
+                  ) : (
+                    (bundleResult.files ?? []).slice(0, 40).map((file) => (
+                      <div key={`${file.target_path}:${file.sha256}`} className="rounded border border-green-900/30 px-2 py-1">
+                        <div className="font-mono text-[11px] break-all">{file.relative_path}</div>
+                        <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-green-300/70">{file.kind}</div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+              <div className="rounded-lg border border-yellow-900/40 bg-black/20 p-3">
+                <div className="text-xs uppercase tracking-[0.16em] text-yellow-200/80">Missed scope</div>
+                <div className="mt-2 max-h-56 space-y-1 overflow-auto">
+                  {(bundleResult.skipped_entries ?? []).length === 0 ? (
+                    <div className="text-xs text-green-200/70">No skipped scope entries.</div>
+                  ) : (
+                    (bundleResult.skipped_entries ?? []).map((entry) => (
+                      <div key={`${entry.path}:${entry.reason}`} className="rounded border border-yellow-900/30 px-2 py-1">
+                        <div className="font-mono text-[11px] break-all">{entry.path}</div>
+                        <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-yellow-200/70">
+                          {entry.kind} · {entry.path_type} · {entry.reason}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -237,6 +271,7 @@ export function PullBundlePanel({ service, disabled }: Props) {
                   <div className="text-right text-xs text-gray-400">
                     <div>{bundle.docs_count} docs</div>
                     <div>{bundle.logs_count} logs</div>
+                    <div>{bundle.skipped_entry_count ?? 0} missed</div>
                   </div>
                 </div>
               </div>

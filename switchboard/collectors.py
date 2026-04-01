@@ -590,7 +590,19 @@ class CollectionCoordinator:
                 item["runtime"] = node_manifest.get("runtime", item.get("runtime", {}))
 
         patch_payload: dict[str, Any] = {"locations": updated_locations}
-        if request.include_scope_snapshot and scope_snapshot and scope_snapshot.get("scope_entries"):
+        should_import_scope = (
+            request.include_scope_snapshot
+            and scope_snapshot is not None
+            and scope_snapshot.get("scope_entries")
+            and (
+                scope_snapshot.get("scope_updates")
+                or any(
+                    entry.get("source") not in {"node_manifest", "seeded"}
+                    for entry in scope_snapshot.get("scope_entries", [])
+                )
+            )
+        )
+        if should_import_scope:
             scope_entries = scope_snapshot["scope_entries"]
             flattened = self._flatten_scope_entries(scope_entries)
             patch_payload.update(
@@ -641,6 +653,7 @@ class CollectionCoordinator:
         if server.connection_type == "local":
             manifest_path = self._local_node_manifest_path(location.root)
             scope_path = self._local_scope_snapshot_path(location.root)
+            bundle_history_path = self._local_pull_bundle_history_path(location.root)
             existing_manifest = self._read_local_json(manifest_path)
             if not existing_manifest:
                 return {"status": "path_missing", "message": "Node manifest not found at selected location."}
@@ -660,6 +673,7 @@ class CollectionCoordinator:
                     location_scope_entries,
                 )
                 self._write_local_json(scope_path, scope_payload)
+            self._write_local_json(bundle_history_path, self._node_pull_bundle_history_payload(service_id))
         else:
             with self._open_ssh(server) as connection:
                 if connection is None:
@@ -667,6 +681,7 @@ class CollectionCoordinator:
                 ssh, sftp = connection
                 manifest_path = self._remote_node_manifest_path(location.root)
                 scope_path = self._remote_scope_snapshot_path(location.root)
+                bundle_history_path = self._remote_pull_bundle_history_path(location.root)
                 existing_manifest = self._read_remote_json(sftp, manifest_path)
                 if not existing_manifest:
                     return {"status": "path_missing", "message": "Node manifest not found at selected location."}
@@ -686,6 +701,7 @@ class CollectionCoordinator:
                         location_scope_entries,
                     )
                     self._write_remote_json(ssh, sftp, scope_path, scope_payload)
+                self._write_remote_json(ssh, sftp, bundle_history_path, self._node_pull_bundle_history_payload(service_id))
 
         record = {
             "service_id": service_id,
@@ -728,14 +744,15 @@ class CollectionCoordinator:
         exclude_patterns = list(dict.fromkeys(DEFAULT_EXCLUDE_GLOBS + [entry.path for entry in service.scope_entries if entry.enabled and entry.kind == "exclude"] + request.extra_excludes))
 
         copied_files: list[dict[str, Any]] = []
+        skipped_entries: list[dict[str, Any]] = []
         if server.connection_type == "local":
-            copied_files.extend(self._copy_bundle_local(service, location.root, scope_entries, exclude_patterns, mirrored_root))
+            copied_files, skipped_entries = self._copy_bundle_local(service, location.root, scope_entries, exclude_patterns, mirrored_root)
         else:
             with self._open_ssh(server) as connection:
                 if connection is None:
                     return {"status": "unreachable", "message": "SSH connection failed."}
                 _, sftp = connection
-                copied_files.extend(self._copy_bundle_remote(service, sftp, location.root, scope_entries, exclude_patterns, mirrored_root))
+                copied_files, skipped_entries = self._copy_bundle_remote(service, sftp, location.root, scope_entries, exclude_patterns, mirrored_root)
 
         repo_metadata = []
         for repo_path in service.repo_paths:
@@ -754,6 +771,7 @@ class CollectionCoordinator:
             "extra_excludes": request.extra_excludes,
             "repo_metadata": repo_metadata,
             "files": copied_files,
+            "skipped_entries": skipped_entries,
         }
         manifest_path = bundle_root / "bundle-manifest.json"
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
@@ -771,6 +789,8 @@ class CollectionCoordinator:
             "source_tree_path": str(mirrored_root),
             "manifest_path": str(manifest_path),
             "repo_commits": [item.get("last_commit", "") for item in repo_metadata if item.get("status") == "ok"],
+            "skipped_entry_count": len(skipped_entries),
+            "skipped_entries": skipped_entries,
         }
         self.snapshots.append_pull_bundle(history_record)
         return {
@@ -778,6 +798,7 @@ class CollectionCoordinator:
             **history_record,
             "files": copied_files,
             "repo_metadata": repo_metadata,
+            "skipped_entries": skipped_entries,
         }
 
     def _collect_server_summary(self, server_id: str, server: ResolvedServer) -> dict[str, Any]:
@@ -855,11 +876,17 @@ class CollectionCoordinator:
     def _local_scope_snapshot_path(self, root: str) -> Path:
         return Path(root) / "switchboard" / "evidence" / "scope.snapshot.json"
 
+    def _local_pull_bundle_history_path(self, root: str) -> Path:
+        return Path(root) / "switchboard" / "evidence" / "pull-bundle-history.json"
+
     def _remote_node_manifest_path(self, root: str) -> str:
         return posixpath.join(root.rstrip("/"), "switchboard", "node.manifest.json")
 
     def _remote_scope_snapshot_path(self, root: str) -> str:
         return posixpath.join(root.rstrip("/"), "switchboard", "evidence", "scope.snapshot.json")
+
+    def _remote_pull_bundle_history_path(self, root: str) -> str:
+        return posixpath.join(root.rstrip("/"), "switchboard", "evidence", "pull-bundle-history.json")
 
     def _collect_service(
         self,
@@ -1369,20 +1396,40 @@ class CollectionCoordinator:
         scope_entries: list[Any],
         exclude_patterns: list[str],
         mirrored_root: Path,
-    ) -> list[dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         copied: list[dict[str, Any]] = []
+        skipped: list[dict[str, Any]] = []
         for entry in scope_entries:
             if entry.kind == "exclude":
                 continue
             if not entry.path.startswith(location_root):
+                skipped.append(
+                    {
+                        "path": entry.path,
+                        "kind": entry.kind,
+                        "path_type": entry.path_type,
+                        "reason": "outside_location_root",
+                    }
+                )
                 continue
-            for source in self._expand_local_entry(entry.path, exclude_patterns):
+            matched = list(self._expand_local_entry(entry.path, exclude_patterns))
+            if not matched:
+                skipped.append(
+                    {
+                        "path": entry.path,
+                        "kind": entry.kind,
+                        "path_type": entry.path_type,
+                        "reason": "no_files_matched",
+                    }
+                )
+                continue
+            for source in matched:
                 relative = self._bundle_relative_path(source, location_root)
                 target = mirrored_root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source, target)
                 copied.append(self._copied_file_record(str(source), str(target), entry.kind, relative_path=str(relative)))
-        return copied
+        return copied, skipped
 
     def _copy_bundle_remote(
         self,
@@ -1392,14 +1439,34 @@ class CollectionCoordinator:
         scope_entries: list[Any],
         exclude_patterns: list[str],
         mirrored_root: Path,
-    ) -> list[dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         copied: list[dict[str, Any]] = []
+        skipped: list[dict[str, Any]] = []
         for entry in scope_entries:
             if entry.kind == "exclude":
                 continue
             if not entry.path.startswith(location_root):
+                skipped.append(
+                    {
+                        "path": entry.path,
+                        "kind": entry.kind,
+                        "path_type": entry.path_type,
+                        "reason": "outside_location_root",
+                    }
+                )
                 continue
-            for source_path, attrs in self._expand_remote_entry(sftp, entry.path, exclude_patterns):
+            matched = list(self._expand_remote_entry(sftp, entry.path, exclude_patterns))
+            if not matched:
+                skipped.append(
+                    {
+                        "path": entry.path,
+                        "kind": entry.kind,
+                        "path_type": entry.path_type,
+                        "reason": "no_files_matched",
+                    }
+                )
+                continue
+            for source_path, attrs in matched:
                 relative = self._bundle_relative_path(source_path, location_root)
                 target = mirrored_root / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -1417,7 +1484,7 @@ class CollectionCoordinator:
                     )
                 except OSError:
                     continue
-        return copied
+        return copied, skipped
 
     def _expand_local_entry(self, path: str, exclude_patterns: list[str]) -> list[Path]:
         source = Path(path)
@@ -1640,6 +1707,14 @@ class CollectionCoordinator:
             "scope_updates": updates[:20],
         }
 
+    def _node_pull_bundle_history_payload(self, service_id: str) -> dict[str, Any]:
+        bundles = self.snapshots.list_pull_bundles(service_id)
+        return {
+            "generated": utc_now_iso(),
+            "service_id": service_id,
+            "bundles": bundles,
+        }
+
     @contextmanager
     def _open_ssh(self, server: ResolvedServer) -> Iterator[tuple[Any, Any] | None]:
         if server.connection_type != "ssh":
@@ -1774,20 +1849,21 @@ class CollectionCoordinator:
             return "exclude"
         if lowered.endswith(".log") or "/logs" in path_lower or "\\logs" in path_lower:
             return "log"
+        if "/switchboard/core" in path_lower or "/switchboard/local" in path_lower or "/switchboard/evidence" in path_lower:
+            return "doc"
         if lowered in {"readme.md", "runbook.md", "approach-history.md", "agents.md"}:
             return "doc"
         if "/docs" in path_lower or "/documentation" in path_lower or lowered.endswith(".md"):
             return "doc"
-        if entry_type == "dir" and any(token in path_lower for token in (".git", "src", "app", "backend", "frontend", "project")):
-            return "repo"
         if entry_type == "dir" and os.path.exists(full_path):
             if any((Path(full_path) / marker).exists() for marker in ("pyproject.toml", "requirements.txt", "package.json")):
                 return "repo"
+            return "doc"
         if entry_type == "file":
             if lowered.endswith((".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".env", ".example")):
                 return "doc"
             if lowered.endswith((".py", ".ts", ".tsx", ".js", ".jsx", ".sh")):
-                return "doc"
+                return "repo"
             return "doc"
         return "doc"
 

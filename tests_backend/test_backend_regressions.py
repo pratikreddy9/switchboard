@@ -366,15 +366,15 @@ class BackendRegressionTests(unittest.TestCase):
             self.assertIn("README.md", files)
             self.assertEqual(files["main.py"]["kind"], "repo")
 
-    def test_scope_classifier_defaults_python_file_to_doc(self) -> None:
+    def test_scope_classifier_defaults_python_file_to_repo(self) -> None:
         settings = Settings()
         manifests = ManifestStore(settings)
         snapshots = SnapshotStore(settings, manifests)
         coordinator = CollectionCoordinator(settings, manifests, snapshots)
 
-        self.assertEqual(coordinator._suggest_scope_kind("main.py", "/workspace/aichat/main.py", "file"), "doc")
+        self.assertEqual(coordinator._suggest_scope_kind("main.py", "/workspace/aichat/main.py", "file"), "repo")
         self.assertEqual(coordinator._suggest_scope_kind("README.md", "/workspace/aichat/README.md", "file"), "doc")
-        self.assertEqual(coordinator._suggest_scope_kind("backend", "/workspace/aichat/backend", "dir"), "repo")
+        self.assertEqual(coordinator._suggest_scope_kind("backend", "/workspace/aichat/backend", "dir"), "doc")
 
 
 if __name__ == "__main__":

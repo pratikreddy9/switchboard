@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
-from .node import list_node_files, load_node_manifest, resolve_static_app_dir, snapshot_node
+from .node import list_node_files, load_node_manifest, load_pull_bundle_history, resolve_static_app_dir, snapshot_node
 
 
 def create_node_app(project_root: str | Path | None = None) -> FastAPI:
@@ -30,6 +30,7 @@ def create_node_app(project_root: str | Path | None = None) -> FastAPI:
             "manifest": manifest,
             "scope_snapshot": snapshot["scope_snapshot"],
             "files": list_node_files(project_root),
+            "pull_bundle_history": load_pull_bundle_history(project_root),
             "last_snapshot_at": snapshot["scope_snapshot"].get("generated") or manifest.get("updated_at"),
             "runtime": manifest.get("runtime", {}),
         }
@@ -63,6 +64,7 @@ def create_node_app(project_root: str | Path | None = None) -> FastAPI:
         runtime = snapshot["runtime"]
         files = snapshot["files"]
         scope_snapshot = snapshot["scope_snapshot"]
+        pull_bundle_history = snapshot["pull_bundle_history"]
         display_name = html.escape(str(manifest.get("display_name", manifest.get("service_id", "Node"))))
         service_id = html.escape(str(manifest.get("service_id", "")))
         project_root_text = html.escape(str(manifest.get("project_root", "")))
@@ -73,6 +75,19 @@ def create_node_app(project_root: str | Path | None = None) -> FastAPI:
         run_command_hint = html.escape(str(runtime.get("run_command_hint", "") or "Not configured"))
         generated = html.escape(str(scope_snapshot.get("generated", "")))
         project_root_command = html.escape(str(project_root))
+        bundles = pull_bundle_history.get("bundles", [])
+        latest_bundle = bundles[0] if bundles else None
+        latest_bundle_files_html = ""
+        latest_bundle_skipped_html = ""
+        if latest_bundle:
+            latest_bundle_files_html = "".join(
+                f"<li><code>{html.escape(str(item.get('relative_path', '')))}</code> · {html.escape(str(item.get('kind', '')))}</li>"
+                for item in latest_bundle.get("files", [])[:20]
+            ) or "<li>No copied files recorded.</li>"
+            latest_bundle_skipped_html = "".join(
+                f"<li><code>{html.escape(str(item.get('path', '')))}</code> · {html.escape(str(item.get('reason', '')))}</li>"
+                for item in latest_bundle.get("skipped_entries", [])[:20]
+            ) or "<li>No missed entries.</li>"
         page = f"""<!doctype html>
 <html lang="en">
   <head>
@@ -128,6 +143,32 @@ def create_node_app(project_root: str | Path | None = None) -> FastAPI:
             <li><code>switchboard/evidence/</code></li>
           </ul>
         </div>
+      </section>
+      <section class="card" style="margin-top: 16px;">
+        <h2>Pull Bundle History</h2>
+        <p><strong>Bundles:</strong> {len(bundles)}</p>
+        <ul>
+          {"".join(
+              f"<li><code>{html.escape(str(bundle.get('bundle_id', '')))}</code> · "
+              f"{html.escape(str(bundle.get('file_count', 0)))} files · "
+              f"{html.escape(str(bundle.get('created_at', '')))}</li>"
+              for bundle in bundles[:8]
+          ) or "<li>No pulled bundles mirrored to this node yet.</li>"}
+        </ul>
+      </section>
+      <section class="card" style="margin-top: 16px;">
+        <h2>Latest Pulled Bundle Detail</h2>
+        {
+          (
+            f"<p><strong>Bundle:</strong> <code>{html.escape(str(latest_bundle.get('bundle_id', '')))}</code></p>"
+            f"<p><strong>Pulled files:</strong> {html.escape(str(latest_bundle.get('file_count', 0)))}</p>"
+            f"<p><strong>Missed scope entries:</strong> {html.escape(str(latest_bundle.get('skipped_entry_count', 0)))}</p>"
+            f"<ul>{latest_bundle_files_html}</ul>"
+            f"<h3>Missed</h3><ul>{latest_bundle_skipped_html}</ul>"
+          )
+          if latest_bundle
+          else "<p>No pulled bundle detail mirrored to this node yet.</p>"
+        }
       </section>
       <section class="card" style="margin-top: 16px;">
         <h2>Operator Notes</h2>
