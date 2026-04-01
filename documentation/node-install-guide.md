@@ -116,7 +116,29 @@ switchboard node snapshot --project-root /Users/p/Desktop/work/zapp/lambdascript
 
 That regenerates local derived docs and evidence JSON.
 
-## Optional Local Node UI/API
+## Start The Node
+
+The simple startup path is the generated node script:
+
+```bash
+./switchboard/start.sh
+```
+
+It asks only for host and port, then starts the node in the background and writes:
+
+- `switchboard/runtime/node.pid`
+- `switchboard/runtime/node.log`
+
+You can also use the package commands directly:
+
+```bash
+switchboard node start --project-root /Users/p/Desktop/work/zapp/lambdascripts --host 127.0.0.1 --port 8010
+switchboard node status --project-root /Users/p/Desktop/work/zapp/lambdascripts --port 8010
+switchboard node logs --project-root /Users/p/Desktop/work/zapp/lambdascripts
+switchboard node stop --project-root /Users/p/Desktop/work/zapp/lambdascripts --port 8010
+```
+
+## Optional Foreground Node UI/API
 
 If you want the node’s minimal local status view:
 
@@ -126,6 +148,8 @@ switchboard node serve \
   --host 127.0.0.1 \
   --port 8010
 ```
+
+Use `node serve` only when you explicitly want foreground mode in the terminal.
 
 Useful endpoints:
 

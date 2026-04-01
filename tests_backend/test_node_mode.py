@@ -27,6 +27,8 @@ class NodeModeTests(unittest.TestCase):
             self.assertTrue(paths["runtime_prompt"].exists())
             self.assertTrue(paths["tasks_completed"].exists())
             self.assertTrue(paths["completed_tasks_json"].exists())
+            self.assertTrue(paths["start_script"].exists())
+            self.assertTrue(paths["run_script"].exists())
             self.assertEqual(result["manifest"]["service_id"], "sample-service")
             top_level = sorted(path.name for path in project_root.iterdir())
             self.assertEqual(top_level, ["README.md", "switchboard"])

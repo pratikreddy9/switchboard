@@ -16,6 +16,7 @@ from .manifests import ManifestStore
 from .models import CollectRequest
 from .node import install_node, snapshot_node, upgrade_node
 from .node_api import create_node_app
+from .node_runtime import node_status, start_node_runtime, stop_node_runtime, runtime_paths
 from .storage import SnapshotStore
 
 
@@ -125,6 +126,48 @@ def node_serve(
 
     app_instance = create_node_app(project_root)
     uvicorn.run(app_instance, host=host, port=port)
+
+
+@node_app.command("start")
+def node_start(
+    project_root: str = typer.Option(..., "--project-root"),
+    host: str = typer.Option("127.0.0.1", "--host"),
+    port: int = typer.Option(8010, "--port"),
+) -> None:
+    result = start_node_runtime(project_root, host=host, port=port)
+    typer.echo(json.dumps(result, indent=2))
+
+
+@node_app.command("stop")
+def node_stop(
+    project_root: str = typer.Option(..., "--project-root"),
+    port: int = typer.Option(8010, "--port"),
+) -> None:
+    result = stop_node_runtime(project_root, port=port)
+    typer.echo(json.dumps(result, indent=2))
+
+
+@node_app.command("status")
+def node_runtime_status(
+    project_root: str = typer.Option(..., "--project-root"),
+    port: int = typer.Option(8010, "--port"),
+) -> None:
+    result = node_status(project_root, port=port)
+    typer.echo(json.dumps(result, indent=2))
+
+
+@node_app.command("logs")
+def node_logs(
+    project_root: str = typer.Option(..., "--project-root"),
+    lines: int = typer.Option(40, "--lines"),
+) -> None:
+    log_file = runtime_paths(project_root)["log"]
+    if not log_file.exists():
+        typer.echo("")
+        return
+    text = log_file.read_text(encoding="utf-8", errors="replace").splitlines()
+    tail = "\n".join(text[-lines:])
+    typer.echo(tail)
 
 
 @release_app.command("build")

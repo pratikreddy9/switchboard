@@ -79,6 +79,14 @@ In `v0.1.x`, servers and workspaces are still manifest-driven. Services are adde
 Start the framework:
 
 ```bash
+./run.sh
+```
+
+`run.sh` / `start.sh` is the simple entrypoint. It asks which mode to start and then runs the correct control-center or node command.
+
+If you want the direct control-center runner without prompts:
+
+```bash
 ./framework.sh start
 ./framework.sh status
 ./framework.sh logs

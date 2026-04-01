@@ -52,6 +52,9 @@ def node_paths(project_root: Path) -> dict[str, Path]:
         "repo_safety_history": root / EVIDENCE_DIR_NAME / "repo-safety-history.json",
         "pull_bundle_history": root / EVIDENCE_DIR_NAME / "pull-bundle-history.json",
         "scope_snapshot": root / EVIDENCE_DIR_NAME / "scope.snapshot.json",
+        "runtime": root / "runtime",
+        "start_script": root / "start.sh",
+        "run_script": root / "run.sh",
     }
 
 
@@ -75,6 +78,11 @@ def _write_text_if_missing(path: Path, content: str) -> None:
 def _write_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+
+
+def _write_executable(path: Path, content: str) -> None:
+    _write_text(path, content)
+    path.chmod(0o755)
 
 
 def load_node_manifest(project_root: str | Path) -> dict[str, Any]:
@@ -185,6 +193,30 @@ def _tasks_completed_template() -> str:
         "      - Added the first standard handoff.\n"
         "```\n"
     )
+
+
+def _node_start_script(project_root: Path) -> str:
+    default_port = "8010"
+    return f"""#!/bin/bash
+set -euo pipefail
+
+PROJECT_ROOT="{project_root}"
+DEFAULT_HOST="127.0.0.1"
+DEFAULT_PORT="{default_port}"
+
+echo "Switchboard Node"
+echo "Project root: $PROJECT_ROOT"
+printf "Port [$DEFAULT_PORT]: "
+read -r PORT_INPUT
+PORT="${{PORT_INPUT:-$DEFAULT_PORT}}"
+printf "Host [$DEFAULT_HOST]: "
+read -r HOST_INPUT
+HOST="${{HOST_INPUT:-$DEFAULT_HOST}}"
+
+switchboard node start --project-root "$PROJECT_ROOT" --host "$HOST" --port "$PORT"
+switchboard node status --project-root "$PROJECT_ROOT" --port "$PORT"
+echo "Logs: $PROJECT_ROOT/switchboard/runtime/node.log"
+"""
 
 
 def _scope_entry_defaults(path: str, kind: str) -> dict[str, Any]:
@@ -411,6 +443,9 @@ def install_node(project_root: str | Path, service_id: str | None = None, displa
 
     for filename, content in _core_templates(service_id, display_name).items():
         _write_text(paths["core"] / filename, content)
+
+    _write_executable(paths["start_script"], _node_start_script(project_root))
+    _write_executable(paths["run_script"], _node_start_script(project_root))
 
     _write_text_if_missing(paths["tasks_completed"], _tasks_completed_template())
     _write_text_if_missing(paths["handoff"], "# Control Center Handoff\n\nNo handoff entries yet.\n")

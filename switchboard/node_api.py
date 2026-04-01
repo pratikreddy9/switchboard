@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -13,8 +14,11 @@ from . import __version__
 from .node import list_node_files, load_node_manifest, resolve_static_app_dir, snapshot_node
 
 
-def create_node_app(project_root: str | Path) -> FastAPI:
-    project_root = Path(project_root).resolve()
+def create_node_app(project_root: str | Path | None = None) -> FastAPI:
+    project_root_value = project_root or os.environ.get("SWITCHBOARD_NODE_PROJECT_ROOT")
+    if not project_root_value:
+        raise RuntimeError("Node project root not provided.")
+    project_root = Path(project_root_value).resolve()
     app = FastAPI(title="Switchboard Node", version=__version__)
     static_dir = resolve_static_app_dir()
     assets_dir = static_dir / "assets" if static_dir else None

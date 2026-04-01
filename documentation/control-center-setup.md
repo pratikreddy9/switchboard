@@ -67,6 +67,14 @@ The control-center UI can add services. Server and workspace registration is sti
 Combined runner:
 
 ```bash
+./run.sh
+```
+
+That prompt-driven entrypoint is the preferred v0.1.x startup path.
+
+Direct control-center runner commands are still available:
+
+```bash
 ./framework.sh start
 ./framework.sh status
 ./framework.sh logs
