@@ -205,3 +205,7 @@ def release_build(
         root,
     )
     typer.echo(str(wheel_dir))
+
+
+if __name__ == "__main__":
+    app()

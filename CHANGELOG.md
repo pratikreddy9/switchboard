@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3
+
+- fixed background node startup in installed wheels by making `python -m switchboard.cli ...` execute the Typer app
+- keeps `switchboard node start` aligned with the direct `switchboard node serve` foreground path
+
 ## 0.1.2
 
 - added a single interactive startup entrypoint with `run.sh` / `start.sh`
