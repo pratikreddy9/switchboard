@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4
+
+- fixed the node root HTML page crash caused by a local variable shadowing the `html` module
+- keeps `/` working for the minimal node dashboard while `/api/health` and `/api/node` continue to work
+
 ## 0.1.3
 
 - fixed background node startup in installed wheels by making `python -m switchboard.cli ...` execute the Typer app

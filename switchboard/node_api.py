@@ -73,7 +73,7 @@ def create_node_app(project_root: str | Path | None = None) -> FastAPI:
         run_command_hint = html.escape(str(runtime.get("run_command_hint", "") or "Not configured"))
         generated = html.escape(str(scope_snapshot.get("generated", "")))
         project_root_command = html.escape(str(project_root))
-        html = f"""<!doctype html>
+        page = f"""<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -140,7 +140,7 @@ def create_node_app(project_root: str | Path | None = None) -> FastAPI:
     </div>
   </body>
 </html>"""
-        return HTMLResponse(html)
+        return HTMLResponse(page)
 
     if static_dir and (static_dir / "index.html").exists():
 
