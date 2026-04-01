@@ -10,11 +10,16 @@ import type {
   GitPullRequest,
   GitPullResult,
   HealthResponse,
+  NodeSyncRequest,
+  NodeSyncResult,
   PullBundleRecord,
   PullBundleRequest,
   RepoStateResult,
   RepoActionRequest,
   RepoPolicy,
+  RuntimeActionRequest,
+  RuntimeCheckResult,
+  RuntimeConfig,
   RunRecord,
   SafetyCheckResult,
   ScanRootRequest,
@@ -44,8 +49,14 @@ function normalizeService(service: any) {
     tags: service.tags ?? [],
     favorite_tier: favoriteRank(service.favorite_tier),
     locations: (service.locations ?? []).map((location: any) => ({
+      location_id: location.location_id,
       server_id: location.server_id,
-      path: location.root ?? location.path ?? '',
+      access_mode: location.access_mode ?? 'ssh',
+      root: location.root ?? location.path ?? '',
+      role: location.role ?? 'primary',
+      is_primary: Boolean(location.is_primary),
+      path_aliases: location.path_aliases ?? [],
+      runtime: normalizeRuntimeConfig(location.runtime),
     })),
     repo_paths: service.repo_paths ?? [],
     docs_paths: service.docs_paths ?? [],
@@ -56,7 +67,23 @@ function normalizeService(service: any) {
     repo_policies: (service.repo_policies ?? []).map(normalizeRepoPolicy),
     notes: service.notes ?? '',
     path_aliases: service.path_aliases ?? [],
+    runtime_checks: (service.runtime_checks ?? []).map(normalizeRuntimeCheck),
+    node_sync: (service.node_sync ?? []).map(normalizeNodeSync),
   } satisfies Service
+}
+
+function normalizeRuntimeConfig(runtime: any): RuntimeConfig {
+  return {
+    expected_ports: Array.isArray(runtime?.expected_ports)
+      ? runtime.expected_ports
+          .map((port: unknown) => Number(port))
+          .filter((port: number) => Number.isFinite(port))
+      : [],
+    healthcheck_command: runtime?.healthcheck_command ?? '',
+    run_command_hint: runtime?.run_command_hint ?? '',
+    monitoring_mode: runtime?.monitoring_mode ?? 'manual',
+    notes: runtime?.notes ?? '',
+  }
 }
 
 function normalizeScopeEntry(entry: any): ScopeEntry {
@@ -126,6 +153,57 @@ function normalizeRepoState(repo: any): RepoStateResult {
   }
 }
 
+function normalizePortInfo(port: any) {
+  return {
+    port: Number(port.port ?? 0),
+    protocol: port.protocol ?? 'tcp',
+    process: port.process ?? '',
+    pid: typeof port.pid === 'number' ? port.pid : port.pid ? Number(port.pid) : undefined,
+    state: port.state,
+  }
+}
+
+function normalizeRuntimeCheck(result: any): RuntimeCheckResult {
+  return {
+    service_id: result.service_id,
+    location_id: result.location_id,
+    server_id: result.server_id,
+    root: result.root ?? '',
+    status: result.status ?? 'unverified',
+    checked_at: result.checked_at ?? '',
+    configured_ports: Array.isArray(result.configured_ports)
+      ? result.configured_ports.map((port: unknown) => Number(port)).filter((port: number) => Number.isFinite(port))
+      : [],
+    detected_ports: (result.detected_ports ?? []).map(normalizePortInfo),
+    missing_ports: Array.isArray(result.missing_ports)
+      ? result.missing_ports.map((port: unknown) => Number(port)).filter((port: number) => Number.isFinite(port))
+      : [],
+    healthcheck_command: result.healthcheck_command ?? '',
+    healthcheck_status: result.healthcheck_status ?? 'skipped',
+    healthcheck_output: result.healthcheck_output ?? '',
+    detected_process_command: result.detected_process_command ?? '',
+    run_command_hint: result.run_command_hint ?? '',
+    monitoring_mode: result.monitoring_mode ?? 'manual',
+    notes: result.notes ?? '',
+    node_present: Boolean(result.node_present),
+    source: result.source,
+  }
+}
+
+function normalizeNodeSync(result: any): NodeSyncResult {
+  return {
+    service_id: result.service_id,
+    location_id: result.location_id,
+    direction: result.direction ?? 'from_node',
+    timestamp: result.timestamp ?? '',
+    status: result.status ?? 'unverified',
+    source: result.source ?? '',
+    target: result.target ?? '',
+    include_scope_snapshot: result.include_scope_snapshot ?? true,
+    include_runtime_config: result.include_runtime_config ?? true,
+  }
+}
+
 function normalizeFile(file: any) {
   return {
     path: file.path,
@@ -140,7 +218,7 @@ function normalizeWorkspaceLatest(raw: any): WorkspaceLatest {
   const services = (raw.services ?? []).map((entry: any) => ({
     service_id: entry.service_id,
     status: entry.status ?? 'unverified',
-    ports: entry.ports ?? [],
+    ports: (entry.ports ?? []).map(normalizePortInfo),
     firewall_status: entry.firewall_status ?? '',
     firewall_active: Boolean(entry.firewall_active),
     repo_summaries: (raw.repo_inventory ?? [])
@@ -156,6 +234,8 @@ function normalizeWorkspaceLatest(raw: any): WorkspaceLatest {
       .map((file: any) => normalizeFile({ ...file, kind: 'log' })),
     secret_path_count: entry.secret_path_count ?? 0,
     collected_at: raw.generated ?? '',
+    runtime_checks: (entry.runtime_checks ?? []).map(normalizeRuntimeCheck),
+    node_sync: (entry.node_sync ?? []).map(normalizeNodeSync),
   }))
 
   return {
@@ -193,9 +273,22 @@ async function apiFetch<T>(
     })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
+      const detail = body?.detail
+      const message =
+        typeof detail === 'string'
+          ? detail
+          : typeof detail?.message === 'string'
+            ? detail.message
+            : `HTTP ${res.status}`
+      const status =
+        typeof detail?.status === 'string'
+          ? detail.status
+          : res.status === 404
+            ? 'path_missing'
+            : 'unreachable'
       return {
-        status: res.status === 404 ? 'path_missing' : 'unreachable',
-        message: body?.detail ?? `HTTP ${res.status}`,
+        status,
+        message,
         code: res.status,
       } as ApiError
     }
@@ -419,6 +512,45 @@ export const getSecretPathCount = (
   id: string,
 ): Promise<ApiResult<SecretPathsResult>> =>
   apiFetch<SecretPathsResult>(`/services/${id}/secret-paths`)
+
+export const runRuntimeCheck = (
+  id: string,
+  req: RuntimeActionRequest,
+): Promise<ApiResult<RuntimeCheckResult>> =>
+  apiFetch<RuntimeCheckResult>(`/services/${id}/actions/runtime-check`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  }).then((res) => (isApiError(res) ? res : normalizeRuntimeCheck(res)))
+
+export const syncFromNode = (
+  id: string,
+  req: NodeSyncRequest,
+): Promise<ApiResult<{ service: Service; sync: NodeSyncResult }>> =>
+  apiFetch<any>(`/services/${id}/actions/sync-from-node`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return {
+      service: normalizeService(res.service),
+      sync: normalizeNodeSync(res.sync),
+    }
+  })
+
+export const syncToNode = (
+  id: string,
+  req: NodeSyncRequest,
+): Promise<ApiResult<{ sync: NodeSyncResult; node_manifest_path?: string }>> =>
+  apiFetch<any>(`/services/${id}/actions/sync-to-node`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return {
+      sync: normalizeNodeSync(res.sync),
+      node_manifest_path: res.node_manifest_path,
+    }
+  })
 
 export const createPullBundle = (
   id: string,

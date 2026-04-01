@@ -78,6 +78,9 @@ class NodeModeTests(unittest.TestCase):
             self.assertEqual(health.json()["mode"], "node")
             self.assertEqual(info.status_code, 200)
             self.assertEqual(info.json()["manifest"]["service_id"], "sample-service")
+            self.assertIn("runtime", info.json())
+            self.assertIn("last_snapshot_at", info.json())
+            self.assertEqual(info.json()["runtime"]["monitoring_mode"], "manual")
 
 
 if __name__ == "__main__":

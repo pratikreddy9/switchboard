@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException
 
+from . import __version__
 from .collectors import CollectionCoordinator
 from .config import get_settings
 from .manifests import ManifestStore
@@ -13,8 +14,10 @@ from .models import (
     DownloadRequest,
     GitPullRequest,
     GitPushRequest,
+    NodeSyncRequest,
     PullBundleRequest,
     RepoActionRequest,
+    RuntimeActionRequest,
     ScanRootRequest,
     ServiceCreateRequest,
     ServicePatchRequest,
@@ -27,7 +30,7 @@ manifest_store = ManifestStore(settings)
 snapshot_store = SnapshotStore(settings, manifest_store)
 coordinator = CollectionCoordinator(settings, manifest_store, snapshot_store)
 
-app = FastAPI(title="Switchboard", version="0.1.0")
+app = FastAPI(title="Switchboard", version=__version__)
 
 
 def _normalize_latest_snapshot(snapshot: dict[str, object]) -> dict[str, object]:
@@ -45,6 +48,29 @@ def _normalize_latest_snapshot(snapshot: dict[str, object]) -> dict[str, object]
     return normalized
 
 
+def _enrich_service_payload(payload: dict[str, object]) -> dict[str, object]:
+    enriched = dict(payload)
+    service_id = str(enriched.get("service_id") or "")
+    if not service_id:
+        return enriched
+    runtime_state = snapshot_store.get_service_runtime_state(service_id)
+    enriched["runtime_checks"] = runtime_state["runtime_checks"]
+    enriched["node_sync"] = runtime_state["node_sync"]
+    return enriched
+
+
+def _enrich_latest_snapshot(snapshot: dict[str, object]) -> dict[str, object]:
+    normalized = _normalize_latest_snapshot(snapshot)
+    services = []
+    for service in normalized.get("services", []):
+        if isinstance(service, dict):
+            services.append(_enrich_service_payload(service))
+        else:
+            services.append(service)
+    normalized["services"] = services
+    return normalized
+
+
 def _raise_for_action_result(result: dict[str, object]) -> None:
     status = result.get("status")
     message = str(result.get("message") or result.get("output") or "Request failed.")
@@ -58,7 +84,7 @@ def _raise_for_action_result(result: dict[str, object]) -> None:
 def health() -> dict[str, object]:
     return {
         "status": "ok",
-        "version": "0.1.0",
+        "version": __version__,
         "timestamp": __import__("datetime").datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
         "framework": "switchboard",
         "vpn_note": "If VPN is needed for a server, turn it on manually. Switchboard does not store VPN state.",
@@ -73,6 +99,7 @@ def list_workspaces() -> dict[str, object]:
         "workspaces": [
             {
                 **workspace.model_dump(mode="json"),
+                "server_count": len(workspace.servers),
                 "service_count": len([service for service in services if service.workspace_id == workspace.workspace_id]),
             }
             for workspace in workspaces
@@ -94,7 +121,7 @@ def get_workspace(workspace_id: str) -> dict[str, object]:
     services = manifest_store.get_workspace_services(workspace_id)
     return {
         "workspace": workspace.model_dump(mode="json"),
-        "services": [service.model_dump(mode="json") for service in services],
+        "services": [_enrich_service_payload(service.model_dump(mode="json")) for service in services],
     }
 
 
@@ -104,19 +131,39 @@ def get_workspace_latest(workspace_id: str) -> dict[str, object]:
     if latest is None:
         try:
             workspace = manifest_store.get_workspace(workspace_id)
+            services = manifest_store.get_workspace_services(workspace_id)
+            servers = [
+                manifest_store.get_server(server_id).model_dump(mode="json")
+                for server_id in workspace.servers
+            ]
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return {
             "generated": None,
             "workspace": workspace.model_dump(mode="json"),
-            "servers": [],
-            "services": [],
+            "servers": [
+                {
+                    **server,
+                    "status": "unverified",
+                    "hostname": server.get("host"),
+                    "services": [],
+                    "docker": [],
+                    "firewall": "unverified",
+                    "ports": [],
+                }
+                for server in servers
+            ],
+            "services": [_enrich_service_payload(service.model_dump(mode="json")) for service in services],
             "repo_inventory": [],
             "docs_index": [],
             "logs_index": [],
-            "summary": {"status": "unverified", "server_count": 0, "service_count": 0},
+            "summary": {
+                "status": "unverified",
+                "server_count": len(workspace.servers),
+                "service_count": len(services),
+            },
         }
-    return _normalize_latest_snapshot(latest)
+    return _enrich_latest_snapshot(latest)
 
 
 @app.get("/api/workspaces/{workspace_id}/runs")
@@ -130,7 +177,7 @@ def get_service(service_id: str) -> dict[str, object]:
         service = manifest_store.get_service(service_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return {"service": service.model_dump(mode="json")}
+    return {"service": _enrich_service_payload(service.model_dump(mode="json"))}
 
 
 @app.get("/api/services/{service_id}/scope")
@@ -172,7 +219,7 @@ def create_service(workspace_id: str, request: ServiceCreateRequest) -> dict[str
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return {"service": service.model_dump(mode="json")}
+    return {"service": _enrich_service_payload(service.model_dump(mode="json"))}
 
 
 @app.patch("/api/services/{service_id}")
@@ -181,7 +228,7 @@ def patch_service(service_id: str, request: ServicePatchRequest) -> dict[str, ob
         service = manifest_store.patch_service(service_id, request)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return {"service": service.model_dump(mode="json")}
+    return {"service": _enrich_service_payload(service.model_dump(mode="json"))}
 
 
 @app.delete("/api/services/{service_id}")
@@ -231,6 +278,38 @@ def git_pull(service_id: str, request: GitPullRequest) -> dict[str, object]:
 def git_push(service_id: str, request: GitPushRequest) -> dict[str, object]:
     try:
         result = coordinator.git_push(service_id, request)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _raise_for_action_result(result)
+    return result
+
+
+@app.post("/api/services/{service_id}/actions/runtime-check")
+def runtime_check(service_id: str, request: RuntimeActionRequest) -> dict[str, object]:
+    try:
+        result = coordinator.runtime_check(service_id, request)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _raise_for_action_result(result)
+    return result
+
+
+@app.post("/api/services/{service_id}/actions/sync-from-node")
+def sync_from_node(service_id: str, request: NodeSyncRequest) -> dict[str, object]:
+    try:
+        result = coordinator.sync_from_node(service_id, request)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _raise_for_action_result(result)
+    if isinstance(result.get("service"), dict):
+        result = {**result, "service": _enrich_service_payload(result["service"])}
+    return result
+
+
+@app.post("/api/services/{service_id}/actions/sync-to-node")
+def sync_to_node(service_id: str, request: NodeSyncRequest) -> dict[str, object]:
+    try:
+        result = coordinator.sync_to_node(service_id, request)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     _raise_for_action_result(result)

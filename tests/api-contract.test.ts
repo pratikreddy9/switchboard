@@ -112,6 +112,17 @@ describe('GET /api/services/:id', () => {
       expect(body.service, `Missing field: ${field}`).toHaveProperty(field)
     }
   })
+
+  it('includes runtime config on locations', async () => {
+    if (!backendUp) return
+    const { status, body } = await get('/services/docgenerator')
+    expect(status).toBe(200)
+    expect(Array.isArray(body.service.locations)).toBe(true)
+    if (body.service.locations.length > 0) {
+      expect(body.service.locations[0]).toHaveProperty('runtime')
+      expect(body.service.locations[0].runtime).toHaveProperty('monitoring_mode')
+    }
+  })
 })
 
 describe('GET /api/services/:id/secret-paths', () => {

@@ -28,10 +28,13 @@ from .models import (
     DownloadRequest,
     GitPushRequest,
     GitPullRequest,
+    NodeSyncRequest,
     PullBundleRequest,
     RepoActionRequest,
     ResolvedServer,
+    RuntimeActionRequest,
     ScanRootRequest,
+    ServicePatchRequest,
     ServiceManifest,
 )
 from .storage import SnapshotStore, utc_now_iso
@@ -62,7 +65,12 @@ class CollectionCoordinator:
             location.server_id
             for service in services
             for location in service.locations
-        } | set(workspace.servers)
+        }
+        if request.service_ids:
+            if not server_ids:
+                server_ids = set(workspace.servers)
+        else:
+            server_ids |= set(workspace.servers)
         resolved_servers: dict[str, ResolvedServer] = {}
         server_results = []
         for server_id in sorted(server_ids):
@@ -461,6 +469,244 @@ class CollectionCoordinator:
             "output": (result["stdout"] or result["stderr"]).strip(),
         }
 
+    def runtime_check(self, service_id: str, request: RuntimeActionRequest) -> dict[str, Any]:
+        service = self.manifests.get_service(service_id)
+        location = self._select_location(service, location_id=request.location_id)
+        if location is None:
+            return {"status": "path_missing", "message": "No service location available."}
+
+        server_id = location.server_id
+        server = self.manifests.resolve_server(
+            server_id,
+            {server_id: request.runtime_password} if request.runtime_password else {},
+        )
+        runtime = location.runtime
+        configured_ports = runtime.expected_ports
+
+        if server.connection_type == "local":
+            listeners = self._collect_local_listener_details()
+            node_present = self._local_node_manifest_path(location.root).exists()
+            health_result = self._run_healthcheck_local(runtime.healthcheck_command)
+        else:
+            with self._open_ssh(server) as connection:
+                if connection is None:
+                    result = {
+                        "service_id": service_id,
+                        "location_id": location.location_id,
+                        "server_id": server_id,
+                        "root": location.root,
+                        "status": "unreachable",
+                        "checked_at": utc_now_iso(),
+                        "configured_ports": configured_ports,
+                        "detected_ports": [],
+                        "missing_ports": configured_ports,
+                        "healthcheck_command": runtime.healthcheck_command,
+                        "healthcheck_status": "skipped",
+                        "healthcheck_output": "",
+                        "detected_process_command": "",
+                        "run_command_hint": runtime.run_command_hint,
+                        "monitoring_mode": runtime.monitoring_mode,
+                        "notes": runtime.notes,
+                        "node_present": False,
+                    }
+                    self.snapshots.persist_runtime_check(service_id, location.location_id, result)
+                    return result
+                ssh, sftp = connection
+                listeners = self._collect_remote_listener_details(ssh)
+                node_present = self._remote_exists(sftp, self._remote_node_manifest_path(location.root))
+                health_result = self._run_healthcheck_remote(ssh, runtime.healthcheck_command)
+
+        matched_ports = [entry for entry in listeners if entry["port"] in configured_ports] if configured_ports else listeners
+        missing_ports = [port for port in configured_ports if port not in {entry["port"] for entry in listeners}]
+        detected_process_command = self._lookup_process_command(
+            server,
+            matched_ports[0].get("pid") if matched_ports else None,
+        )
+
+        status = "ok"
+        if configured_ports and missing_ports:
+            status = "partial"
+        if health_result["status"] == "failed":
+            status = "partial"
+        if not configured_ports and not runtime.healthcheck_command and not listeners:
+            status = "unverified"
+
+        result = {
+            "service_id": service_id,
+            "location_id": location.location_id,
+            "server_id": server_id,
+            "root": location.root,
+            "status": status,
+            "checked_at": utc_now_iso(),
+            "configured_ports": configured_ports,
+            "detected_ports": listeners,
+            "missing_ports": missing_ports,
+            "healthcheck_command": runtime.healthcheck_command,
+            "healthcheck_status": health_result["status"],
+            "healthcheck_output": health_result["output"],
+            "detected_process_command": detected_process_command,
+            "run_command_hint": runtime.run_command_hint,
+            "monitoring_mode": runtime.monitoring_mode,
+            "notes": runtime.notes,
+            "node_present": node_present,
+            "source": "runtime_check",
+        }
+        self.snapshots.persist_runtime_check(service_id, location.location_id, result)
+        return result
+
+    def sync_from_node(self, service_id: str, request: NodeSyncRequest) -> dict[str, Any]:
+        service = self.manifests.get_service(service_id)
+        location = self._select_location(service, location_id=request.location_id)
+        if location is None:
+            return {"status": "path_missing", "message": "No service location available."}
+
+        node_manifest: dict[str, Any] | None = None
+        scope_snapshot: dict[str, Any] | None = None
+        server_id = location.server_id
+        server = self.manifests.resolve_server(
+            server_id,
+            {server_id: request.runtime_password} if request.runtime_password else {},
+        )
+
+        if server.connection_type == "local":
+            node_manifest_path = self._local_node_manifest_path(location.root)
+            scope_snapshot_path = self._local_scope_snapshot_path(location.root)
+            node_manifest = self._read_local_json(node_manifest_path)
+            scope_snapshot = self._read_local_json(scope_snapshot_path)
+        else:
+            with self._open_ssh(server) as connection:
+                if connection is None:
+                    return {"status": "unreachable", "message": "SSH connection failed."}
+                _, sftp = connection
+                node_manifest = self._read_remote_json(sftp, self._remote_node_manifest_path(location.root))
+                scope_snapshot = self._read_remote_json(sftp, self._remote_scope_snapshot_path(location.root))
+
+        if not node_manifest:
+            return {"status": "path_missing", "message": "Node manifest not found at selected location."}
+
+        updated_locations = [item.model_dump(mode="json") for item in service.locations]
+        for item in updated_locations:
+            if item["location_id"] == location.location_id and request.include_runtime_config:
+                item["runtime"] = node_manifest.get("runtime", item.get("runtime", {}))
+
+        patch_payload: dict[str, Any] = {"locations": updated_locations}
+        if request.include_scope_snapshot and scope_snapshot and scope_snapshot.get("scope_entries"):
+            scope_entries = scope_snapshot["scope_entries"]
+            flattened = self._flatten_scope_entries(scope_entries)
+            patch_payload.update(
+                {
+                    "scope_entries": scope_entries,
+                    "repo_paths": flattened["repo_paths"],
+                    "docs_paths": flattened["docs_paths"],
+                    "log_paths": flattened["log_paths"],
+                    "exclude_globs": flattened["exclude_globs"],
+                    "allowed_git_pull_paths": flattened["repo_paths"],
+                    "repo_policies": self._repo_policies_for_paths(flattened["repo_paths"]),
+                }
+            )
+
+        updated_service = self.manifests.patch_service(service_id, ServicePatchRequest(**patch_payload))
+        record = {
+            "service_id": service_id,
+            "location_id": location.location_id,
+            "direction": "from_node",
+            "timestamp": utc_now_iso(),
+            "status": "ok",
+            "source": "node",
+            "target": "control_center",
+            "include_scope_snapshot": request.include_scope_snapshot,
+            "include_runtime_config": request.include_runtime_config,
+        }
+        self.snapshots.persist_node_sync(service_id, location.location_id, record)
+        return {
+            "status": "ok",
+            "service": updated_service.model_dump(mode="json"),
+            "sync": record,
+        }
+
+    def sync_to_node(self, service_id: str, request: NodeSyncRequest) -> dict[str, Any]:
+        service = self.manifests.get_service(service_id)
+        location = self._select_location(service, location_id=request.location_id)
+        if location is None:
+            return {"status": "path_missing", "message": "No service location available."}
+
+        server_id = location.server_id
+        server = self.manifests.resolve_server(
+            server_id,
+            {server_id: request.runtime_password} if request.runtime_password else {},
+        )
+        location_scope_entries = self._scope_entries_for_location(service, location.root)
+        flattened = self._flatten_scope_entries(location_scope_entries)
+
+        if server.connection_type == "local":
+            manifest_path = self._local_node_manifest_path(location.root)
+            scope_path = self._local_scope_snapshot_path(location.root)
+            existing_manifest = self._read_local_json(manifest_path)
+            if not existing_manifest:
+                return {"status": "path_missing", "message": "Node manifest not found at selected location."}
+            updated_manifest = self._updated_node_manifest(
+                existing_manifest,
+                service,
+                location,
+                flattened,
+                request.include_runtime_config,
+            )
+            self._write_local_json(manifest_path, updated_manifest)
+            if request.include_scope_snapshot:
+                scope_payload = self._updated_scope_snapshot(
+                    self._read_local_json(scope_path),
+                    service,
+                    location.root,
+                    location_scope_entries,
+                )
+                self._write_local_json(scope_path, scope_payload)
+        else:
+            with self._open_ssh(server) as connection:
+                if connection is None:
+                    return {"status": "unreachable", "message": "SSH connection failed."}
+                ssh, sftp = connection
+                manifest_path = self._remote_node_manifest_path(location.root)
+                scope_path = self._remote_scope_snapshot_path(location.root)
+                existing_manifest = self._read_remote_json(sftp, manifest_path)
+                if not existing_manifest:
+                    return {"status": "path_missing", "message": "Node manifest not found at selected location."}
+                updated_manifest = self._updated_node_manifest(
+                    existing_manifest,
+                    service,
+                    location,
+                    flattened,
+                    request.include_runtime_config,
+                )
+                self._write_remote_json(ssh, sftp, manifest_path, updated_manifest)
+                if request.include_scope_snapshot:
+                    scope_payload = self._updated_scope_snapshot(
+                        self._read_remote_json(sftp, scope_path),
+                        service,
+                        location.root,
+                        location_scope_entries,
+                    )
+                    self._write_remote_json(ssh, sftp, scope_path, scope_payload)
+
+        record = {
+            "service_id": service_id,
+            "location_id": location.location_id,
+            "direction": "to_node",
+            "timestamp": utc_now_iso(),
+            "status": "ok",
+            "source": "control_center",
+            "target": "node",
+            "include_scope_snapshot": request.include_scope_snapshot,
+            "include_runtime_config": request.include_runtime_config,
+        }
+        self.snapshots.persist_node_sync(service_id, location.location_id, record)
+        return {
+            "status": "ok",
+            "sync": record,
+            "node_manifest_path": self._remote_node_manifest_path(location.root)
+            if server.connection_type == "ssh"
+            else str(self._local_node_manifest_path(location.root)),
+        }
+
     def pull_bundle(self, service_id: str, request: PullBundleRequest) -> dict[str, Any]:
         service = self.manifests.get_service(service_id)
         location = self._select_location(service, request.server_id)
@@ -539,7 +785,14 @@ class CollectionCoordinator:
             return self._collect_local_server_summary(server_id, server)
         return self._collect_ssh_server_summary(server_id, server)
 
-    def _select_location(self, service: ServiceManifest, server_id: str | None) -> Any | None:
+    def _select_location(
+        self,
+        service: ServiceManifest,
+        server_id: str | None = None,
+        location_id: str | None = None,
+    ) -> Any | None:
+        if location_id is not None:
+            return next((location for location in service.locations if location.location_id == location_id), None)
         if server_id is not None:
             return next((location for location in service.locations if location.server_id == server_id), None)
         primary = next((location for location in service.locations if location.is_primary), None)
@@ -554,6 +807,59 @@ class CollectionCoordinator:
             if repo_path.startswith(location.root):
                 return location.server_id
         return None
+
+    def _flatten_scope_entries(self, scope_entries: list[dict[str, Any]]) -> dict[str, list[str]]:
+        repo_paths = [entry["path"] for entry in scope_entries if entry.get("enabled", True) and entry.get("kind") == "repo"]
+        docs_paths = [entry["path"] for entry in scope_entries if entry.get("enabled", True) and entry.get("kind") == "doc"]
+        log_paths = [entry["path"] for entry in scope_entries if entry.get("enabled", True) and entry.get("kind") == "log"]
+        exclude_globs = [entry["path"] for entry in scope_entries if entry.get("enabled", True) and entry.get("kind") == "exclude"]
+        return {
+            "repo_paths": repo_paths,
+            "docs_paths": docs_paths,
+            "log_paths": log_paths,
+            "exclude_globs": exclude_globs,
+        }
+
+    def _repo_policies_for_paths(self, repo_paths: list[str]) -> list[dict[str, Any]]:
+        policies: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for repo_path in repo_paths:
+            if repo_path in seen:
+                continue
+            seen.add(repo_path)
+            token = repo_path.lower()
+            secret_heavy = "lambda" in token or "secret" in token or "credential" in token
+            policies.append(
+                {
+                    "repo_path": repo_path,
+                    "push_mode": "blocked" if secret_heavy else "allowed",
+                    "safety_profile": "secret_heavy" if secret_heavy else "generic_python",
+                    "allowed_branches": [],
+                    "allowed_remotes": [],
+                }
+            )
+        return policies
+
+    def _scope_entries_for_location(self, service: ServiceManifest, root: str) -> list[dict[str, Any]]:
+        entries: list[dict[str, Any]] = []
+        for entry in service.scope_entries:
+            if not entry.enabled:
+                continue
+            if entry.path.startswith(root):
+                entries.append(entry.model_dump(mode="json"))
+        return entries
+
+    def _local_node_manifest_path(self, root: str) -> Path:
+        return Path(root) / "switchboard" / "node.manifest.json"
+
+    def _local_scope_snapshot_path(self, root: str) -> Path:
+        return Path(root) / "switchboard" / "evidence" / "scope.snapshot.json"
+
+    def _remote_node_manifest_path(self, root: str) -> str:
+        return posixpath.join(root.rstrip("/"), "switchboard", "node.manifest.json")
+
+    def _remote_scope_snapshot_path(self, root: str) -> str:
+        return posixpath.join(root.rstrip("/"), "switchboard", "evidence", "scope.snapshot.json")
 
     def _collect_service(
         self,
@@ -1176,6 +1482,162 @@ class CollectionCoordinator:
             "size": size if size is not None else stats.st_size,
             "mtime": self._format_mtime(mtime if mtime is not None else stats.st_mtime),
             "sha256": digest,
+        }
+
+    def _read_local_json(self, path: Path) -> dict[str, Any] | None:
+        if not path.exists():
+            return None
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    def _write_local_json(self, path: Path, value: dict[str, Any]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
+
+    def _read_remote_json(self, sftp: Any, path: str) -> dict[str, Any] | None:
+        try:
+            with sftp.open(path, "r") as handle:
+                return json.loads(handle.read().decode("utf-8"))
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+            return None
+
+    def _write_remote_json(self, ssh: Any, sftp: Any, path: str, value: dict[str, Any]) -> None:
+        parent = posixpath.dirname(path)
+        self._run_remote(ssh, f"mkdir -p {self._quote(parent)}")
+        with sftp.open(path, "w") as handle:
+            handle.write(json.dumps(value, indent=2) + "\n")
+
+    def _collect_local_listener_details(self) -> list[dict[str, Any]]:
+        result = self._run_local(["sh", "-lc", "ss -ltnp 2>/dev/null || lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null"])
+        return self._parse_listener_output(result["stdout"])
+
+    def _collect_remote_listener_details(self, ssh: Any) -> list[dict[str, Any]]:
+        result = self._run_remote(ssh, "ss -ltnp 2>/dev/null || lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null")
+        return self._parse_listener_output(result["stdout"])
+
+    def _parse_listener_output(self, output: str) -> list[dict[str, Any]]:
+        listeners: list[dict[str, Any]] = []
+        seen: set[tuple[int, int | None, str]] = set()
+        for raw_line in self._split_lines(output):
+            line = raw_line.strip()
+            if not line or line.lower().startswith(("state", "netid", "command")):
+                continue
+            port_match = re.search(r":(\d+)(?:\s|\(|$)", line)
+            if not port_match:
+                continue
+            port = int(port_match.group(1))
+            state = "LISTEN" if "LISTEN" in line.upper() else ""
+            process = ""
+            pid: int | None = None
+
+            ss_match = re.search(r'users:\(\("([^"]+)",pid=(\d+)', line)
+            if ss_match:
+                process = ss_match.group(1)
+                pid = int(ss_match.group(2))
+            else:
+                lsof_match = re.match(r"(\S+)\s+(\d+)\s+", line)
+                if lsof_match:
+                    process = lsof_match.group(1)
+                    pid = int(lsof_match.group(2))
+
+            key = (port, pid, process)
+            if key in seen:
+                continue
+            seen.add(key)
+            listeners.append(
+                {
+                    "port": port,
+                    "protocol": "tcp",
+                    "process": process,
+                    "pid": pid,
+                    "state": state,
+                    "raw": line,
+                }
+            )
+        listeners.sort(key=lambda item: item["port"])
+        return listeners
+
+    def _run_healthcheck_local(self, command: str) -> dict[str, str]:
+        if not command.strip():
+            return {"status": "skipped", "output": ""}
+        result = self._run_local(["sh", "-lc", command])
+        return {
+            "status": "ok" if result["returncode"] == 0 else "failed",
+            "output": (result["stdout"] or result["stderr"]).strip(),
+        }
+
+    def _run_healthcheck_remote(self, ssh: Any, command: str) -> dict[str, str]:
+        if not command.strip():
+            return {"status": "skipped", "output": ""}
+        result = self._run_remote(ssh, command)
+        return {
+            "status": "ok" if result["returncode"] == 0 else "failed",
+            "output": (result["stdout"] or result["stderr"]).strip(),
+        }
+
+    def _lookup_process_command(self, server: ResolvedServer, pid: int | None) -> str:
+        if pid is None:
+            return ""
+        command = ["ps", "-p", str(pid), "-o", "command="]
+        if server.connection_type == "local":
+            result = self._run_local(command)
+        else:
+            with self._open_ssh(server) as connection:
+                if connection is None:
+                    return ""
+                ssh, _ = connection
+                result = self._run_remote(ssh, f"ps -p {pid} -o command=")
+        return result["stdout"].strip()
+
+    def _updated_node_manifest(
+        self,
+        existing_manifest: dict[str, Any],
+        service: ServiceManifest,
+        location: Any,
+        flattened_scope: dict[str, list[str]],
+        include_runtime_config: bool,
+    ) -> dict[str, Any]:
+        updated = dict(existing_manifest)
+        updated["service_id"] = service.service_id
+        updated["display_name"] = service.display_name
+        updated["project_root"] = location.root
+        updated["mode"] = "node"
+        updated["repo_paths"] = flattened_scope["repo_paths"] or updated.get("repo_paths", [location.root])
+        updated["docs_paths"] = flattened_scope["docs_paths"] or updated.get("docs_paths", [])
+        updated["log_paths"] = flattened_scope["log_paths"] or updated.get("log_paths", [])
+        updated["exclude_patterns"] = flattened_scope["exclude_globs"] or updated.get("exclude_patterns", [])
+        if include_runtime_config:
+            updated["runtime"] = location.runtime.model_dump(mode="json")
+        updated["updated_at"] = utc_now_iso()
+        return updated
+
+    def _updated_scope_snapshot(
+        self,
+        existing_snapshot: dict[str, Any] | None,
+        service: ServiceManifest,
+        project_root: str,
+        scope_entries: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        current = existing_snapshot or {}
+        updates = list(current.get("scope_updates", []))
+        updates.insert(
+            0,
+            {
+                "timestamp": utc_now_iso(),
+                "title": "Sync from control center",
+                "summary": "Updated scope snapshot from control-center service configuration.",
+                "changed_paths": [project_root],
+                "scope_entries": scope_entries,
+            },
+        )
+        return {
+            "generated": utc_now_iso(),
+            "service_id": service.service_id,
+            "project_root": project_root,
+            "scope_entries": scope_entries,
+            "scope_updates": updates[:20],
         }
 
     @contextmanager

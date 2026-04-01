@@ -12,6 +12,7 @@ import { addService, browseTree, listServers } from '../api/client'
 import type {
   CreateServiceRequest,
   RepoPolicy,
+  RuntimeConfig,
   ScopeEntry,
   ServerRecord,
   Service,
@@ -71,6 +72,13 @@ function uniqueScope(entries: ScopeEntry[]) {
     seen.add(key)
     return true
   })
+}
+
+function parsePorts(value: string): number[] {
+  return value
+    .split(',')
+    .map((token) => Number(token.trim()))
+    .filter((port) => Number.isFinite(port) && port > 0 && port <= 65535)
 }
 
 function pathTypeForNode(node: TreeNodeState): ScopeEntry['path_type'] {
@@ -179,6 +187,11 @@ export function ProjectOnboardingPanel({ workspaceId, serverIds, disabled, onCre
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [rootPathLoaded, setRootPathLoaded] = useState<string | null>(null)
+  const [expectedPorts, setExpectedPorts] = useState('')
+  const [healthcheckCommand, setHealthcheckCommand] = useState('')
+  const [runCommandHint, setRunCommandHint] = useState('')
+  const [monitoringMode, setMonitoringMode] = useState<RuntimeConfig['monitoring_mode']>('manual')
+  const [runtimeNotes, setRuntimeNotes] = useState('')
 
   useEffect(() => {
     if (disabled) return
@@ -440,6 +453,13 @@ export function ProjectOnboardingPanel({ workspaceId, serverIds, disabled, onCre
           role: 'primary',
           is_primary: true,
           path_aliases: [],
+          runtime: {
+            expected_ports: parsePorts(expectedPorts),
+            healthcheck_command: healthcheckCommand.trim(),
+            run_command_hint: runCommandHint.trim(),
+            monitoring_mode: monitoringMode,
+            notes: runtimeNotes.trim(),
+          },
         },
       ],
       scope_entries: scopeEntries,
@@ -464,6 +484,11 @@ export function ProjectOnboardingPanel({ workspaceId, serverIds, disabled, onCre
     setDisplayName('')
     setServiceId('')
     setRoot('')
+    setExpectedPorts('')
+    setHealthcheckCommand('')
+    setRunCommandHint('')
+    setMonitoringMode('manual')
+    setRuntimeNotes('')
     resetTreeState()
   }
 
@@ -555,6 +580,72 @@ export function ProjectOnboardingPanel({ workspaceId, serverIds, disabled, onCre
               disabled={disabled}
             />
           </label>
+
+          <div className="mt-4 rounded-xl border border-gray-800 bg-gray-950 p-4">
+            <div className="text-sm font-medium text-white">Runtime Config</div>
+            <div className="mt-1 text-xs text-gray-500">
+              Store the expected ports, health check command, and run-command hint for this location.
+            </div>
+
+            <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              <label className="text-sm text-gray-300">
+                <div className="mb-1">Expected ports</div>
+                <input
+                  value={expectedPorts}
+                  onChange={(event) => setExpectedPorts(event.target.value)}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500"
+                  placeholder="8000, 8506"
+                  disabled={disabled}
+                />
+              </label>
+              <label className="text-sm text-gray-300">
+                <div className="mb-1">Monitoring mode</div>
+                <select
+                  value={monitoringMode}
+                  onChange={(event) => setMonitoringMode(event.target.value as RuntimeConfig['monitoring_mode'])}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500"
+                  disabled={disabled}
+                >
+                  <option value="manual">manual</option>
+                  <option value="detect">detect</option>
+                  <option value="node_managed">node_managed</option>
+                </select>
+              </label>
+            </div>
+
+            <label className="mt-3 block text-sm text-gray-300">
+              <div className="mb-1">Health check command</div>
+              <input
+                value={healthcheckCommand}
+                onChange={(event) => setHealthcheckCommand(event.target.value)}
+                className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500"
+                placeholder="curl -fsS http://127.0.0.1:8000/health"
+                disabled={disabled}
+              />
+            </label>
+
+            <label className="mt-3 block text-sm text-gray-300">
+              <div className="mb-1">Run command hint</div>
+              <input
+                value={runCommandHint}
+                onChange={(event) => setRunCommandHint(event.target.value)}
+                className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500"
+                placeholder="uvicorn main:app --host 0.0.0.0 --port 8000"
+                disabled={disabled}
+              />
+            </label>
+
+            <label className="mt-3 block text-sm text-gray-300">
+              <div className="mb-1">Runtime notes</div>
+              <textarea
+                value={runtimeNotes}
+                onChange={(event) => setRuntimeNotes(event.target.value)}
+                className="min-h-24 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500"
+                placeholder="Manual runtime notes for this location."
+                disabled={disabled}
+              />
+            </label>
+          </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <button

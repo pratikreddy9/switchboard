@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "switchboard"
-version = "0.1.0"
+version = "0.1.1"
 description = "Framework-first control center for project workspaces, server pulls, and dashboard snapshots."
-readme = "docs/dashboard-agent-handoff.md"
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.115,<1.0",

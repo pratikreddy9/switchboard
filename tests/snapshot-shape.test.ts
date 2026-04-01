@@ -7,11 +7,16 @@ import { readFileSync, existsSync } from 'fs'
 import { resolve } from 'path'
 
 const EVIDENCE_DIR = resolve(process.cwd(), 'docs/evidence')
+const FALLBACK_DIR = resolve(process.cwd(), 'src/data')
 
 function loadEvidence(name: string) {
-  const p = resolve(EVIDENCE_DIR, name)
-  if (!existsSync(p)) return null
-  return JSON.parse(readFileSync(p, 'utf-8'))
+  const runtimePath = resolve(EVIDENCE_DIR, name)
+  if (existsSync(runtimePath)) {
+    return JSON.parse(readFileSync(runtimePath, 'utf-8'))
+  }
+  const fallbackPath = resolve(FALLBACK_DIR, name)
+  if (!existsSync(fallbackPath)) return null
+  return JSON.parse(readFileSync(fallbackPath, 'utf-8'))
 }
 
 const REQUIRED_FILES = [
@@ -27,8 +32,9 @@ const REQUIRED_FILES = [
 describe('Evidence files exist', () => {
   for (const file of REQUIRED_FILES) {
     it(`${file} exists`, () => {
-      const p = resolve(EVIDENCE_DIR, file)
-      expect(existsSync(p), `Missing: ${p}`).toBe(true)
+      const runtimePath = resolve(EVIDENCE_DIR, file)
+      const fallbackPath = resolve(FALLBACK_DIR, file)
+      expect(existsSync(runtimePath) || existsSync(fallbackPath), `Missing: ${runtimePath} and ${fallbackPath}`).toBe(true)
     })
   }
 })
@@ -86,8 +92,10 @@ describe('Secret path data not in dashboard-safe evidence', () => {
   for (const file of SAFE_FILES) {
     it(`${file} does not contain secret path data`, () => {
       const p = resolve(EVIDENCE_DIR, file)
-      if (!existsSync(p)) return
-      const raw = readFileSync(p, 'utf-8').toLowerCase()
+      const q = resolve(FALLBACK_DIR, file)
+      const target = existsSync(p) ? p : q
+      if (!existsSync(target)) return
+      const raw = readFileSync(target, 'utf-8').toLowerCase()
       // These strings should never appear in dashboard-safe files
       const BANNED = ['.env', 'secret_path_index', 'private/']
       for (const banned of BANNED) {

@@ -12,9 +12,10 @@ OwnershipTier = Literal["owned", "shared", "infra"]
 ConnectionType = Literal["local", "ssh"]
 ScopeKind = Literal["repo", "doc", "log", "exclude"]
 ScopePathType = Literal["file", "dir", "glob"]
-ScopeSource = Literal["seeded", "user_added"]
+ScopeSource = Literal["seeded", "user_added", "node_manifest", "tasks_completed"]
 PushMode = Literal["allowed", "blocked"]
 SafetyProfile = Literal["generic_python", "secret_heavy"]
+MonitoringMode = Literal["manual", "detect", "node_managed"]
 ActionStatus = Literal[
     "ok",
     "partial",
@@ -47,6 +48,25 @@ class ResolvedServer(ServerManifest):
     password: str | None = None
 
 
+class RuntimeConfig(BaseModel):
+    expected_ports: list[int] = Field(default_factory=list)
+    healthcheck_command: str = ""
+    run_command_hint: str = ""
+    monitoring_mode: MonitoringMode = "manual"
+    notes: str = ""
+
+    @field_validator("expected_ports")
+    @classmethod
+    def validate_expected_ports(cls, value: list[int]) -> list[int]:
+        deduped: list[int] = []
+        for port in value:
+            if port < 1 or port > 65535:
+                raise ValueError("expected_ports entries must be between 1 and 65535")
+            if port not in deduped:
+                deduped.append(port)
+        return deduped
+
+
 class LocationSpec(BaseModel):
     location_id: str
     server_id: str
@@ -55,6 +75,7 @@ class LocationSpec(BaseModel):
     role: str
     is_primary: bool = False
     path_aliases: list[str] = Field(default_factory=list)
+    runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
 
 
 class ScopeEntry(BaseModel):
@@ -257,6 +278,18 @@ class PullBundleRequest(BaseModel):
     runtime_password: str | None = None
     extra_includes: list[ScopeEntry] = Field(default_factory=list)
     extra_excludes: list[str] = Field(default_factory=list)
+
+
+class RuntimeActionRequest(BaseModel):
+    location_id: str | None = None
+    runtime_password: str | None = None
+
+
+class NodeSyncRequest(BaseModel):
+    location_id: str | None = None
+    runtime_password: str | None = None
+    include_scope_snapshot: bool = True
+    include_runtime_config: bool = True
 
 
 class SecretPathQuery(BaseModel):

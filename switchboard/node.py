@@ -101,6 +101,7 @@ def _core_templates(service_id: str, display_name: str) -> dict[str, str]:
             "- Core files in `switchboard/core/` are standardized and may be replaced on upgrade.\n"
             "- Agents should maintain project-specific updates through `switchboard/local/tasks-completed.md`.\n"
             "- Snapshot regeneration updates the other local and evidence files deterministically.\n"
+            "- Node sync is manual and initiated from the control center.\n"
             f"- Service id: `{service_id}`\n"
         ),
         "design-principles.md": (
@@ -109,6 +110,7 @@ def _core_templates(service_id: str, display_name: str) -> dict[str, str]:
             "- Keep Git as the canonical change history.\n"
             "- Prefer deterministic, timestamped machine-readable evidence.\n"
             "- Update one canonical runtime file, then regenerate derived docs.\n"
+            "- Keep runtime config mirrored per location through the node manifest.\n"
             "- Never commit secrets, live passwords, or tokens into tracked docs.\n"
         ),
         "doc-structure-rules.md": (
@@ -117,6 +119,7 @@ def _core_templates(service_id: str, display_name: str) -> dict[str, str]:
             "- `switchboard/local/tasks-completed.md` is the canonical runtime input file.\n"
             "- `switchboard/local/control-center-handoff.md`, `runbook.md`, and `approach-history.md` are regenerated outputs.\n"
             "- `switchboard/evidence/` is machine-readable and timestamped.\n"
+            "- `switchboard/node.manifest.json` is the node identity and runtime-config mirror.\n"
             "- Use ISO timestamps in every generated JSON or markdown note.\n"
         ),
         "agent-instructions.md": (
@@ -124,6 +127,7 @@ def _core_templates(service_id: str, display_name: str) -> dict[str, str]:
             "- Read `switchboard/core/` first.\n"
             "- On regular updates, edit only `switchboard/local/tasks-completed.md` unless explicitly asked otherwise.\n"
             "- After editing `tasks-completed.md`, run `switchboard node snapshot --project-root <path>`.\n"
+            "- Do not assume the node can push into the control center. Sync is manual and control-center initiated.\n"
             "- Keep project docs outside `switchboard/` untouched unless explicitly requested.\n"
         ),
         "bootstrap-standardize-prompt.md": (
@@ -246,6 +250,16 @@ def _manifest_payload(project_root: Path, service_id: str, display_name: str, ex
         "docs_paths": docs_paths,
         "log_paths": existing.get("log_paths", []),
         "exclude_patterns": existing.get("exclude_patterns", []),
+        "runtime": existing.get(
+            "runtime",
+            {
+                "expected_ports": [],
+                "healthcheck_command": "",
+                "run_command_hint": "",
+                "monitoring_mode": "manual",
+                "notes": "",
+            },
+        ),
         "evidence_paths": {
             "completed_tasks": str(paths["completed_tasks_json"].relative_to(project_root)),
             "repo_safety_history": str(paths["repo_safety_history"].relative_to(project_root)),

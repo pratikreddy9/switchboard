@@ -7,6 +7,7 @@ rollout predictable without broad crawling or doc sprawl.
 ## Core Rules
 
 - `docs/evidence/` is the dashboard-safe canonical lane for the control center.
+- Checked-in fallback data lives in `src/data/`. Runtime-generated control-center evidence stays local in `docs/evidence/`.
 - Node-owned project docs live under `switchboard/` inside each project root.
 - Private path discoveries stay in `state/private/`.
 - Passwords and tokens do not belong in tracked framework scaffolding.
@@ -17,6 +18,8 @@ rollout predictable without broad crawling or doc sprawl.
 - Secret handling is path-only. The framework records location metadata but never
   reads or stores secret file contents.
 - A node should update one canonical runtime file and regenerate its derived docs.
+- Runtime config belongs to each service location, not to the service as a whole.
+- Node sync is manual and always initiated from the control center.
 - Broad local dump-folder crawling is out of scope for v1. Only explicitly seeded
   roots are managed.
 

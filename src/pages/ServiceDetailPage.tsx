@@ -1,7 +1,16 @@
-import { useEffect, useState } from 'react'
-import { ArrowLeft, FileStack, FolderTree, Pencil, Save, Server, Trash2, X } from 'lucide-react'
-import type { Service, ServiceRunResult, RunRecord, ScopeEntry } from '../types/switchboard'
-import { deleteService, getService, getServiceScope, getWorkspaceRuns, updateService } from '../api/client'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowLeft, FileStack, FolderTree, Pencil, RefreshCw, Save, Server, Trash2, X } from 'lucide-react'
+import type { RuntimeCheckResult, Service, ServiceLocationDraft, ServiceRunResult, RunRecord, ScopeEntry } from '../types/switchboard'
+import {
+  deleteService,
+  getService,
+  getServiceScope,
+  getWorkspaceRuns,
+  runRuntimeCheck,
+  syncFromNode,
+  syncToNode,
+  updateService,
+} from '../api/client'
 import { isApiError } from '../types/switchboard'
 import { StatusBadge } from '../components/StatusBadge'
 import { RepoSummary } from '../components/RepoSummary'
@@ -15,6 +24,13 @@ interface Props {
   offline: boolean
   onBack: () => void
   onDeleted: (serviceId: string, workspaceId: string) => void
+}
+
+function parsePorts(value: string): number[] {
+  return value
+    .split(',')
+    .map((token) => Number(token.trim()))
+    .filter((port) => Number.isFinite(port) && port > 0 && port <= 65535)
 }
 
 export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDeleted }: Props) {
@@ -31,11 +47,21 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [editingRuntime, setEditingRuntime] = useState(false)
+  const [runtimeDraft, setRuntimeDraft] = useState<ServiceLocationDraft[]>([])
+  const [savingRuntime, setSavingRuntime] = useState(false)
+  const [runtimeMessage, setRuntimeMessage] = useState<string | null>(null)
+  const [checkingRuntimeLocation, setCheckingRuntimeLocation] = useState<string | null>(null)
+  const [syncingFromLocation, setSyncingFromLocation] = useState<string | null>(null)
+  const [syncingToLocation, setSyncingToLocation] = useState<string | null>(null)
 
   useEffect(() => {
     if (offline) return
     getService(serviceId).then((res) => {
-      if (!isApiError(res)) setService(res)
+      if (!isApiError(res)) {
+        setService(res)
+        setRuntimeDraft(res.locations.map((location) => ({ ...location, runtime: { ...location.runtime } })))
+      }
     })
     getServiceScope(serviceId).then((res) => {
       if (!isApiError(res)) {
@@ -74,6 +100,156 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
     setService(updated)
     setScopeEntries(updated.scope_entries)
     setScopeDraft(updated.scope_entries.map((entry) => ({ ...entry })))
+    setRuntimeDraft(updated.locations.map((location) => ({ ...location, runtime: { ...location.runtime } })))
+  }
+
+  const runtimeChecksByLocation = useMemo(() => {
+    const map = new Map<string, RuntimeCheckResult>()
+    for (const entry of service?.runtime_checks ?? []) {
+      if (!map.has(entry.location_id)) map.set(entry.location_id, entry)
+    }
+    for (const entry of runResult?.runtime_checks ?? []) {
+      if (!map.has(entry.location_id)) map.set(entry.location_id, entry)
+    }
+    return map
+  }, [runResult?.runtime_checks, service?.runtime_checks])
+
+  const nodeSyncByLocation = useMemo(() => {
+    const map = new Map<string, NonNullable<Service['node_sync']>[number]>()
+    for (const entry of service?.node_sync ?? []) {
+      if (!map.has(entry.location_id)) map.set(entry.location_id, entry)
+    }
+    return map
+  }, [service?.node_sync])
+
+  const hasNodeScope = useMemo(
+    () =>
+      (service?.scope_entries ?? []).some((entry) => entry.enabled && entry.path.endsWith('switchboard/node.manifest.json')),
+    [service?.scope_entries],
+  )
+
+  function updateRuntimeDraftField(
+    locationId: string,
+    field: keyof ServiceLocationDraft['runtime'],
+    value: string,
+  ) {
+    setRuntimeDraft((current) =>
+      current.map((location) => {
+        if (location.location_id !== locationId) return location
+        if (field === 'expected_ports') {
+          return {
+            ...location,
+            runtime: {
+              ...location.runtime,
+              expected_ports: parsePorts(value),
+            },
+          }
+        }
+        if (field === 'monitoring_mode') {
+          return {
+            ...location,
+            runtime: {
+              ...location.runtime,
+              monitoring_mode: value as ServiceLocationDraft['runtime']['monitoring_mode'],
+            },
+          }
+        }
+        return {
+          ...location,
+          runtime: {
+            ...location.runtime,
+            [field]: value,
+          },
+        }
+      }),
+    )
+  }
+
+  async function handleSaveRuntime() {
+    if (!service) return
+    setSavingRuntime(true)
+    setRuntimeMessage(null)
+    const result = await updateService(service.service_id, {
+      locations: runtimeDraft,
+    } as Partial<Service>)
+    setSavingRuntime(false)
+    if (isApiError(result)) {
+      setRuntimeMessage(result.message)
+      return
+    }
+    handleServiceUpdated(result)
+    setEditingRuntime(false)
+    setRuntimeMessage('Runtime config updated.')
+  }
+
+  function handleCancelRuntimeEdit() {
+    setRuntimeDraft(service?.locations.map((location) => ({ ...location, runtime: { ...location.runtime } })) ?? [])
+    setEditingRuntime(false)
+    setRuntimeMessage(null)
+  }
+
+  async function handleRuntimeCheck(locationId: string) {
+    setCheckingRuntimeLocation(locationId)
+    setRuntimeMessage(null)
+    const result = await runRuntimeCheck(serviceId, { location_id: locationId })
+    setCheckingRuntimeLocation(null)
+    if (isApiError(result)) {
+      setRuntimeMessage(result.message)
+      return
+    }
+    setService((current) =>
+      current
+        ? {
+            ...current,
+            runtime_checks: [
+              result,
+              ...(current.runtime_checks ?? []).filter((entry) => entry.location_id !== result.location_id),
+            ],
+          }
+        : current,
+    )
+    setRuntimeMessage('Runtime check completed.')
+  }
+
+  async function handleSyncFromNode(locationId: string) {
+    setSyncingFromLocation(locationId)
+    setRuntimeMessage(null)
+    const result = await syncFromNode(serviceId, { location_id: locationId })
+    setSyncingFromLocation(null)
+    if (isApiError(result)) {
+      setRuntimeMessage(result.message)
+      return
+    }
+    handleServiceUpdated(result.service)
+    setService((current) =>
+      current
+        ? {
+            ...result.service,
+            node_sync: [result.sync, ...(result.service.node_sync ?? []).filter((entry) => entry.location_id !== result.sync.location_id)],
+          }
+        : result.service,
+    )
+    setRuntimeMessage('Synced from node.')
+  }
+
+  async function handleSyncToNode(locationId: string) {
+    setSyncingToLocation(locationId)
+    setRuntimeMessage(null)
+    const result = await syncToNode(serviceId, { location_id: locationId })
+    setSyncingToLocation(null)
+    if (isApiError(result)) {
+      setRuntimeMessage(result.message)
+      return
+    }
+    setService((current) =>
+      current
+        ? {
+            ...current,
+            node_sync: [result.sync, ...(current.node_sync ?? []).filter((entry) => entry.location_id !== result.sync.location_id)],
+          }
+        : current,
+    )
+    setRuntimeMessage(result.node_manifest_path ? `Synced to node at ${result.node_manifest_path}.` : 'Synced to node.')
   }
 
   function addScopeEntry() {
@@ -135,6 +311,11 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
               <div className="mt-0.5 flex items-center gap-2">
                 <span className="text-xs text-gray-500">{serviceId}</span>
                 {runResult && <StatusBadge status={runResult.status} />}
+                {hasNodeScope && (
+                  <span className="rounded-full border border-cyan-900 bg-cyan-950/60 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-cyan-300">
+                    Node Linked
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -231,6 +412,249 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
             Firewall: <span className={runResult.firewall_active ? 'text-green-400' : 'text-yellow-400'}>
               {runResult.firewall_status || (runResult.firewall_active ? 'active' : 'inactive')}
             </span>
+          </div>
+        </section>
+      )}
+
+      {service && (
+        <section className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-medium text-gray-300">Runtime</h3>
+              <div className="mt-1 text-xs text-gray-500">
+                Per-location ports, health checks, run-command hints, and node sync.
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {editingRuntime ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleCancelRuntimeEdit}
+                    disabled={savingRuntime}
+                    className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-300 transition-colors hover:border-gray-500 hover:text-white disabled:opacity-50"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveRuntime}
+                    disabled={offline || savingRuntime}
+                    className="inline-flex items-center gap-1 rounded-lg bg-white px-3 py-2 text-xs font-medium text-black transition-colors hover:bg-gray-200 disabled:opacity-50"
+                  >
+                    <Save className="h-3.5 w-3.5" />
+                    {savingRuntime ? 'Saving…' : 'Save Runtime'}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRuntimeDraft(service.locations.map((location) => ({ ...location, runtime: { ...location.runtime } })))
+                    setEditingRuntime(true)
+                    setRuntimeMessage(null)
+                  }}
+                  disabled={offline}
+                  className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-300 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Edit Runtime
+                </button>
+              )}
+            </div>
+          </div>
+
+          {runtimeMessage && (
+            <div className="mb-4 rounded-xl border border-gray-800 bg-gray-950 px-3 py-2 text-sm text-gray-300">
+              {runtimeMessage}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            {(editingRuntime ? runtimeDraft : service.locations).map((location) => {
+              const latestRuntime = runtimeChecksByLocation.get(location.location_id)
+              const latestSync = nodeSyncByLocation.get(location.location_id)
+              const portsValue = location.runtime.expected_ports.join(', ')
+              return (
+                <div key={location.location_id} className="rounded-xl border border-gray-800 bg-gray-950 p-4">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.16em] text-gray-500">{location.location_id}</div>
+                      <div className="mt-1 text-sm font-medium text-white">{location.server_id}</div>
+                      <div className="mt-1 font-mono text-xs text-gray-400 break-all">{location.root}</div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleRuntimeCheck(location.location_id)}
+                        disabled={offline || checkingRuntimeLocation === location.location_id}
+                        className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
+                      >
+                        <RefreshCw className={`h-3.5 w-3.5 ${checkingRuntimeLocation === location.location_id ? 'animate-spin' : ''}`} />
+                        {checkingRuntimeLocation === location.location_id ? 'Checking…' : 'Run Runtime Check'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSyncFromNode(location.location_id)}
+                        disabled={offline || syncingFromLocation === location.location_id}
+                        className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
+                      >
+                        {syncingFromLocation === location.location_id ? 'Syncing…' : 'Sync From Node'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSyncToNode(location.location_id)}
+                        disabled={offline || syncingToLocation === location.location_id}
+                        className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
+                      >
+                        {syncingToLocation === location.location_id ? 'Syncing…' : 'Sync To Node'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <label className="text-sm text-gray-300">
+                      <div className="mb-1">Expected ports</div>
+                      {editingRuntime ? (
+                        <input
+                          value={portsValue}
+                          onChange={(event) => updateRuntimeDraftField(location.location_id, 'expected_ports', event.target.value)}
+                          className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500"
+                        />
+                      ) : (
+                        <div className="rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-gray-200">
+                          {portsValue || 'Not configured'}
+                        </div>
+                      )}
+                    </label>
+
+                    <label className="text-sm text-gray-300">
+                      <div className="mb-1">Monitoring mode</div>
+                      {editingRuntime ? (
+                        <select
+                          value={location.runtime.monitoring_mode}
+                          onChange={(event) => updateRuntimeDraftField(location.location_id, 'monitoring_mode', event.target.value)}
+                          className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500"
+                        >
+                          <option value="manual">manual</option>
+                          <option value="detect">detect</option>
+                          <option value="node_managed">node_managed</option>
+                        </select>
+                      ) : (
+                        <div className="rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-gray-200">
+                          {location.runtime.monitoring_mode}
+                        </div>
+                      )}
+                    </label>
+                  </div>
+
+                  <label className="mt-3 block text-sm text-gray-300">
+                    <div className="mb-1">Health check command</div>
+                    {editingRuntime ? (
+                      <input
+                        value={location.runtime.healthcheck_command}
+                        onChange={(event) => updateRuntimeDraftField(location.location_id, 'healthcheck_command', event.target.value)}
+                        className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500"
+                      />
+                    ) : (
+                      <pre className="rounded-lg border border-gray-800 bg-gray-900 p-3 text-xs text-cyan-200 overflow-x-auto">
+                        {location.runtime.healthcheck_command || 'Not configured'}
+                      </pre>
+                    )}
+                  </label>
+
+                  <label className="mt-3 block text-sm text-gray-300">
+                    <div className="mb-1">Run command hint</div>
+                    {editingRuntime ? (
+                      <input
+                        value={location.runtime.run_command_hint}
+                        onChange={(event) => updateRuntimeDraftField(location.location_id, 'run_command_hint', event.target.value)}
+                        className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500"
+                      />
+                    ) : (
+                      <pre className="rounded-lg border border-gray-800 bg-gray-900 p-3 text-xs text-cyan-200 overflow-x-auto">
+                        {location.runtime.run_command_hint || 'Not configured'}
+                      </pre>
+                    )}
+                  </label>
+
+                  <label className="mt-3 block text-sm text-gray-300">
+                    <div className="mb-1">Runtime notes</div>
+                    {editingRuntime ? (
+                      <textarea
+                        value={location.runtime.notes}
+                        onChange={(event) => updateRuntimeDraftField(location.location_id, 'notes', event.target.value)}
+                        className="min-h-24 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500"
+                      />
+                    ) : (
+                      <div className="rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-gray-200">
+                        {location.runtime.notes || 'No notes'}
+                      </div>
+                    )}
+                  </label>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <div className="rounded-xl border border-gray-800 bg-gray-900 p-3">
+                      <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Latest Runtime Check</div>
+                      {latestRuntime ? (
+                        <div className="mt-2 space-y-2 text-sm text-gray-300">
+                          <div className="flex items-center gap-2">
+                            <StatusBadge status={latestRuntime.status} />
+                            <span className="text-xs text-gray-500">{new Date(latestRuntime.checked_at).toLocaleString()}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Detected ports:</span>{' '}
+                            {latestRuntime.detected_ports.length > 0
+                              ? latestRuntime.detected_ports.map((port) => `:${port.port}`).join(', ')
+                              : 'none'}
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Missing ports:</span>{' '}
+                            {latestRuntime.missing_ports.length > 0 ? latestRuntime.missing_ports.join(', ') : 'none'}
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Health:</span> {latestRuntime.healthcheck_status}
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Detected command:</span>{' '}
+                            {latestRuntime.detected_process_command || 'Not detected'}
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Node present:</span> {latestRuntime.node_present ? 'yes' : 'no'}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-sm text-gray-500">No runtime check captured yet.</div>
+                      )}
+                    </div>
+
+                    <div className="rounded-xl border border-gray-800 bg-gray-900 p-3">
+                      <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Latest Node Sync</div>
+                      {latestSync ? (
+                        <div className="mt-2 space-y-2 text-sm text-gray-300">
+                          <div className="flex items-center gap-2">
+                            <StatusBadge status={latestSync.status} />
+                            <span className="text-xs text-gray-500">{new Date(latestSync.timestamp).toLocaleString()}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Direction:</span> {latestSync.direction}
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Source:</span> {latestSync.source}
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Target:</span> {latestSync.target}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-sm text-gray-500">No node sync recorded yet.</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </section>
       )}

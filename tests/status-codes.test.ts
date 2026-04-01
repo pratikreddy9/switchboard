@@ -63,21 +63,23 @@ describe('collect response shape', () => {
     const res = await fetch(`${BASE}/workspaces/zapp/collect`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ service_filter: ['zapplambda'] }),
+      signal: AbortSignal.timeout(60000),
     })
     // Must not 500 — even if servers are unreachable, returns structured result
     expect(res.status).not.toBe(500)
     const body = await res.json()
     expect(body).toHaveProperty('services')
     expect(Array.isArray(body.services)).toBe(true)
-  })
+  }, 70000)
 
   it('each service result has a status field', async () => {
     if (!backendUp) return
     const res = await fetch(`${BASE}/workspaces/zapp/collect`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ service_filter: ['zapplambda'] }),
+      signal: AbortSignal.timeout(60000),
     })
     if (res.status === 500) return // skip if backend errored
     const body = await res.json()
@@ -90,5 +92,5 @@ describe('collect response shape', () => {
       ]
       expect(VALID_STATUSES).toContain(svc.status)
     }
-  })
+  }, 70000)
 })

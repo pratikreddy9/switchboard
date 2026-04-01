@@ -1,128 +1,95 @@
-# Switchboard Node Install Guide
+# Node Install Guide
 
-## Goal
+## Purpose
 
-Use one packaged Switchboard release for both:
+This guide explains how to install a Switchboard node into a project root and how that node interacts with the control center.
 
-- the control center on your main machine
-- node installs inside project roots
+In `v0.1.x`, node mode is real and installable, but still secondary to the control center.
 
-In v1, the safest deployment shape is:
+## Important Direction Rule
 
-1. build a wheel in the control-center repo
-2. upload that wheel to GitHub as a release asset
-3. pull that wheel on the target machine
-4. install it with `uv tool install`
-5. run `switchboard node install --project-root ...`
+Node sync is manual and control-center initiated.
 
-This keeps node installs simple and avoids needing a live Node/Vite stack on every project machine.
+- the node does not push back into the control center
+- the node does not SSH into the control-center machine
+- the control center pulls from or writes to the node when needed
 
-## What Gets Installed
+## What A Node Installs
 
-A node install creates one folder in the project root:
+A node install creates only one top-level folder inside the project root:
 
 ```text
 <project-root>/
   switchboard/
     node.manifest.json
     core/
-      README.md
-      design-principles.md
-      doc-structure-rules.md
-      agent-instructions.md
-      bootstrap-standardize-prompt.md
-      runtime-update-prompt.md
     local/
-      tasks-completed.md
-      control-center-handoff.md
-      runbook.md
-      approach-history.md
     evidence/
-      completed-tasks.json
-      repo-safety-history.json
-      pull-bundle-history.json
-      scope.snapshot.json
 ```
 
-Nothing in the project root like `README.md` or `api.md` is replaced.
+It does not replace project-owned root files like:
 
-## Release It Once From The Control Center Repo
+- `README.md`
+- `api.md`
+- existing local docs outside `switchboard/`
 
-Run this in the framework repo:
+## Release The Package From The Control Center Repo
+
+From the framework repo:
 
 ```bash
 cd /Users/p/Desktop/dashboard
 ./.venv/bin/switchboard release build --wheel-out release
 ```
 
-That does three things:
+That build:
 
-1. builds the React frontend
-2. bundles the static UI into the Python package
-3. builds a wheel in `release/`
+1. builds the React UI
+2. bundles static frontend assets into the Python package
+3. builds a Python wheel for node installation
 
-Expected output:
+Example output:
 
 ```text
-release/switchboard-0.1.0-py3-none-any.whl
+release/switchboard-0.1.1-py3-none-any.whl
 ```
 
-## Upload The Wheel To GitHub
+## Publish The Release
 
-Recommended: attach the wheel to a GitHub Release.
+Recommended path:
+
+1. push the repo to GitHub
+2. create a GitHub Release
+3. attach the wheel asset
 
 Example:
 
 ```bash
-cd /Users/p/Desktop/dashboard
-gh release create v0.1.0 release/switchboard-0.1.0-py3-none-any.whl \
-  --title "Switchboard v0.1.0" \
-  --notes "Control-center and node-mode release."
+gh release create v0.1.1 release/switchboard-0.1.1-py3-none-any.whl \
+  --title "Switchboard v0.1.1" \
+  --notes "Runtime config and node-sync groundwork."
 ```
 
-If the repo is private, the node machine can still pull it with `gh` after GitHub auth is set up there.
+## Install A Node Tool On The Target Machine
 
-## Install A Node On A Project Machine
+Prerequisites:
 
-### Prerequisites
+- Python available
+- `uv` installed
+- Git available
+- access to the wheel asset
 
-- `uv` installed on the target machine
-- Python available on the target machine
-- Git available on the target machine
-- access to the GitHub release asset or copied wheel file
-
-### Step 1: Download The Wheel
-
-Example using GitHub CLI:
+Install in one step:
 
 ```bash
-mkdir -p /tmp/switchboard-release
-gh release download v0.1.0 \
-  -R <owner>/<repo> \
-  -p "switchboard-0.1.0-py3-none-any.whl" \
-  -D /tmp/switchboard-release
+uv tool install /path/to/switchboard-0.1.1-py3-none-any.whl --force
 ```
 
-You can also copy the wheel manually to the target machine if needed.
+That installs the `switchboard` CLI and all Python dependencies. No `npm` install is needed on the node machine.
 
-### Step 2: Install The Tool And All Python Dependencies In One Shot
+## Plant The Node In A Project Root
 
-```bash
-uv tool install /tmp/switchboard-release/switchboard-0.1.0-py3-none-any.whl --force
-```
-
-This is the one-shot install step.
-
-It installs:
-
-- the `switchboard` CLI
-- all Python dependencies declared by the package
-
-It does not require `npm` on the node machine.
-
-### Step 3: Plant The Node In The Project Root
-
-Example for the first local test node:
+Example:
 
 ```bash
 switchboard node install \
@@ -131,42 +98,27 @@ switchboard node install \
   --display-name "Lambda Scripts"
 ```
 
-This creates the `switchboard/` folder pack in that project.
+This creates the standard node pack.
 
-### Step 4: Regenerate Derived Docs After Edits
+## Update Node Docs After Work
 
-Whenever `switchboard/local/tasks-completed.md` changes:
+The canonical runtime-edited file is:
+
+```text
+switchboard/local/tasks-completed.md
+```
+
+After updates, regenerate derived files:
 
 ```bash
 switchboard node snapshot --project-root /Users/p/Desktop/work/zapp/lambdascripts
 ```
 
-This regenerates:
+That regenerates local derived docs and evidence JSON.
 
-- `switchboard/local/control-center-handoff.md`
-- `switchboard/local/runbook.md`
-- `switchboard/local/approach-history.md`
-- `switchboard/evidence/completed-tasks.json`
-- `switchboard/evidence/scope.snapshot.json` when scope entries are present
+## Optional Local Node UI/API
 
-### Step 5: Upgrade A Node Later
-
-When a newer wheel is released:
-
-```bash
-uv tool install /tmp/switchboard-release/switchboard-0.1.1-py3-none-any.whl --force
-switchboard node upgrade --project-root /Users/p/Desktop/work/zapp/lambdascripts
-```
-
-Upgrade behavior:
-
-- `switchboard/core/*` is refreshed
-- `switchboard/local/*` is preserved
-- `switchboard/evidence/*` is preserved except when regenerated intentionally by snapshot commands
-
-## Optional Local Node API
-
-If you want a lightweight local node API or local static dashboard view:
+If you want the node’s minimal local status view:
 
 ```bash
 switchboard node serve \
@@ -181,81 +133,44 @@ Useful endpoints:
 - `GET /api/node`
 - `POST /api/node/snapshot`
 
-## How The Control Center Sees A Node
+The root page exposes a minimal local dashboard for:
 
-In v1, node detection should be treated as **manual add with stable node files**.
+- node identity
+- docs pack presence
+- current scope snapshot
+- runtime config
+- last snapshot timestamp
 
-Control-center flow:
+## Control Center Detection Flow
 
-1. open the workspace in the dashboard
-2. add the project by its real project root
-3. scan that root
-4. include the project repo paths you want
-5. include the node-owned files under `switchboard/`
+In `v0.1.x`, node pickup is still manual:
 
-Default node paths to include:
+1. install the node into the real project root
+2. open the control center
+3. add that project root as a service location
+4. include the relevant project files plus the `switchboard/` folder
+5. use:
+   - `Sync From Node`
+   - `Sync To Node`
+   - `Run Runtime Check`
 
-- `switchboard/core/`
-- `switchboard/local/`
-- `switchboard/evidence/`
-
-The key file that marks the project as a Switchboard node is:
+Primary node marker file:
 
 ```text
 switchboard/node.manifest.json
 ```
 
-That manifest tells the control center:
+## First Test Deployment Flow
 
-- node identity
-- service id
-- display name
-- repo paths
-- doc paths
-- log paths
-- exclude patterns
-- evidence file locations
+For the first real test:
 
-## Recommended Agent Workflow On The Node
-
-For first-time standardization:
-
-1. read `switchboard/core/bootstrap-standardize-prompt.md`
-2. inspect the available project docs
-3. write the standardized first pass into the `switchboard/` files
-4. record the work in `switchboard/local/tasks-completed.md`
-5. run `switchboard node snapshot --project-root ...`
-
-For normal day-to-day updates:
-
-1. update only `switchboard/local/tasks-completed.md`
-2. use the fixed routing tags
-3. run `switchboard node snapshot --project-root ...`
-
-This keeps the regular agent workload small.
-
-## Git Usage
-
-Use Git on both ends:
-
-- the control-center repo tracks framework changes and pulled bundles
-- the project repo tracks its own code plus the `switchboard/` node folder
-
-Recommended rule:
-
-- commit `switchboard/` in the project repo
-- do not hand-edit `switchboard/core/*`
-- do edit `switchboard/local/*`
-- regenerate `switchboard/evidence/*` through snapshot commands
-
-## Current v1 Constraint
-
-Automatic node registration inside the control center is not the primary v1 path yet.
-
-Current v1 behavior should be treated as:
-
-- install the node in the project root
-- add that project in the control center
-- select the `switchboard/` files as first-class project docs/evidence
-
-That gives you stable structure now without blocking on a full auto-discovery layer.
+1. build the wheel from the control-center repo
+2. install the tool on the target machine
+3. plant a node into the chosen project root
+4. optionally run the node UI/API locally
+5. add that project in the control center
+6. confirm the node manifest is visible in scope
+7. run `Sync From Node`
+8. edit runtime config in the control center
+9. run `Sync To Node`
+10. verify both sides reflect the change

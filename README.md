@@ -1,78 +1,82 @@
 # Switchboard
 
-Switchboard is a framework-first control center for managing project workspaces, servers, pull bundles, and standardized node documentation.
+Switchboard is a control-center-first framework for managing project workspaces, service roots, server pulls, runtime checks, repo actions, and standardized node documentation.
 
-Version 1 is centered on the control center. Node mode is defined and packaged, but rollout into project roots is intentionally secondary until the control center workflow is stable.
+`v0.1.x` keeps the product focused on the control center. Node mode is packaged and documented now so the first real node can be deployed cleanly, but node rollout is still secondary to the control-center workflow.
 
-## What It Does
+## What v0.1.x Includes
 
-- tracks workspaces, services, and servers from explicit manifests
-- browses project paths and saves editable scope entries
-- pulls versioned bundles while preserving the source tree
-- exposes repo actions such as status and guarded pull flows
-- standardizes future project nodes under a dedicated `switchboard/` folder
-- packages the React UI into the Python release for node-mode serving
-
-## Modes
-
-### Control Center
-
-Runs on the main machine and provides:
-
-- the dashboard UI
-- the FastAPI backend
-- workspace and service manifests
-- pull bundle history
-- dashboard-safe evidence snapshots
-
-### Node
-
-Installs inside a project root and creates:
-
-- `switchboard/node.manifest.json`
-- `switchboard/core/` for package-owned docs and prompts
-- `switchboard/local/` for project-maintained runtime notes
-- `switchboard/evidence/` for machine-readable node outputs
+- a FastAPI backend for service discovery, pulls, runtime checks, repo actions, and manual node sync
+- a React control-center UI for workspaces, services, scope editing, bundle pulls, runtime config, and node sync actions
+- a Python CLI for control-center tasks, node install/snapshot/serve, and release builds
+- a standardized `switchboard/` node pack for future project roots
+- control-center-only sync: nodes never call back into the control center on their own
 
 ## Stack
 
 - Python 3.12+
 - FastAPI
-- Paramiko
-- Typer
-- React
+- Pydantic Settings
+- Paramiko for SSH/SFTP
+- Typer CLI
+- React 19
 - Vite
 - TypeScript
-- `uv` for packaging and tool installation
+- Tailwind
+- `uv` for packaging and node installation
+- Git for repo status and version metadata
 
 ## Repo Layout
 
 ```text
-switchboard/         Python backend, CLI, collectors, node mode
-src/                 React control-center UI
-documentation/       Framework docs
-tests/               Frontend tests
-tests_backend/       Backend tests
-framework.sh         Runner for backend + frontend
-pyproject.toml       Python package definition
-package.json         Frontend build definition
+switchboard/           Python backend, CLI, collectors, node mode
+src/                   React control-center UI
+src/data/              checked-in offline fallback data for the UI
+documentation/         public framework docs
+tests/                 frontend tests
+tests_backend/         backend tests
+framework.sh           combined start/stop/status/logs runner
+pyproject.toml         Python package metadata
+package.json           frontend package metadata
 ```
 
-## Local Development
+## Control Center Setup
 
-Backend:
+Fresh clone:
 
 ```bash
-./.venv/bin/python -m uvicorn switchboard.api:app --host 127.0.0.1 --port 8009
+git clone https://github.com/pratikreddy9/switchboard.git
+cd switchboard
+python3 -m venv .venv
+./.venv/bin/pip install -e .
+npm install
 ```
 
-Frontend:
+Create `.env` from `.env.example`:
 
 ```bash
-npm run dev -- --host 127.0.0.1 --port 5173
+cp .env.example .env
 ```
 
-Combined runner:
+Add server credentials using the `SWITCHBOARD_SERVER_<SERVER_ID>_*` naming pattern.
+
+Example:
+
+```dotenv
+SWITCHBOARD_SERVER_PESU_DEV_47_HOST=192.168.3.47
+SWITCHBOARD_SERVER_PESU_DEV_47_USERNAME=pesu
+SWITCHBOARD_SERVER_PESU_DEV_47_PORT=22
+SWITCHBOARD_SERVER_PESU_DEV_47_PASSWORD=
+```
+
+Current server definitions live in:
+
+- `switchboard/manifests/servers.json`
+- `switchboard/manifests/workspaces.json`
+
+In `v0.1.x`, servers and workspaces are still manifest-driven. Services are added from the control-center UI.
+
+Start the framework:
 
 ```bash
 ./framework.sh start
@@ -80,47 +84,165 @@ Combined runner:
 ./framework.sh logs
 ```
 
+Default local URLs:
+
+- UI: `http://127.0.0.1:5173`
+- API: `http://127.0.0.1:8009/api/health`
+
+More detail is in [documentation/control-center-setup.md](documentation/control-center-setup.md).
+
+## How Control Center Configuration Works
+
+### Servers
+
+- server identity is defined in `switchboard/manifests/servers.json`
+- credentials are resolved from `.env`, `.env.local`, or runtime password overrides
+- Switchboard stores host, username, and port in manifests
+- passwords stay local in env files or request payloads
+
+### Workspaces
+
+- workspaces are umbrella groups defined in `switchboard/manifests/workspaces.json`
+- each workspace lists its allowed server ids
+- service cards in the UI are scoped by workspace
+
+### Services and Project Roots
+
+- services are stored in `switchboard/manifests/services.json`
+- the control center can add services from the UI by choosing:
+  - workspace
+  - server
+  - root path
+  - selected scope entries
+- scope entries define what is treated as:
+  - `repo`
+  - `doc`
+  - `log`
+  - `exclude`
+
+## Runtime Config
+
+Runtime config lives per location, not per service.
+
+Each location can store:
+
+- expected ports
+- a raw health-check command
+- a run-command hint
+- monitoring mode: `manual`, `detect`, or `node_managed`
+- runtime notes
+
+In `v0.1.x`:
+
+- process-command detection is best effort only
+- the manual run-command hint remains first-class
+- health checks are operator-managed raw commands, usually `curl ...`
+
+The UI exposes runtime config in two places:
+
+- service creation flow
+- service detail page
+
+The service detail page also exposes:
+
+- `Run Runtime Check`
+- `Sync From Node`
+- `Sync To Node`
+
+More detail is in [documentation/runtime-monitoring.md](documentation/runtime-monitoring.md).
+
+## Pull Bundles
+
+Pull bundles create a new timestamped local copy every time.
+
+Bundle behavior:
+
+- starts from the saved scope
+- allows one-run extra includes and excludes
+- preserves the original relative source tree under the bundle root
+- records file metadata and checksums
+- records repo metadata when the pulled paths overlap a tracked repo
+
+Local bundle layout:
+
+```text
+downloads/<workspace>/<service>/<bundle_id>/
+  source_tree/
+  bundle-manifest.json
+```
+
+## Node Mode
+
+Node mode installs a standardized `switchboard/` folder into a project root.
+
+That folder contains:
+
+- `switchboard/node.manifest.json`
+- `switchboard/core/`
+- `switchboard/local/`
+- `switchboard/evidence/`
+
+Important rules:
+
+- node install does not replace project-owned root docs like `README.md`
+- node sync is manual
+- node never pushes into the control center
+- node never SSHs back to the control-center machine
+- sync is always initiated from the control center
+
+See [documentation/node-install-guide.md](documentation/node-install-guide.md).
+
+## Release Flow
+
+Build a wheel from the control-center repo:
+
+```bash
+./.venv/bin/switchboard release build --wheel-out release
+```
+
+That build:
+
+- runs the React production build
+- bundles the static app into the Python package
+- builds a wheel for `uv tool install`
+
 ## Tests
 
 Backend:
 
 ```bash
+python3 -m compileall switchboard tests_backend
 ./.venv/bin/python -m unittest discover -s tests_backend -p '*.py'
 ```
 
 Frontend:
 
 ```bash
-npm test
 npm run build
+npm test
 ```
 
-## Build A Release
+## v0.1.x Limits
 
-```bash
-./.venv/bin/switchboard release build --wheel-out release
-```
+- servers and workspaces are still manifest-driven
+- node registration back into the control center is manual
+- secret scanning before push/deploy is deferred to a later sub-version
+- runtime checks are manual or best-effort, not a full monitoring system
+- task management and multi-project reporting are not in the dashboard yet
 
-This builds the React app, bundles the static UI into the Python package, and writes a wheel into `release/`.
+## Planned for v2
 
-## Install A Node
+- day-wise task views across projects
+- project and workspace task calendar views
+- richer agent activity dashboards
+- broader project-management reporting across nodes and control center
+- stronger deploy-readiness and cross-project workflow views
 
-After downloading a release wheel onto a target machine:
+## Public Docs
 
-```bash
-uv tool install /path/to/switchboard-0.1.0-py3-none-any.whl --force
-
-switchboard node install \
-  --project-root /path/to/project \
-  --service-id my-service \
-  --display-name "My Service"
-```
-
-More detail is in [documentation/node-install-guide.md](documentation/node-install-guide.md).
-
-## Current v1 Constraints
-
-- control-center first, node rollout second
-- workspace and service discovery is manifest-driven, not broad filesystem crawling
-- automatic node registration back into the control center is not the primary v1 path yet
-- sensitive files are tracked by path metadata only, not by content
+- [documentation/control-center-setup.md](documentation/control-center-setup.md)
+- [documentation/runtime-monitoring.md](documentation/runtime-monitoring.md)
+- [documentation/node-install-guide.md](documentation/node-install-guide.md)
+- [documentation/switchboard-design-principles.md](documentation/switchboard-design-principles.md)
+- [documentation/switchboard-doc-structure-rules.md](documentation/switchboard-doc-structure-rules.md)
+- [CHANGELOG.md](CHANGELOG.md)

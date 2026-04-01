@@ -14,6 +14,8 @@ const TECH_STACK_LINES = [
   'Frontend: React 19, Vite, TypeScript, Tailwind, Lucide icons.',
   'Versioning: Git for repo status/pull/push actions and commit metadata.',
   'Operations: local path walking plus remote SSH/SFTP collection from declared servers.',
+  'Runtime: per-location ports, health-check commands, run-command hints, and manual runtime checks.',
+  'Node sync: manual, control-center initiated only. Nodes do not call back into the control center.',
   'Testing: Vitest for frontend contract checks and Python unittest for backend regressions.',
 ]
 
@@ -21,7 +23,9 @@ const HOW_TO_USE_LINES = [
   'Pick a workspace, then run Collect to refresh ports, repo state, docs, and logs.',
   'Use Add Project to open one root path, expand the tree, and uncheck dump paths you do not want.',
   'Category rules are simple: repo, doc, log, or exclude. You can override the auto-suggestion.',
-  'Create service saves the chosen scope into the manifest. Pull Bundles then copy versioned docs/logs locally.',
+  'Create service saves the chosen scope and per-location runtime config into the manifest.',
+  'Pull Bundles create a new timestamped local copy while preserving the source tree.',
+  'Service detail pages now handle runtime checks plus Sync From Node and Sync To Node.',
   'Repo actions stay per service: git status, safety check, git pull, git push.',
 ]
 

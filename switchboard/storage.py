@@ -66,7 +66,7 @@ class SnapshotStore:
         service_inventory = {
             "generated": generated,
             "services": [
-                {**service.model_dump(mode="json"), "last_status": "unverified"}
+                self._service_inventory_entry(service, "unverified")
                 for service in services
             ],
         }
@@ -89,11 +89,60 @@ class SnapshotStore:
         write_json(self.settings.evidence_dir / "repo-safety-history.json", repo_safety_history)
         write_json(self.settings.private_state_dir / "secret-path-index.json", secret_index)
         write_json(self.settings.private_state_dir / "repo-safety-findings.json", {"generated": generated, "checks": []})
-        write_json(self.settings.private_state_dir / "runtime-cache.json", {"generated": generated, "cache": {}})
+        write_json(
+            self.settings.private_state_dir / "runtime-cache.json",
+            {"generated": generated, "runtime_checks": {}, "node_sync": {}},
+        )
         return {
             "workspace_registry": workspace_registry,
             "server_registry": server_registry,
             "service_inventory": service_inventory,
+        }
+
+    def _runtime_cache_path(self) -> Path:
+        return self.settings.private_state_dir / "runtime-cache.json"
+
+    def _read_runtime_cache(self) -> dict[str, Any]:
+        return read_json(
+            self._runtime_cache_path(),
+            {"generated": utc_now_iso(), "runtime_checks": {}, "node_sync": {}},
+        )
+
+    def _write_runtime_cache(self, cache: dict[str, Any]) -> None:
+        cache.setdefault("runtime_checks", {})
+        cache.setdefault("node_sync", {})
+        cache["generated"] = cache.get("generated") or utc_now_iso()
+        write_json(self._runtime_cache_path(), cache)
+
+    def persist_runtime_check(self, service_id: str, location_id: str, record: dict[str, Any]) -> dict[str, Any]:
+        cache = self._read_runtime_cache()
+        runtime_checks = cache.setdefault("runtime_checks", {})
+        service_checks = runtime_checks.setdefault(service_id, {})
+        service_checks[location_id] = record
+        cache["generated"] = record.get("checked_at") or utc_now_iso()
+        self._write_runtime_cache(cache)
+        return record
+
+    def persist_node_sync(self, service_id: str, location_id: str, record: dict[str, Any]) -> dict[str, Any]:
+        cache = self._read_runtime_cache()
+        sync_state = cache.setdefault("node_sync", {})
+        service_sync = sync_state.setdefault(service_id, {})
+        service_sync[location_id] = record
+        cache["generated"] = record.get("timestamp") or utc_now_iso()
+        self._write_runtime_cache(cache)
+        return record
+
+    def get_service_runtime_state(self, service_id: str) -> dict[str, Any]:
+        cache = self._read_runtime_cache()
+        runtime_checks = list(cache.get("runtime_checks", {}).get(service_id, {}).values())
+        node_sync = list(cache.get("node_sync", {}).get(service_id, {}).values())
+        runtime_checks.sort(key=lambda entry: entry.get("checked_at", ""), reverse=True)
+        node_sync.sort(key=lambda entry: entry.get("timestamp", ""), reverse=True)
+        return {
+            "generated": cache.get("generated"),
+            "service_id": service_id,
+            "runtime_checks": runtime_checks,
+            "node_sync": node_sync,
         }
 
     def persist_collect_snapshot(self, snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -187,10 +236,10 @@ class SnapshotStore:
             {
                 "generated": generated,
                 "services": [
-                    {
-                        **service.model_dump(mode="json"),
-                        "last_status": latest_service_status.get(service.service_id, "unverified"),
-                    }
+                    self._service_inventory_entry(
+                        service,
+                        latest_service_status.get(service.service_id, "unverified"),
+                    )
                     for service in services
                 ],
             },
@@ -281,6 +330,12 @@ class SnapshotStore:
         _filter_records(self.settings.private_state_dir / "secret-path-index.json", "entries")
         _filter_records(self.settings.private_state_dir / "repo-safety-findings.json", "checks")
 
+        runtime_cache = self._read_runtime_cache()
+        runtime_cache.get("runtime_checks", {}).pop(service_id, None)
+        runtime_cache.get("node_sync", {}).pop(service_id, None)
+        runtime_cache["generated"] = generated
+        self._write_runtime_cache(runtime_cache)
+
         downloads_root = self.settings.downloads_dir / workspace_id / service_id
         if downloads_root.exists():
             shutil.rmtree(downloads_root)
@@ -353,10 +408,10 @@ class SnapshotStore:
             {
                 "generated": generated,
                 "services": [
-                    {
-                        **service.model_dump(mode="json"),
-                        "last_status": service_statuses.get(service.service_id, "unverified"),
-                    }
+                    self._service_inventory_entry(
+                        service,
+                        service_statuses.get(service.service_id, "unverified"),
+                    )
                     for service in services
                 ],
             },
@@ -367,4 +422,19 @@ class SnapshotStore:
             "service_id": service_id,
             "workspace_id": workspace_id,
             "generated": generated,
+        }
+
+    def _service_inventory_entry(self, service: Any, last_status: str) -> dict[str, Any]:
+        return {
+            "service_id": service.service_id,
+            "workspace_id": service.workspace_id,
+            "display_name": service.display_name,
+            "kind": service.kind,
+            "ownership_tier": service.ownership_tier,
+            "tags": service.tags,
+            "favorite_tier": service.favorite_tier,
+            "notes": service.notes,
+            "path_aliases": service.path_aliases,
+            "location_count": len(service.locations),
+            "last_status": last_status,
         }

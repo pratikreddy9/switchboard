@@ -15,7 +15,16 @@ export interface PortInfo {
   port: number
   protocol: string
   process: string
+  pid?: number | null
   state?: string
+}
+
+export interface RuntimeConfig {
+  expected_ports: number[]
+  healthcheck_command: string
+  run_command_hint: string
+  monitoring_mode: 'manual' | 'detect' | 'node_managed'
+  notes: string
 }
 
 export interface RepoSummary {
@@ -33,8 +42,14 @@ export interface RepoSummary {
 }
 
 export interface ServiceLocation {
+  location_id: string
   server_id: string
-  path: string
+  access_mode: 'local' | 'ssh'
+  root: string
+  role: string
+  is_primary: boolean
+  path_aliases: string[]
+  runtime: RuntimeConfig
 }
 
 export interface ServiceLocationDraft {
@@ -45,6 +60,7 @@ export interface ServiceLocationDraft {
   role: string
   is_primary: boolean
   path_aliases: string[]
+  runtime: RuntimeConfig
 }
 
 export interface ScopeEntry {
@@ -52,7 +68,7 @@ export interface ScopeEntry {
   kind: 'repo' | 'doc' | 'log' | 'exclude'
   path: string
   path_type: 'file' | 'dir' | 'glob'
-  source: 'seeded' | 'user_added'
+  source: 'seeded' | 'user_added' | 'node_manifest' | 'tasks_completed'
   enabled: boolean
 }
 
@@ -80,6 +96,8 @@ export interface Service {
   repo_policies: RepoPolicy[]
   notes: string
   path_aliases: string[]
+  runtime_checks?: RuntimeCheckResult[]
+  node_sync?: NodeSyncResult[]
 }
 
 export interface ServiceRunResult {
@@ -95,6 +113,8 @@ export interface ServiceRunResult {
   logs_files: FileEntry[]
   secret_path_count: number
   collected_at: string
+  runtime_checks?: RuntimeCheckResult[]
+  node_sync?: NodeSyncResult[]
 }
 
 export interface FileEntry {
@@ -196,6 +216,16 @@ export interface RepoActionRequest {
   runtime_password?: string
 }
 
+export interface RuntimeActionRequest {
+  location_id?: string
+  runtime_password?: string
+}
+
+export interface NodeSyncRequest extends RuntimeActionRequest {
+  include_scope_snapshot?: boolean
+  include_runtime_config?: boolean
+}
+
 export interface GitPullRequest extends RepoActionRequest {}
 
 export interface GitPushRequest extends RepoActionRequest {
@@ -289,6 +319,39 @@ export interface SafetyCheckResult {
   safe_to_deploy: boolean
   status: CollectStatus
   repo_state: RepoSummary
+}
+
+export interface RuntimeCheckResult {
+  service_id: string
+  location_id: string
+  server_id: string
+  root: string
+  status: CollectStatus
+  checked_at: string
+  configured_ports: number[]
+  detected_ports: PortInfo[]
+  missing_ports: number[]
+  healthcheck_command: string
+  healthcheck_status: 'ok' | 'failed' | 'skipped'
+  healthcheck_output: string
+  detected_process_command: string
+  run_command_hint: string
+  monitoring_mode: 'manual' | 'detect' | 'node_managed'
+  notes: string
+  node_present: boolean
+  source?: string
+}
+
+export interface NodeSyncResult {
+  service_id: string
+  location_id: string
+  direction: 'from_node' | 'to_node'
+  timestamp: string
+  status: CollectStatus
+  source: string
+  target: string
+  include_scope_snapshot: boolean
+  include_runtime_config: boolean
 }
 
 export interface PullBundleRequest {

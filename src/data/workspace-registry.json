@@ -7,7 +7,8 @@
       "tags": ["umbrella", "seed"],
       "favorite_tier": "primary",
       "servers": ["local_mac", "zapp_test_114", "zapp_prod_253"],
-      "services": ["docgenerator", "lambdalogger", "lambdascripts"],
+      "services": ["docgenerator", "lambdalogger", "zapplambda"],
+      "server_count": 3,
       "notes": "Seed workspace for document generation, lambda logging, and lambda source lanes.",
       "service_count": 3,
       "last_status": "unverified"
@@ -18,9 +19,10 @@
       "tags": ["umbrella", "seed"],
       "favorite_tier": "primary",
       "servers": ["local_mac", "pesu_dev_47"],
-      "services": ["aichat", "slp", "processchat", "emailagent"],
+      "services": ["e", "aichat"],
+      "server_count": 2,
       "notes": "Seed workspace for the first named PESU lanes only.",
-      "service_count": 4,
+      "service_count": 2,
       "last_status": "unverified"
     }
   ]
