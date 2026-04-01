@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.6
+
+- fixed explicit exclude handling for bundle pulls so exact paths like `.DS_Store` are not copied when excluded
+- added collapsible bundle history cards in the control center
+- added per-bundle copied-file and missed-scope detail in history views
+- added resolved-file preview under saved scope entries using the latest bundle detail
+
 ## 0.1.5
 
 - fixed node/control-center scope sync so seed-only node scope does not overwrite explicit control-center scope choices

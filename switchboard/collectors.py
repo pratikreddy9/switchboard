@@ -791,6 +791,7 @@ class CollectionCoordinator:
             "repo_commits": [item.get("last_commit", "") for item in repo_metadata if item.get("status") == "ok"],
             "skipped_entry_count": len(skipped_entries),
             "skipped_entries": skipped_entries,
+            "files": copied_files,
         }
         self.snapshots.append_pull_bundle(history_record)
         return {
@@ -1490,12 +1491,16 @@ class CollectionCoordinator:
         source = Path(path)
         if not source.exists():
             return []
+        if self._is_explicitly_excluded(str(source), exclude_patterns):
+            return []
         if source.is_file():
             return [] if self._matches_exclude(source.name, str(source), exclude_patterns) else [source]
         return list(self._walk_local_files(source, exclude_patterns))
 
     def _expand_remote_entry(self, sftp: Any, path: str, exclude_patterns: list[str]) -> list[tuple[str, Any]]:
         if not self._remote_exists(sftp, path):
+            return []
+        if self._is_explicitly_excluded(path, exclude_patterns):
             return []
         attrs = sftp.stat(path)
         if stat.S_ISDIR(attrs.st_mode):
@@ -1827,8 +1832,24 @@ class CollectionCoordinator:
         return deduped
 
     def _matches_exclude(self, name: str, full_path: str, excludes: list[str]) -> bool:
+        if self._is_explicitly_excluded(full_path, excludes):
+            return True
         spec = self._compile_pathspec(tuple(excludes))
         return any(spec.match_file(candidate) for candidate in self._candidate_match_paths(name, full_path))
+
+    def _is_explicitly_excluded(self, full_path: str, excludes: list[str]) -> bool:
+        normalized_full = str(full_path).replace("\\", "/").rstrip("/")
+        for pattern in excludes:
+            token = str(pattern).strip().replace("\\", "/").rstrip("/")
+            if not token or any(char in token for char in "*?["):
+                continue
+            normalized_token = token.lstrip("/")
+            normalized_full_cmp = normalized_full.lstrip("/")
+            if normalized_full_cmp == normalized_token:
+                return True
+            if normalized_full_cmp.startswith(normalized_token + "/"):
+                return True
+        return False
 
     def _matches_secret_pattern(self, name: str, full_path: str, patterns: list[str]) -> bool:
         spec = self._compile_pathspec(tuple(patterns))

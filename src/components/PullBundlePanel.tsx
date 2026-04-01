@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Archive, Download, LoaderCircle, PackagePlus } from 'lucide-react'
+import { Archive, ChevronDown, ChevronRight, Download, LoaderCircle, PackagePlus } from 'lucide-react'
 import { createPullBundle, listPullBundles } from '../api/client'
 import type { PullBundleRecord, ScopeEntry, Service } from '../types/switchboard'
 import { isApiError } from '../types/switchboard'
@@ -29,6 +29,7 @@ export function PullBundlePanel({ service, disabled }: Props) {
   const [extraExcludes, setExtraExcludes] = useState('')
   const [creating, setCreating] = useState(false)
   const [message, setMessage] = useState('')
+  const [expandedHistory, setExpandedHistory] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     if (disabled) return
@@ -41,6 +42,15 @@ export function PullBundlePanel({ service, disabled }: Props) {
     () => service.scope_entries.filter((entry) => entry.enabled && entry.kind !== 'exclude'),
     [service.scope_entries],
   )
+  const latestBundleWithFiles = useMemo(() => {
+    if (bundleResult?.files?.length) return bundleResult
+    return history.find((bundle) => (bundle.files?.length ?? 0) > 0) ?? null
+  }, [bundleResult, history])
+
+  function matchingFilesForScope(scopePath: string) {
+    const files = latestBundleWithFiles?.files ?? []
+    return files.filter((file) => file.source_path.startsWith(scopePath))
+  }
 
   function addExtraInclude() {
     const trimmed = includePath.trim()
@@ -113,7 +123,20 @@ export function PullBundlePanel({ service, disabled }: Props) {
                 savedScope.map((entry) => (
                   <div key={`${entry.kind}:${entry.path}`} className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-2">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="font-mono text-xs text-gray-300">{entry.path}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-mono text-xs text-gray-300 break-all">{entry.path}</div>
+                        {matchingFilesForScope(entry.path).length > 0 && (
+                          <div className="mt-2 max-h-32 space-y-1 overflow-auto rounded border border-gray-800 bg-black/20 p-2">
+                            {matchingFilesForScope(entry.path)
+                              .slice(0, 20)
+                              .map((file) => (
+                                <div key={`${file.target_path}:${file.sha256}`} className="font-mono text-[11px] text-gray-400 break-all">
+                                  {file.relative_path}
+                                </div>
+                              ))}
+                          </div>
+                        )}
+                      </div>
                       <span className="rounded-full border border-gray-700 px-2 py-0.5 text-[11px] uppercase tracking-[0.14em] text-cyan-300">
                         {entry.kind}
                       </span>
@@ -262,18 +285,70 @@ export function PullBundlePanel({ service, disabled }: Props) {
             history.map((bundle) => (
               <div key={bundle.bundle_id} className="rounded-xl border border-gray-800 bg-gray-900 px-4 py-3">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="font-mono text-xs text-gray-300">{bundle.bundle_id}</div>
-                    <div className="mt-1 text-xs text-gray-500">
-                      {new Date(bundle.created_at).toLocaleString()} · {bundle.file_count} files
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedHistory((current) => ({
+                        ...current,
+                        [bundle.bundle_id]: !current[bundle.bundle_id],
+                      }))
+                    }
+                    className="flex min-w-0 flex-1 items-start gap-2 text-left"
+                  >
+                    {expandedHistory[bundle.bundle_id] ? (
+                      <ChevronDown className="mt-0.5 h-4 w-4 text-gray-500" />
+                    ) : (
+                      <ChevronRight className="mt-0.5 h-4 w-4 text-gray-500" />
+                    )}
+                    <div className="min-w-0">
+                      <div className="font-mono text-xs text-gray-300 break-all">{bundle.bundle_id}</div>
+                      <div className="mt-1 text-xs text-gray-500">
+                        {new Date(bundle.created_at).toLocaleString()} · {bundle.file_count} files
+                      </div>
                     </div>
-                  </div>
+                  </button>
                   <div className="text-right text-xs text-gray-400">
                     <div>{bundle.docs_count} docs</div>
                     <div>{bundle.logs_count} logs</div>
                     <div>{bundle.skipped_entry_count ?? 0} missed</div>
                   </div>
                 </div>
+                {expandedHistory[bundle.bundle_id] && (
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <div className="rounded-lg border border-gray-800 bg-gray-950 p-3">
+                      <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Pulled files</div>
+                      <div className="mt-2 max-h-56 space-y-1 overflow-auto">
+                        {(bundle.files ?? []).length === 0 ? (
+                          <div className="text-xs text-gray-500">No copied file list stored for this bundle.</div>
+                        ) : (
+                          (bundle.files ?? []).map((file) => (
+                            <div key={`${bundle.bundle_id}:${file.target_path}:${file.sha256}`} className="rounded border border-gray-800 px-2 py-1">
+                              <div className="font-mono text-[11px] text-gray-300 break-all">{file.relative_path}</div>
+                              <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-gray-500">{file.kind}</div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-gray-800 bg-gray-950 p-3">
+                      <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Missed scope</div>
+                      <div className="mt-2 max-h-56 space-y-1 overflow-auto">
+                        {(bundle.skipped_entries ?? []).length === 0 ? (
+                          <div className="text-xs text-gray-500">No missed scope entries.</div>
+                        ) : (
+                          (bundle.skipped_entries ?? []).map((entry) => (
+                            <div key={`${bundle.bundle_id}:${entry.path}:${entry.reason}`} className="rounded border border-gray-800 px-2 py-1">
+                              <div className="font-mono text-[11px] text-gray-300 break-all">{entry.path}</div>
+                              <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-gray-500">
+                                {entry.kind} · {entry.path_type} · {entry.reason}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ))
           )}

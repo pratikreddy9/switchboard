@@ -9,7 +9,7 @@ from switchboard.api import collect_workspace, get_workspace_latest, git_pull
 from switchboard.config import Settings
 from switchboard.collectors import CollectionCoordinator
 from switchboard.manifests import ManifestStore, save_json
-from switchboard.models import CollectRequest, GitPullRequest, PullBundleRequest
+from switchboard.models import CollectRequest, GitPullRequest, PullBundleRequest, ResolvedServer, ScopeEntry, LocationSpec, ServiceManifest
 from switchboard.storage import SnapshotStore, read_json
 
 
@@ -375,6 +375,63 @@ class BackendRegressionTests(unittest.TestCase):
         self.assertEqual(coordinator._suggest_scope_kind("main.py", "/workspace/aichat/main.py", "file"), "repo")
         self.assertEqual(coordinator._suggest_scope_kind("README.md", "/workspace/aichat/README.md", "file"), "doc")
         self.assertEqual(coordinator._suggest_scope_kind("backend", "/workspace/aichat/backend", "dir"), "doc")
+
+    def test_pull_bundle_respects_explicit_ds_store_exclude(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            settings = Settings()
+            manifests = ManifestStore(settings)
+            snapshots = SnapshotStore(settings, manifests)
+            coordinator = CollectionCoordinator(settings, manifests, snapshots)
+            root = Path(tmpdir) / "repo"
+            root.mkdir(parents=True)
+            (root / "main.py").write_text("print('ok')\n", encoding="utf-8")
+            (root / ".DS_Store").write_text("junk\n", encoding="utf-8")
+
+            service = ServiceManifest(
+                service_id="svc",
+                workspace_id="ws",
+                display_name="Svc",
+                locations=[
+                    LocationSpec(
+                        location_id="loc",
+                        server_id="local_mac",
+                        access_mode="local",
+                        root=str(root),
+                        role="primary",
+                        is_primary=True,
+                        path_aliases=[],
+                    )
+                ],
+                scope_entries=[
+                    ScopeEntry(kind="repo", path=str(root), path_type="dir", source="user_added", enabled=True),
+                    ScopeEntry(kind="exclude", path=str(root / ".DS_Store"), path_type="file", source="user_added", enabled=True),
+                ],
+                repo_paths=[str(root)],
+                docs_paths=[],
+                log_paths=[],
+                allowed_git_pull_paths=[str(root)],
+                exclude_globs=[str(root / ".DS_Store")],
+            )
+
+            manifests.get_service = lambda _service_id: service  # type: ignore[assignment]
+            manifests.resolve_server = lambda *_args, **_kwargs: ResolvedServer(  # type: ignore[assignment]
+                server_id="local_mac",
+                name="Local",
+                connection_type="local",
+                host="127.0.0.1",
+                username="p",
+                port=22,
+                tags=[],
+                favorite_tier="primary",
+                notes="",
+                password=None,
+            )
+
+            result = coordinator.pull_bundle("svc", PullBundleRequest())
+            copied_names = {Path(item["target_path"]).name for item in result["files"]}
+
+            self.assertIn("main.py", copied_names)
+            self.assertNotIn(".DS_Store", copied_names)
 
 
 if __name__ == "__main__":
