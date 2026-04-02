@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.1.7
+
+- made `switchboard/local/tasks-completed.md` the single canonical node update file for normal agent work
+- added `switchboard/core/playbook.md` as the only primary node rulebook
+- changed the older node instruction files into compatibility stubs that point back to the playbook
+- added managed-doc config for opt-in framework-owned root docs:
+  - `README.md`
+  - `API.md`
+  - `CHANGELOG.md`
+- added managed-doc defaults and doc-index metadata to `switchboard/node.manifest.json`
+- made `switchboard node snapshot` regenerate:
+  - handoff
+  - runbook
+  - approach history
+  - doc index markdown
+  - completed tasks json
+  - scope snapshot json
+  - doc index json
+  - any enabled root derived docs
+- added node/control-center sync support for managed-doc configuration and doc-index metadata
+- added managed-doc and doc-index visibility to the control-center service page and the node dashboard
+- updated the public docs to describe the canonical-file model and the explicit `v2` boundary for broader project-management views
+
 ## 0.1.6
 
 - fixed explicit exclude handling for bundle pulls so exact paths like `.DS_Store` are not copied when excluded

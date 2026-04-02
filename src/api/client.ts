@@ -28,6 +28,7 @@ import type {
   Service,
   ServerRecord,
   ScopeEntry,
+  ManagedDocConfig,
   Workspace,
   WorkspaceLatest,
 } from '../types/switchboard'
@@ -64,6 +65,7 @@ function normalizeService(service: any) {
     allowed_git_pull_paths: service.allowed_git_pull_paths ?? [],
     exclude_globs: service.exclude_globs ?? [],
     scope_entries: (service.scope_entries ?? []).map(normalizeScopeEntry),
+    managed_docs: (service.managed_docs ?? []).map(normalizeManagedDoc),
     repo_policies: (service.repo_policies ?? []).map(normalizeRepoPolicy),
     notes: service.notes ?? '',
     path_aliases: service.path_aliases ?? [],
@@ -104,6 +106,35 @@ function normalizeRepoPolicy(policy: any): RepoPolicy {
     safety_profile: policy.safety_profile ?? 'generic_python',
     allowed_branches: policy.allowed_branches ?? [],
     allowed_remotes: policy.allowed_remotes ?? [],
+  }
+}
+
+function normalizeManagedDoc(entry: any): ManagedDocConfig {
+  return {
+    doc_id: entry.doc_id,
+    path: entry.path ?? '',
+    enabled: entry.enabled ?? false,
+    generated_from: entry.generated_from ?? 'switchboard/local/tasks-completed.md',
+    last_generated_at: entry.last_generated_at ?? null,
+  }
+}
+
+function normalizeDocIndex(docIndex: any) {
+  return {
+    generated: docIndex?.generated ?? '',
+    service_id: docIndex?.service_id,
+    project_root: docIndex?.project_root,
+    docs: Array.isArray(docIndex?.docs)
+      ? docIndex.docs.map((entry: any) => ({
+          doc_id: entry.doc_id,
+          label: entry.label,
+          path: entry.path ?? '',
+          enabled: entry.enabled ?? false,
+          generated_at: entry.generated_at ?? null,
+          generated_from: entry.generated_from ?? 'switchboard/local/tasks-completed.md',
+          contributor_timestamps: entry.contributor_timestamps ?? [],
+        }))
+      : [],
   }
 }
 
@@ -201,6 +232,8 @@ function normalizeNodeSync(result: any): NodeSyncResult {
     target: result.target ?? '',
     include_scope_snapshot: result.include_scope_snapshot ?? true,
     include_runtime_config: result.include_runtime_config ?? true,
+    managed_docs: (result.managed_docs ?? []).map(normalizeManagedDoc),
+    doc_index: result.doc_index ? normalizeDocIndex(result.doc_index) : undefined,
   }
 }
 

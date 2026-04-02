@@ -29,6 +29,7 @@ def create_node_app(project_root: str | Path | None = None) -> FastAPI:
         return {
             "manifest": manifest,
             "scope_snapshot": snapshot["scope_snapshot"],
+            "doc_index": snapshot.get("doc_index", manifest.get("doc_index", {})),
             "files": list_node_files(project_root),
             "pull_bundle_history": load_pull_bundle_history(project_root),
             "last_snapshot_at": snapshot["scope_snapshot"].get("generated") or manifest.get("updated_at"),
@@ -64,7 +65,9 @@ def create_node_app(project_root: str | Path | None = None) -> FastAPI:
         runtime = snapshot["runtime"]
         files = snapshot["files"]
         scope_snapshot = snapshot["scope_snapshot"]
+        doc_index = snapshot.get("doc_index", {})
         pull_bundle_history = snapshot["pull_bundle_history"]
+        managed_docs = manifest.get("managed_docs", [])
         display_name = html.escape(str(manifest.get("display_name", manifest.get("service_id", "Node"))))
         service_id = html.escape(str(manifest.get("service_id", "")))
         project_root_text = html.escape(str(manifest.get("project_root", "")))
@@ -74,6 +77,7 @@ def create_node_app(project_root: str | Path | None = None) -> FastAPI:
         healthcheck_command = html.escape(str(runtime.get("healthcheck_command", "") or "Not configured"))
         run_command_hint = html.escape(str(runtime.get("run_command_hint", "") or "Not configured"))
         generated = html.escape(str(scope_snapshot.get("generated", "")))
+        doc_index_generated = html.escape(str(doc_index.get("generated", "")))
         project_root_command = html.escape(str(project_root))
         bundles = pull_bundle_history.get("bundles", [])
         latest_bundle = bundles[0] if bundles else None
@@ -117,7 +121,7 @@ def create_node_app(project_root: str | Path | None = None) -> FastAPI:
         <p><strong>Project root:</strong> <code>{project_root_text}</code></p>
         <p><strong>Last snapshot:</strong> <code>{last_snapshot}</code></p>
       </section>
-      <section class="grid">
+        <section class="grid">
         <div class="card">
           <h2>Runtime</h2>
           <p><strong>Monitoring mode:</strong> {monitoring_mode}</p>
@@ -138,11 +142,25 @@ def create_node_app(project_root: str | Path | None = None) -> FastAPI:
           <p><strong>Tracked node files:</strong> {len(files)}</p>
           <ul>
             <li><code>switchboard/node.manifest.json</code></li>
+            <li><code>switchboard/core/playbook.md</code></li>
             <li><code>switchboard/core/</code></li>
             <li><code>switchboard/local/</code></li>
             <li><code>switchboard/evidence/</code></li>
           </ul>
         </div>
+      </section>
+      <section class="card" style="margin-top: 16px;">
+        <h2>Managed Docs</h2>
+        <p><strong>Doc index generated:</strong> <code>{doc_index_generated or "not yet"}</code></p>
+        <ul>
+          {"".join(
+              f"<li><code>{html.escape(str(entry.get('doc_id', '')))}</code> → "
+              f"<code>{html.escape(str(entry.get('path', '')))}</code> · "
+              f"{'enabled' if entry.get('enabled') else 'disabled'} · "
+              f"generated <code>{html.escape(str(entry.get('last_generated_at') or ''))}</code></li>"
+              for entry in managed_docs
+          ) or "<li>No managed docs configured.</li>"}
+        </ul>
       </section>
       <section class="card" style="margin-top: 16px;">
         <h2>Pull Bundle History</h2>

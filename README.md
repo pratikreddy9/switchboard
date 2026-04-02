@@ -1,41 +1,56 @@
 # Switchboard
 
-Switchboard is a control-center-first framework for managing project workspaces, service roots, server pulls, runtime checks, repo actions, and standardized node documentation.
+Switchboard is a control-center-first framework for managing project workspaces, server pulls, runtime checks, repo actions, versioned pull bundles, and standardized per-project node docs.
 
-`v0.1.x` keeps the product focused on the control center. Node mode is packaged and documented now so the first real node can be deployed cleanly, but node rollout is still secondary to the control-center workflow.
+`v0.1.7` keeps the product simple:
 
-## What v0.1.x Includes
+- the control center is the main product
+- node mode is installable and usable
+- sync is manual and control-center initiated
+- project/task dashboards across all nodes are deferred to `v2`
 
-- a FastAPI backend for service discovery, pulls, runtime checks, repo actions, and manual node sync
-- a React control-center UI for workspaces, services, scope editing, bundle pulls, runtime config, and node sync actions
-- a Python CLI for control-center tasks, node install/snapshot/serve, and release builds
-- a standardized `switchboard/` node pack for future project roots
-- control-center-only sync: nodes never call back into the control center on their own
+## What v0.1.7 Adds
+
+- one canonical node update file: `switchboard/local/tasks-completed.md`
+- one primary rulebook: `switchboard/core/playbook.md`
+- deterministic snapshot regeneration of:
+  - `switchboard/local/control-center-handoff.md`
+  - `switchboard/local/runbook.md`
+  - `switchboard/local/approach-history.md`
+  - `switchboard/local/doc-index.md`
+  - `switchboard/evidence/completed-tasks.json`
+  - `switchboard/evidence/scope.snapshot.json`
+  - `switchboard/evidence/doc-index.json`
+  - runtime/doc-index mirrors in `switchboard/node.manifest.json`
+- opt-in framework-managed root docs:
+  - `README.md`
+  - `API.md`
+  - `CHANGELOG.md`
 
 ## Stack
 
 - Python 3.12+
 - FastAPI
-- Pydantic Settings
 - Paramiko for SSH/SFTP
 - Typer CLI
 - React 19
 - Vite
 - TypeScript
 - Tailwind
-- `uv` for packaging and node installation
-- Git for repo status and version metadata
+- `uv` for wheel-based node installs
+- Git for repo state and version metadata
 
 ## Repo Layout
 
 ```text
-switchboard/           Python backend, CLI, collectors, node mode
+switchboard/           Python backend, CLI, node mode, snapshot logic
 src/                   React control-center UI
 src/data/              checked-in offline fallback data for the UI
 documentation/         public framework docs
 tests/                 frontend tests
 tests_backend/         backend tests
-framework.sh           combined start/stop/status/logs runner
+framework.sh           combined control-center process runner
+run.sh                 simple interactive launcher
 pyproject.toml         Python package metadata
 package.json           frontend package metadata
 ```
@@ -52,13 +67,20 @@ python3 -m venv .venv
 npm install
 ```
 
-Create `.env` from `.env.example`:
+Create local env:
 
 ```bash
 cp .env.example .env
 ```
 
-Add server credentials using the `SWITCHBOARD_SERVER_<SERVER_ID>_*` naming pattern.
+Use this key pattern:
+
+```text
+SWITCHBOARD_SERVER_<SERVER_ID>_HOST
+SWITCHBOARD_SERVER_<SERVER_ID>_USERNAME
+SWITCHBOARD_SERVER_<SERVER_ID>_PORT
+SWITCHBOARD_SERVER_<SERVER_ID>_PASSWORD
+```
 
 Example:
 
@@ -69,12 +91,11 @@ SWITCHBOARD_SERVER_PESU_DEV_47_PORT=22
 SWITCHBOARD_SERVER_PESU_DEV_47_PASSWORD=
 ```
 
-Current server definitions live in:
+Current server/workspace manifests:
 
 - `switchboard/manifests/servers.json`
 - `switchboard/manifests/workspaces.json`
-
-In `v0.1.x`, servers and workspaces are still manifest-driven. Services are added from the control-center UI.
+- `switchboard/manifests/services.json`
 
 Start the framework:
 
@@ -82,9 +103,7 @@ Start the framework:
 ./run.sh
 ```
 
-`run.sh` / `start.sh` is the simple entrypoint. It asks which mode to start and then runs the correct control-center or node command.
-
-If you want the direct control-center runner without prompts:
+Direct runner:
 
 ```bash
 ./framework.sh start
@@ -97,81 +116,162 @@ Default local URLs:
 - UI: `http://127.0.0.1:5173`
 - API: `http://127.0.0.1:8009/api/health`
 
-More detail is in [documentation/control-center-setup.md](documentation/control-center-setup.md).
+Detailed operator flow:
 
-## How Control Center Configuration Works
+- [documentation/control-center-setup.md](documentation/control-center-setup.md)
+
+## Control Center Configuration Model
 
 ### Servers
 
-- server identity is defined in `switchboard/manifests/servers.json`
-- credentials are resolved from `.env`, `.env.local`, or runtime password overrides
-- Switchboard stores host, username, and port in manifests
-- passwords stay local in env files or request payloads
+- server identity lives in `switchboard/manifests/servers.json`
+- credentials resolve from `.env`, `.env.local`, or runtime overrides
+- passwords stay local and untracked
 
 ### Workspaces
 
-- workspaces are umbrella groups defined in `switchboard/manifests/workspaces.json`
-- each workspace lists its allowed server ids
-- service cards in the UI are scoped by workspace
+- workspaces group servers and services
+- the workspace list is still manifest-driven in `v0.1.x`
 
-### Services and Project Roots
+### Services
 
-- services are stored in `switchboard/manifests/services.json`
-- the control center can add services from the UI by choosing:
-  - workspace
-  - server
-  - root path
-  - selected scope entries
-- scope entries define what is treated as:
-  - `repo`
-  - `doc`
-  - `log`
-  - `exclude`
+Services are added in the control center by:
+
+1. choosing a workspace
+2. choosing a server/location
+3. entering a root path
+4. selecting scope
+5. saving runtime config
+
+Scope categories are:
+
+- `repo`
+- `doc`
+- `log`
+- `exclude`
+
+Each service also carries:
+
+- per-location runtime config
+- managed-doc config
+- repo policies
+- bundle history
 
 ## Runtime Config
 
-Runtime config lives per location, not per service.
+Runtime config is stored per location.
 
-Each location can store:
+Each location can carry:
 
 - expected ports
-- a raw health-check command
-- a run-command hint
-- monitoring mode: `manual`, `detect`, or `node_managed`
+- health-check command
+- run-command hint
+- monitoring mode
 - runtime notes
 
-In `v0.1.x`:
+The control center can:
 
-- process-command detection is best effort only
-- the manual run-command hint remains first-class
-- health checks are operator-managed raw commands, usually `curl ...`
+- run runtime checks
+- sync runtime config from node
+- sync runtime config to node
 
-The UI exposes runtime config in two places:
+See:
 
-- service creation flow
-- service detail page
+- [documentation/runtime-monitoring.md](documentation/runtime-monitoring.md)
 
-The service detail page also exposes:
+## Canonical Node Doc Flow
 
-- `Run Runtime Check`
-- `Sync From Node`
-- `Sync To Node`
+Normal agent work should update only:
 
-More detail is in [documentation/runtime-monitoring.md](documentation/runtime-monitoring.md).
+```text
+switchboard/local/tasks-completed.md
+```
+
+Then run:
+
+```bash
+switchboard node snapshot --project-root <path>
+```
+
+That snapshot regenerates the framework-owned derived docs and evidence.
+
+The primary agent rulebook is:
+
+```text
+switchboard/core/playbook.md
+```
+
+Compatibility files like:
+
+- `design-principles.md`
+- `doc-structure-rules.md`
+- `agent-instructions.md`
+- bootstrap/runtime prompt files
+
+remain present, but the playbook is the primary authority.
+
+## Managed Root Docs
+
+Root project docs can be framework-managed, but only when enabled in:
+
+```text
+switchboard/node.manifest.json
+```
+
+Managed doc ids:
+
+- `readme`
+- `api`
+- `changelog`
+- `handoff`
+- `runbook`
+- `approach_history`
+- `doc_index_md`
+- `doc_index_json`
+
+Default:
+
+- enabled:
+  - `handoff`
+  - `runbook`
+  - `approach_history`
+  - `doc_index_md`
+  - `doc_index_json`
+- disabled:
+  - `readme`
+  - `api`
+  - `changelog`
+
+If a root doc is disabled, Switchboard must not rewrite it.
+
+## Node Mode
+
+Node mode installs a standard `switchboard/` folder into a project root.
+
+Important rules:
+
+- node install does not replace existing project root docs by default
+- node never pushes into the control center
+- node never SSHs into the control-center machine
+- sync is always initiated from the control center
+
+Node install/update details:
+
+- [documentation/node-install-guide.md](documentation/node-install-guide.md)
 
 ## Pull Bundles
 
-Pull bundles create a new timestamped local copy every time.
+Every pull is a new bundle.
 
 Bundle behavior:
 
-- starts from the saved scope
-- allows one-run extra includes and excludes
-- preserves the original relative source tree under the bundle root
-- records file metadata and checksums
-- records repo metadata when the pulled paths overlap a tracked repo
+- starts from saved scope
+- supports one-run extra includes and excludes
+- preserves the original relative source tree
+- writes a bundle manifest with file metadata and checksums
+- keeps history for later comparison
 
-Local bundle layout:
+Local layout:
 
 ```text
 downloads/<workspace>/<service>/<bundle_id>/
@@ -179,39 +279,18 @@ downloads/<workspace>/<service>/<bundle_id>/
   bundle-manifest.json
 ```
 
-## Node Mode
-
-Node mode installs a standardized `switchboard/` folder into a project root.
-
-That folder contains:
-
-- `switchboard/node.manifest.json`
-- `switchboard/core/`
-- `switchboard/local/`
-- `switchboard/evidence/`
-
-Important rules:
-
-- node install does not replace project-owned root docs like `README.md`
-- node sync is manual
-- node never pushes into the control center
-- node never SSHs back to the control-center machine
-- sync is always initiated from the control center
-
-See [documentation/node-install-guide.md](documentation/node-install-guide.md).
-
 ## Release Flow
 
-Build a wheel from the control-center repo:
+Build a wheel:
 
 ```bash
 ./.venv/bin/switchboard release build --wheel-out release
 ```
 
-That build:
+That release build:
 
 - runs the React production build
-- bundles the static app into the Python package
+- bundles the static frontend into the Python package
 - builds a wheel for `uv tool install`
 
 ## Tests
@@ -232,25 +311,14 @@ npm test
 
 ## v0.1.x Limits
 
-- servers and workspaces are still manifest-driven
-- node registration back into the control center is manual
-- secret scanning before push/deploy is deferred to a later sub-version
-- runtime checks are manual or best-effort, not a full monitoring system
-- task management and multi-project reporting are not in the dashboard yet
+- server and workspace registration are still manifest-driven
+- sync is manual and control-center initiated only
+- runtime checks are best-effort, not full monitoring
+- repo safety/deploy readiness is still incomplete
+- cross-project task dashboards, day-wise task calendars, and broader project-management views are `v2` work
 
-## Planned for v2
+## v2 Direction
 
-- day-wise task views across projects
-- project and workspace task calendar views
-- richer agent activity dashboards
-- broader project-management reporting across nodes and control center
-- stronger deploy-readiness and cross-project workflow views
+Switchboard is ultimately meant to become a project-management dashboard across agents, tasks, and projects.
 
-## Public Docs
-
-- [documentation/control-center-setup.md](documentation/control-center-setup.md)
-- [documentation/runtime-monitoring.md](documentation/runtime-monitoring.md)
-- [documentation/node-install-guide.md](documentation/node-install-guide.md)
-- [documentation/switchboard-design-principles.md](documentation/switchboard-design-principles.md)
-- [documentation/switchboard-doc-structure-rules.md](documentation/switchboard-doc-structure-rules.md)
-- [CHANGELOG.md](CHANGELOG.md)
+That broader common-view layer is intentionally out of scope for `v0.1.x`. The goal here is to make the control center and node contract clean enough that `v2` can build on reliable pulled data instead of ad hoc docs.

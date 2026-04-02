@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, FileStack, FolderTree, Pencil, RefreshCw, Save, Server, Trash2, X } from 'lucide-react'
-import type { RuntimeCheckResult, Service, ServiceLocationDraft, ServiceRunResult, RunRecord, ScopeEntry } from '../types/switchboard'
+import type {
+  ManagedDocConfig,
+  RuntimeCheckResult,
+  Service,
+  ServiceLocationDraft,
+  ServiceRunResult,
+  RunRecord,
+  ScopeEntry,
+} from '../types/switchboard'
 import {
   deleteService,
   getService,
@@ -51,6 +59,10 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
   const [runtimeDraft, setRuntimeDraft] = useState<ServiceLocationDraft[]>([])
   const [savingRuntime, setSavingRuntime] = useState(false)
   const [runtimeMessage, setRuntimeMessage] = useState<string | null>(null)
+  const [managedDocsDraft, setManagedDocsDraft] = useState<ManagedDocConfig[]>([])
+  const [editingManagedDocs, setEditingManagedDocs] = useState(false)
+  const [savingManagedDocs, setSavingManagedDocs] = useState(false)
+  const [managedDocsMessage, setManagedDocsMessage] = useState<string | null>(null)
   const [checkingRuntimeLocation, setCheckingRuntimeLocation] = useState<string | null>(null)
   const [syncingFromLocation, setSyncingFromLocation] = useState<string | null>(null)
   const [syncingToLocation, setSyncingToLocation] = useState<string | null>(null)
@@ -61,6 +73,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
       if (!isApiError(res)) {
         setService(res)
         setRuntimeDraft(res.locations.map((location) => ({ ...location, runtime: { ...location.runtime } })))
+        setManagedDocsDraft(res.managed_docs.map((entry) => ({ ...entry })))
       }
     })
     getServiceScope(serviceId).then((res) => {
@@ -101,6 +114,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
     setScopeEntries(updated.scope_entries)
     setScopeDraft(updated.scope_entries.map((entry) => ({ ...entry })))
     setRuntimeDraft(updated.locations.map((location) => ({ ...location, runtime: { ...location.runtime } })))
+    setManagedDocsDraft(updated.managed_docs.map((entry) => ({ ...entry })))
   }
 
   const runtimeChecksByLocation = useMemo(() => {
@@ -121,6 +135,11 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
     }
     return map
   }, [service?.node_sync])
+
+  const latestNodeDocIndex = useMemo(
+    () => (service?.node_sync ?? []).find((entry) => entry.doc_index)?.doc_index,
+    [service?.node_sync],
+  )
 
   const hasNodeScope = useMemo(
     () =>
@@ -186,6 +205,29 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
     setRuntimeDraft(service?.locations.map((location) => ({ ...location, runtime: { ...location.runtime } })) ?? [])
     setEditingRuntime(false)
     setRuntimeMessage(null)
+  }
+
+  async function handleSaveManagedDocs() {
+    if (!service) return
+    setSavingManagedDocs(true)
+    setManagedDocsMessage(null)
+    const result = await updateService(service.service_id, {
+      managed_docs: managedDocsDraft,
+    } as Partial<Service>)
+    setSavingManagedDocs(false)
+    if (isApiError(result)) {
+      setManagedDocsMessage(result.message)
+      return
+    }
+    handleServiceUpdated(result)
+    setEditingManagedDocs(false)
+    setManagedDocsMessage('Managed docs updated.')
+  }
+
+  function handleCancelManagedDocsEdit() {
+    setManagedDocsDraft(service?.managed_docs.map((entry) => ({ ...entry })) ?? [])
+    setEditingManagedDocs(false)
+    setManagedDocsMessage(null)
   }
 
   async function handleRuntimeCheck(locationId: string) {
@@ -655,6 +697,149 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                 </div>
               )
             })}
+          </div>
+        </section>
+      )}
+
+      {service && (
+        <section className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-medium text-gray-300">Managed Docs</h3>
+              <div className="mt-1 text-xs text-gray-500">
+                Framework-owned derived docs generated from <code>switchboard/local/tasks-completed.md</code>.
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {editingManagedDocs ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleCancelManagedDocsEdit}
+                    disabled={savingManagedDocs}
+                    className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-300 transition-colors hover:border-gray-500 hover:text-white disabled:opacity-50"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveManagedDocs}
+                    disabled={offline || savingManagedDocs}
+                    className="inline-flex items-center gap-1 rounded-lg bg-white px-3 py-2 text-xs font-medium text-black transition-colors hover:bg-gray-200 disabled:opacity-50"
+                  >
+                    <Save className="h-3.5 w-3.5" />
+                    {savingManagedDocs ? 'Saving…' : 'Save Managed Docs'}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManagedDocsDraft(service.managed_docs.map((entry) => ({ ...entry })))
+                    setEditingManagedDocs(true)
+                    setManagedDocsMessage(null)
+                  }}
+                  disabled={offline}
+                  className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-300 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Edit Managed Docs
+                </button>
+              )}
+            </div>
+          </div>
+
+          {managedDocsMessage && (
+            <div className="mb-4 rounded-xl border border-gray-800 bg-gray-950 px-3 py-2 text-sm text-gray-300">
+              {managedDocsMessage}
+            </div>
+          )}
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {(editingManagedDocs ? managedDocsDraft : service.managed_docs).map((entry, index) => (
+              <div key={`${entry.doc_id}:${index}`} className="rounded-xl border border-gray-800 bg-gray-950 p-4">
+                {editingManagedDocs ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm font-medium text-white">{entry.doc_id}</div>
+                      <label className="inline-flex items-center gap-2 text-xs text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={entry.enabled}
+                          onChange={(event) =>
+                            setManagedDocsDraft((current) =>
+                              current.map((candidate, candidateIndex) =>
+                                candidateIndex === index ? { ...candidate, enabled: event.target.checked } : candidate,
+                              ),
+                            )
+                          }
+                        />
+                        Enabled
+                      </label>
+                    </div>
+                    <input
+                      value={entry.path}
+                      onChange={(event) =>
+                        setManagedDocsDraft((current) =>
+                          current.map((candidate, candidateIndex) =>
+                            candidateIndex === index ? { ...candidate, path: event.target.value } : candidate,
+                          ),
+                        )
+                      }
+                      className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-xs text-white outline-none focus:border-cyan-500"
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-2 text-sm text-gray-300">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium text-white">{entry.doc_id}</span>
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-[0.16em] ${
+                          entry.enabled
+                            ? 'border-cyan-900 bg-cyan-950/60 text-cyan-300'
+                            : 'border-gray-700 text-gray-500'
+                        }`}
+                      >
+                        {entry.enabled ? 'enabled' : 'disabled'}
+                      </span>
+                    </div>
+                    <div className="font-mono text-xs text-gray-400 break-all">{entry.path}</div>
+                    <div className="text-xs text-gray-500">
+                      Generated: {entry.last_generated_at ? new Date(entry.last_generated_at).toLocaleString() : 'not yet'}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 rounded-xl border border-gray-800 bg-gray-950 p-4">
+            <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Latest Doc Index</div>
+            {latestNodeDocIndex ? (
+              <div className="mt-2 space-y-3 text-sm text-gray-300">
+                <div>
+                  <span className="text-gray-500">Generated:</span>{' '}
+                  {latestNodeDocIndex.generated ? new Date(latestNodeDocIndex.generated).toLocaleString() : 'unknown'}
+                </div>
+                <div className="grid gap-2 md:grid-cols-2">
+                  {latestNodeDocIndex.docs.map((entry) => (
+                    <div key={`${entry.doc_id}:${entry.path}`} className="rounded-lg border border-gray-800 bg-gray-900 px-3 py-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="font-medium text-white">{entry.label ?? entry.doc_id}</span>
+                        <span className="text-xs text-gray-500">{entry.enabled ? 'enabled' : 'disabled'}</span>
+                      </div>
+                      <div className="mt-1 font-mono text-[11px] text-gray-400 break-all">{entry.path}</div>
+                      <div className="mt-1 text-[11px] text-gray-500">
+                        Contributors: {entry.contributor_timestamps.length > 0 ? entry.contributor_timestamps.length : 0}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-2 text-sm text-gray-500">No doc index metadata synced from the node yet.</div>
+            )}
           </div>
         </section>
       )}

@@ -12,6 +12,7 @@ from typing import Any
 
 from .config import Settings
 from .models import (
+    ManagedDocConfig,
     RepoPolicy,
     ResolvedServer,
     ScopeEntry,
@@ -163,11 +164,59 @@ def _repo_policies_from_record(item: dict[str, Any], scope_entries: list[ScopeEn
     return deduped
 
 
+def _default_managed_docs() -> list[ManagedDocConfig]:
+    defaults = [
+        ("readme", "README.md", False),
+        ("api", "API.md", False),
+        ("changelog", "CHANGELOG.md", False),
+        ("handoff", "switchboard/local/control-center-handoff.md", True),
+        ("runbook", "switchboard/local/runbook.md", True),
+        ("approach_history", "switchboard/local/approach-history.md", True),
+        ("doc_index_md", "switchboard/local/doc-index.md", True),
+        ("doc_index_json", "switchboard/evidence/doc-index.json", True),
+    ]
+    return [
+        ManagedDocConfig(doc_id=doc_id, path=path, enabled=enabled)
+        for doc_id, path, enabled in defaults
+    ]
+
+
+def _managed_docs_from_record(item: dict[str, Any]) -> list[ManagedDocConfig]:
+    entries = [ManagedDocConfig.model_validate(entry) for entry in item.get("managed_docs", [])]
+    if not entries:
+        entries = _default_managed_docs()
+
+    deduped: list[ManagedDocConfig] = []
+    seen: set[str] = set()
+    defaults_by_id = {entry.doc_id: entry for entry in _default_managed_docs()}
+    for entry in entries:
+        if entry.doc_id in seen:
+            continue
+        seen.add(entry.doc_id)
+        default = defaults_by_id.get(entry.doc_id)
+        deduped.append(
+            ManagedDocConfig(
+                doc_id=entry.doc_id,
+                path=entry.path or (default.path if default else ""),
+                enabled=entry.enabled,
+                generated_from=entry.generated_from,
+                last_generated_at=entry.last_generated_at,
+            )
+        )
+    for doc_id, default in defaults_by_id.items():
+        if doc_id in seen:
+            continue
+        deduped.append(default)
+    return deduped
+
+
 def _normalize_service_record(item: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(item)
     scope_entries = _scope_entries_from_record(normalized)
+    managed_docs = _managed_docs_from_record(normalized)
     repo_policies = _repo_policies_from_record(normalized, scope_entries)
     normalized["scope_entries"] = [entry.model_dump(mode="json") for entry in scope_entries]
+    normalized["managed_docs"] = [entry.model_dump(mode="json") for entry in managed_docs]
     normalized["repo_policies"] = [policy.model_dump(mode="json") for policy in repo_policies]
     normalized.update(_flatten_scope(scope_entries))
     return normalized

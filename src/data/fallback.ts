@@ -77,6 +77,7 @@ export async function loadFallbackWorkspaceList(): Promise<Workspace[]> {
           allowed_git_pull_paths: [],
           exclude_globs: [],
           scope_entries: [],
+          managed_docs: [],
           repo_policies: [],
           notes: service.notes ?? '',
           path_aliases: [],

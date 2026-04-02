@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document is the operator setup flow for a fresh Switchboard control-center install.
+This is the operator setup flow for a fresh Switchboard control-center install.
 
 ## 1. Clone The Repo
 
@@ -18,7 +18,7 @@ python3 -m venv .venv
 ./.venv/bin/pip install -e .
 ```
 
-If you prefer `uv`, that is fine too. The package itself is still the product boundary.
+`uv` is also fine, but the product boundary is still the Python package.
 
 ## 3. Install Frontend Dependencies
 
@@ -31,8 +31,6 @@ npm install
 ```bash
 cp .env.example .env
 ```
-
-Fill the server-specific values you want the control center to use locally.
 
 Credential key pattern:
 
@@ -52,27 +50,25 @@ SWITCHBOARD_SERVER_ZAPP_TEST_114_PORT=22
 SWITCHBOARD_SERVER_ZAPP_TEST_114_PASSWORD=
 ```
 
-## 5. Check Server And Workspace Definitions
+## 5. Check Manifest Definitions
 
-Current v0.1.x behavior:
+Current `v0.1.x` behavior:
 
 - servers are defined in `switchboard/manifests/servers.json`
 - workspaces are defined in `switchboard/manifests/workspaces.json`
 - services are stored in `switchboard/manifests/services.json`
 
-The control-center UI can add services. Server and workspace registration is still manifest-driven in this version.
+Server/workspace registration is still manifest-driven in this version.
 
 ## 6. Start The Framework
 
-Combined runner:
+Preferred prompt-driven entrypoint:
 
 ```bash
 ./run.sh
 ```
 
-That prompt-driven entrypoint is the preferred v0.1.x startup path.
-
-Direct control-center runner commands are still available:
+Direct runner:
 
 ```bash
 ./framework.sh start
@@ -80,7 +76,7 @@ Direct control-center runner commands are still available:
 ./framework.sh logs
 ```
 
-Direct commands:
+Direct processes:
 
 ```bash
 ./.venv/bin/python -m uvicorn switchboard.api:app --host 127.0.0.1 --port 8009
@@ -98,35 +94,46 @@ From the workspace page:
 
 1. open `Add Project`
 2. choose the workspace
-3. choose one of that workspace’s servers
+3. choose a workspace server
 4. enter the project root path
 5. browse the path tree
-6. keep or uncheck paths
-7. assign categories:
-   - `repo`
-   - `doc`
-   - `log`
-   - `exclude`
-8. optionally add runtime config:
-   - expected ports
-   - health-check command
-   - run-command hint
-   - monitoring mode
-   - notes
+6. keep or deselect paths
+7. assign `repo`, `doc`, `log`, or `exclude`
+8. save runtime config for the location
 9. save the service
 
-## 9. Collect, Pull, And Sync
+## 9. Configure Runtime And Docs
 
-- `Collect` refreshes service state, docs/log indices, repo summaries, and runtime evidence.
-- `Pull Bundle` creates a new timestamped local bundle.
-- `Run Runtime Check` checks configured ports and health commands.
-- `Sync From Node` pulls node manifest and node evidence into the control center.
-- `Sync To Node` writes selected control-center config back into the node files.
+After a service exists, the service page lets you:
 
-## 10. Important Direction Rule
+- edit per-location runtime config
+- edit saved scope
+- edit managed-doc configuration
+- run runtime checks
+- sync from node
+- sync to node
+- create pull bundles
+
+## 10. Sync Direction Rule
 
 Sync is manual and control-center initiated only.
 
 - nodes do not call back into the control center
 - nodes do not SSH into the control-center machine
-- the control center pulls from or writes to nodes when the operator asks
+- the control center pulls from or writes to nodes on demand
+
+## 11. Canonical Doc Rule
+
+The control center should assume node-side agents normally edit only:
+
+```text
+switchboard/local/tasks-completed.md
+```
+
+and then run:
+
+```bash
+switchboard node snapshot --project-root <path>
+```
+
+That is how derived docs and evidence stay aligned in `v0.1.7`.

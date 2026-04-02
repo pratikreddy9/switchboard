@@ -80,6 +80,41 @@ export interface RepoPolicy {
   allowed_remotes: string[]
 }
 
+export type ManagedDocId =
+  | 'readme'
+  | 'api'
+  | 'changelog'
+  | 'handoff'
+  | 'runbook'
+  | 'approach_history'
+  | 'doc_index_md'
+  | 'doc_index_json'
+
+export interface ManagedDocConfig {
+  doc_id: ManagedDocId
+  path: string
+  enabled: boolean
+  generated_from: string
+  last_generated_at?: string | null
+}
+
+export interface DocIndexEntry {
+  doc_id: ManagedDocId
+  label?: string
+  path: string
+  enabled: boolean
+  generated_at?: string | null
+  generated_from?: string
+  contributor_timestamps: string[]
+}
+
+export interface DocIndexState {
+  generated: string
+  service_id?: string
+  project_root?: string
+  docs: DocIndexEntry[]
+}
+
 export interface Service {
   service_id: string
   workspace_id: string
@@ -93,6 +128,7 @@ export interface Service {
   allowed_git_pull_paths: string[]
   exclude_globs: string[]
   scope_entries: ScopeEntry[]
+  managed_docs: ManagedDocConfig[]
   repo_policies: RepoPolicy[]
   notes: string
   path_aliases: string[]
@@ -352,6 +388,8 @@ export interface NodeSyncResult {
   target: string
   include_scope_snapshot: boolean
   include_runtime_config: boolean
+  managed_docs?: ManagedDocConfig[]
+  doc_index?: DocIndexState
 }
 
 export interface PullBundleRequest {
@@ -406,6 +444,7 @@ export interface CreateServiceRequest {
   allowed_git_pull_paths?: string[]
   exclude_globs?: string[]
   scope_entries: ScopeEntry[]
+  managed_docs?: ManagedDocConfig[]
   repo_policies?: RepoPolicy[]
   notes?: string
   path_aliases?: string[]

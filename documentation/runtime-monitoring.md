@@ -6,7 +6,7 @@ Runtime config in `v0.1.x` is a per-location operator-managed layer. It is not a
 
 ## Runtime Config Fields
 
-Each service location can store:
+Each location stores:
 
 - `expected_ports`
 - `healthcheck_command`
@@ -14,14 +14,16 @@ Each service location can store:
 - `monitoring_mode`
 - `notes`
 
+Runtime config belongs to a specific service location, not to the service as a whole.
+
 ## Monitoring Modes
 
 - `manual`
-  Use configured data only. Best when you mainly want reminders and a manual health command.
+  Use saved data only.
 - `detect`
-  Switchboard will try to detect live listeners and process commands from the control center.
+  Let the control center try to detect live listeners and process commands.
 - `node_managed`
-  Use when the node is expected to mirror and maintain runtime details locally, with manual sync back to the control center.
+  Use when the node is expected to mirror runtime details locally and the control center syncs them when needed.
 
 ## Health Check Commands
 
@@ -37,15 +39,13 @@ Important:
 
 - the command is stored as configuration
 - the command is executed from the selected location context
-- Switchboard does not attempt to interpret every command shape
+- Switchboard does not try to normalize every command shape
 
 ## Run Command Hints
 
 Run-command detection is best effort only.
 
-Switchboard may be able to infer a process command from a detected PID, but this is not guaranteed.
-
-That is why `run_command_hint` remains a first-class field. Use it to record the operator-known command or startup hint.
+That is why `run_command_hint` remains first-class. Use it for the operator-known startup hint when process detection is missing or ambiguous.
 
 Examples:
 
@@ -57,12 +57,10 @@ streamlit run app.py --server.port 8503
 
 ## Control Center Checks vs Node Data
 
-Two sources can inform runtime status:
-
 ### Control-center runtime check
 
 - runs from the control center
-- uses local or SSH access
+- uses local access or SSH
 - checks open ports
 - runs the configured health command
 - may detect a process command
@@ -70,31 +68,49 @@ Two sources can inform runtime status:
 ### Node-reported runtime config
 
 - stored in `switchboard/node.manifest.json`
+- updated by `switchboard node snapshot`
 - synced manually into or out of the control center
-- useful when the local project node is treated as the more accurate runtime owner
 
-## Conflict Rule In v0.1.x
+## Conflict Rule In `v0.1.x`
 
 - sync is manual
 - last write wins
-- timestamp and direction are recorded
-- there is no automatic merge logic yet
+- timestamps are preserved
+- there is no automatic merge logic
+
+## Related Canonical Doc Rule
+
+Runtime config may also be mirrored from the canonical node file flow.
+
+Normal node-side agent work should update:
+
+```text
+switchboard/local/tasks-completed.md
+```
+
+with a `Runtime:` block, then run:
+
+```bash
+switchboard node snapshot --project-root <path>
+```
+
+That snapshot mirrors runtime into `switchboard/node.manifest.json`.
 
 ## What The Service Page Shows
 
-For each location, the UI shows:
+Per location, the control center can show:
 
 - configured ports
 - detected live ports
 - missing configured ports
 - health-check status
-- detected process command if available
+- detected process command
 - saved run-command hint
 - node presence
-- latest node sync record
+- latest node sync result
 
 ## What This Is Not Yet
 
-This is not a full daemonized monitor with alerting, historical charts, or automatic remediation.
+This is not a daemonized monitoring system with alerting, charts, or automatic remediation.
 
-Those broader operational views belong in later versions.
+Those views belong in later versions.

@@ -324,6 +324,7 @@ class RuntimeAndNodeSyncTests(unittest.TestCase):
             self.assertEqual(node_manifest["runtime"]["expected_ports"], [8000])
             self.assertEqual(node_manifest["runtime"]["run_command_hint"], "uvicorn main:app --port 8000")
             self.assertEqual(scope_snapshot["scope_entries"][0]["kind"], "repo")
+            self.assertTrue(any(entry["doc_id"] == "readme" for entry in node_manifest["managed_docs"]))
 
             node_manifest["runtime"] = {
                 "expected_ports": [8100],
@@ -367,6 +368,7 @@ class RuntimeAndNodeSyncTests(unittest.TestCase):
             self.assertEqual(pulled["status"], "ok")
             self.assertEqual(pulled["service"]["locations"][0]["runtime"]["expected_ports"], [8100])
             self.assertEqual(pulled["service"]["locations"][0]["runtime"]["monitoring_mode"], "node_managed")
+            self.assertTrue(any(entry["doc_id"] == "readme" for entry in pulled["service"]["managed_docs"]))
 
             stored_service = manifests.get_service("svc")
             self.assertEqual(stored_service.docs_paths, [str(paths["manifest"])])
@@ -375,6 +377,7 @@ class RuntimeAndNodeSyncTests(unittest.TestCase):
             sync_state = snapshots.get_service_runtime_state("svc")["node_sync"]
             self.assertEqual(sync_state[0]["direction"], "from_node")
             self.assertTrue(sync_state[0]["timestamp"])
+            self.assertIn("doc_index", sync_state[0])
 
     def test_collect_with_service_filter_only_resolves_relevant_servers(self) -> None:
         with TemporaryDirectory() as tmpdir:

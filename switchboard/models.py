@@ -16,6 +16,16 @@ ScopeSource = Literal["seeded", "user_added", "node_manifest", "tasks_completed"
 PushMode = Literal["allowed", "blocked"]
 SafetyProfile = Literal["generic_python", "secret_heavy"]
 MonitoringMode = Literal["manual", "detect", "node_managed"]
+ManagedDocId = Literal[
+    "readme",
+    "api",
+    "changelog",
+    "handoff",
+    "runbook",
+    "approach_history",
+    "doc_index_md",
+    "doc_index_json",
+]
 ActionStatus = Literal[
     "ok",
     "partial",
@@ -78,6 +88,22 @@ class LocationSpec(BaseModel):
     runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
 
 
+class ManagedDocConfig(BaseModel):
+    doc_id: ManagedDocId
+    path: str
+    enabled: bool = False
+    generated_from: str = "switchboard/local/tasks-completed.md"
+    last_generated_at: str | None = None
+
+    @field_validator("path")
+    @classmethod
+    def validate_path(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            raise ValueError("managed doc path must not be empty")
+        return trimmed
+
+
 class ScopeEntry(BaseModel):
     entry_id: str | None = None
     kind: ScopeKind
@@ -126,6 +152,7 @@ class ServiceManifest(BaseModel):
     allowed_git_pull_paths: list[str] = Field(default_factory=list)
     exclude_globs: list[str] = Field(default_factory=list)
     scope_entries: list[ScopeEntry] = Field(default_factory=list)
+    managed_docs: list[ManagedDocConfig] = Field(default_factory=list)
     repo_policies: list[RepoPolicy] = Field(default_factory=list)
     notes: str = ""
     path_aliases: list[str] = Field(default_factory=list)
@@ -170,6 +197,7 @@ class ServiceCreateRequest(BaseModel):
     allowed_git_pull_paths: list[str] = Field(default_factory=list)
     exclude_globs: list[str] = Field(default_factory=list)
     scope_entries: list[ScopeEntry] = Field(default_factory=list)
+    managed_docs: list[ManagedDocConfig] = Field(default_factory=list)
     repo_policies: list[RepoPolicy] = Field(default_factory=list)
     notes: str = ""
     path_aliases: list[str] = Field(default_factory=list)
@@ -188,6 +216,7 @@ class ServicePatchRequest(BaseModel):
     allowed_git_pull_paths: list[str] | None = None
     exclude_globs: list[str] | None = None
     scope_entries: list[ScopeEntry] | None = None
+    managed_docs: list[ManagedDocConfig] | None = None
     repo_policies: list[RepoPolicy] | None = None
     notes: str | None = None
     path_aliases: list[str] | None = None

@@ -4,9 +4,9 @@
 
 This guide explains how to install a Switchboard node into a project root and how that node interacts with the control center.
 
-In `v0.1.x`, node mode is real and installable, but still secondary to the control center.
+In `v0.1.x`, node mode is installable and usable, but still secondary to the control center.
 
-## Important Direction Rule
+## Direction Rule
 
 Node sync is manual and control-center initiated.
 
@@ -25,17 +25,38 @@ A node install creates only one top-level folder inside the project root:
     core/
     local/
     evidence/
+    runtime/
 ```
 
-It does not replace project-owned root files like:
+It does not overwrite project-owned root docs by default.
 
-- `README.md`
-- `api.md`
-- existing local docs outside `switchboard/`
+## Core Node Files
 
-## Release The Package From The Control Center Repo
+Primary rulebook:
 
-From the framework repo:
+```text
+switchboard/core/playbook.md
+```
+
+Canonical editable file:
+
+```text
+switchboard/local/tasks-completed.md
+```
+
+Derived files:
+
+- `switchboard/local/control-center-handoff.md`
+- `switchboard/local/runbook.md`
+- `switchboard/local/approach-history.md`
+- `switchboard/local/doc-index.md`
+- `switchboard/evidence/completed-tasks.json`
+- `switchboard/evidence/scope.snapshot.json`
+- `switchboard/evidence/doc-index.json`
+
+## Release The Package
+
+From the control-center repo:
 
 ```bash
 cd /Users/p/Desktop/dashboard
@@ -48,46 +69,34 @@ That build:
 2. bundles static frontend assets into the Python package
 3. builds a Python wheel for node installation
 
-Example output:
-
-```text
-release/switchboard-0.1.2-py3-none-any.whl
-```
-
 ## Publish The Release
-
-Recommended path:
-
-1. push the repo to GitHub
-2. create a GitHub Release
-3. attach the wheel asset
 
 Example:
 
 ```bash
-gh release create v0.1.2 release/switchboard-0.1.2-py3-none-any.whl \
-  --title "Switchboard v0.1.2" \
-  --notes "Simple startup launcher and node runtime commands."
+gh release create v0.1.7 release/switchboard-0.1.7-py3-none-any.whl \
+  --title "Switchboard v0.1.7" \
+  --notes "Single canonical doc source and derived project docs."
 ```
 
-## Install A Node Tool On The Target Machine
+## Install The Node Tool
 
 Prerequisites:
 
 - Python available
 - `uv` installed
 - Git available
-- access to the wheel asset
+- access to the release wheel
 
-Install in one step:
+Install:
 
 ```bash
-uv tool install /path/to/switchboard-0.1.2-py3-none-any.whl --force
+uv tool install /path/to/switchboard-0.1.7-py3-none-any.whl --force
 ```
 
-That installs the `switchboard` CLI and all Python dependencies. No `npm` install is needed on the node machine.
+No `npm install` is needed on the node machine.
 
-## Plant The Node In A Project Root
+## Plant The Node
 
 Example:
 
@@ -98,38 +107,68 @@ switchboard node install \
   --display-name "Lambda Scripts"
 ```
 
-This creates the standard node pack.
+## Normal Agent Workflow
 
-## Update Node Docs After Work
+Agents should:
 
-The canonical runtime-edited file is:
-
-```text
-switchboard/local/tasks-completed.md
-```
-
-After updates, regenerate derived files:
+1. read `switchboard/core/playbook.md`
+2. edit only `switchboard/local/tasks-completed.md` during normal work
+3. run:
 
 ```bash
 switchboard node snapshot --project-root /Users/p/Desktop/work/zapp/lambdascripts
 ```
 
-That regenerates local derived docs and evidence JSON.
+Agents should not hand-edit derived docs unless explicitly instructed.
+
+## Managed Root Docs
+
+Framework-managed root docs are configured in:
+
+```text
+switchboard/node.manifest.json
+```
+
+Supported doc ids:
+
+- `readme`
+- `api`
+- `changelog`
+- `handoff`
+- `runbook`
+- `approach_history`
+- `doc_index_md`
+- `doc_index_json`
+
+Default:
+
+- enabled:
+  - `handoff`
+  - `runbook`
+  - `approach_history`
+  - `doc_index_md`
+  - `doc_index_json`
+- disabled:
+  - `readme`
+  - `api`
+  - `changelog`
+
+If a root doc is disabled, snapshot must not rewrite it.
 
 ## Start The Node
 
-The simple startup path is the generated node script:
+Simple startup path:
 
 ```bash
 ./switchboard/start.sh
 ```
 
-It asks only for host and port, then starts the node in the background and writes:
+That asks for host and port, starts the node in the background, and writes:
 
 - `switchboard/runtime/node.pid`
 - `switchboard/runtime/node.log`
 
-You can also use the package commands directly:
+Direct commands are also available:
 
 ```bash
 switchboard node start --project-root /Users/p/Desktop/work/zapp/lambdascripts --host 127.0.0.1 --port 8010
@@ -138,32 +177,23 @@ switchboard node logs --project-root /Users/p/Desktop/work/zapp/lambdascripts
 switchboard node stop --project-root /Users/p/Desktop/work/zapp/lambdascripts --port 8010
 ```
 
-## Optional Foreground Node UI/API
-
-If you want the node’s minimal local status view:
-
-```bash
-switchboard node serve \
-  --project-root /Users/p/Desktop/work/zapp/lambdascripts \
-  --host 127.0.0.1 \
-  --port 8010
-```
-
-Use `node serve` only when you explicitly want foreground mode in the terminal.
+## Local Node UI/API
 
 Useful endpoints:
 
+- `GET /`
 - `GET /api/health`
 - `GET /api/node`
 - `POST /api/node/snapshot`
 
-The root page exposes a minimal local dashboard for:
+The node view shows:
 
 - node identity
-- docs pack presence
-- current scope snapshot
 - runtime config
-- last snapshot timestamp
+- scope snapshot status
+- managed docs status
+- doc-index status
+- mirrored pull-bundle history
 
 ## Control Center Detection Flow
 
@@ -172,7 +202,7 @@ In `v0.1.x`, node pickup is still manual:
 1. install the node into the real project root
 2. open the control center
 3. add that project root as a service location
-4. include the relevant project files plus the `switchboard/` folder
+4. include the relevant project files plus `switchboard/`
 5. use:
    - `Sync From Node`
    - `Sync To Node`
@@ -183,18 +213,3 @@ Primary node marker file:
 ```text
 switchboard/node.manifest.json
 ```
-
-## First Test Deployment Flow
-
-For the first real test:
-
-1. build the wheel from the control-center repo
-2. install the tool on the target machine
-3. plant a node into the chosen project root
-4. optionally run the node UI/API locally
-5. add that project in the control center
-6. confirm the node manifest is visible in scope
-7. run `Sync From Node`
-8. edit runtime config in the control center
-9. run `Sync To Node`
-10. verify both sides reflect the change

@@ -26,6 +26,8 @@ const HOW_TO_USE_LINES = [
   'Create service saves the chosen scope and per-location runtime config into the manifest.',
   'Pull Bundles create a new timestamped local copy while preserving the source tree.',
   'Service detail pages now handle runtime checks plus Sync From Node and Sync To Node.',
+  'Node-side agents should read switchboard/core/playbook.md and update only switchboard/local/tasks-completed.md.',
+  'Managed root docs like README.md, API.md, and CHANGELOG.md are opt-in and controlled from the service page.',
   'Repo actions stay per service: git status, safety check, git pull, git push.',
 ]
 

@@ -562,6 +562,7 @@ class CollectionCoordinator:
 
         node_manifest: dict[str, Any] | None = None
         scope_snapshot: dict[str, Any] | None = None
+        doc_index: dict[str, Any] | None = None
         server_id = location.server_id
         server = self.manifests.resolve_server(
             server_id,
@@ -571,8 +572,10 @@ class CollectionCoordinator:
         if server.connection_type == "local":
             node_manifest_path = self._local_node_manifest_path(location.root)
             scope_snapshot_path = self._local_scope_snapshot_path(location.root)
+            doc_index_path = self._local_doc_index_path(location.root)
             node_manifest = self._read_local_json(node_manifest_path)
             scope_snapshot = self._read_local_json(scope_snapshot_path)
+            doc_index = self._read_local_json(doc_index_path)
         else:
             with self._open_ssh(server) as connection:
                 if connection is None:
@@ -580,6 +583,7 @@ class CollectionCoordinator:
                 _, sftp = connection
                 node_manifest = self._read_remote_json(sftp, self._remote_node_manifest_path(location.root))
                 scope_snapshot = self._read_remote_json(sftp, self._remote_scope_snapshot_path(location.root))
+                doc_index = self._read_remote_json(sftp, self._remote_doc_index_path(location.root))
 
         if not node_manifest:
             return {"status": "path_missing", "message": "Node manifest not found at selected location."}
@@ -590,6 +594,8 @@ class CollectionCoordinator:
                 item["runtime"] = node_manifest.get("runtime", item.get("runtime", {}))
 
         patch_payload: dict[str, Any] = {"locations": updated_locations}
+        if node_manifest.get("managed_docs"):
+            patch_payload["managed_docs"] = node_manifest["managed_docs"]
         should_import_scope = (
             request.include_scope_snapshot
             and scope_snapshot is not None
@@ -628,6 +634,8 @@ class CollectionCoordinator:
             "target": "control_center",
             "include_scope_snapshot": request.include_scope_snapshot,
             "include_runtime_config": request.include_runtime_config,
+            "managed_docs": node_manifest.get("managed_docs", []),
+            "doc_index": doc_index or node_manifest.get("doc_index", {}),
         }
         self.snapshots.persist_node_sync(service_id, location.location_id, record)
         return {
@@ -654,6 +662,7 @@ class CollectionCoordinator:
             manifest_path = self._local_node_manifest_path(location.root)
             scope_path = self._local_scope_snapshot_path(location.root)
             bundle_history_path = self._local_pull_bundle_history_path(location.root)
+            doc_index_path = self._local_doc_index_path(location.root)
             existing_manifest = self._read_local_json(manifest_path)
             if not existing_manifest:
                 return {"status": "path_missing", "message": "Node manifest not found at selected location."}
@@ -674,6 +683,7 @@ class CollectionCoordinator:
                 )
                 self._write_local_json(scope_path, scope_payload)
             self._write_local_json(bundle_history_path, self._node_pull_bundle_history_payload(service_id))
+            existing_doc_index = self._read_local_json(doc_index_path) or updated_manifest.get("doc_index", {})
         else:
             with self._open_ssh(server) as connection:
                 if connection is None:
@@ -682,6 +692,7 @@ class CollectionCoordinator:
                 manifest_path = self._remote_node_manifest_path(location.root)
                 scope_path = self._remote_scope_snapshot_path(location.root)
                 bundle_history_path = self._remote_pull_bundle_history_path(location.root)
+                doc_index_path = self._remote_doc_index_path(location.root)
                 existing_manifest = self._read_remote_json(sftp, manifest_path)
                 if not existing_manifest:
                     return {"status": "path_missing", "message": "Node manifest not found at selected location."}
@@ -702,6 +713,7 @@ class CollectionCoordinator:
                     )
                     self._write_remote_json(ssh, sftp, scope_path, scope_payload)
                 self._write_remote_json(ssh, sftp, bundle_history_path, self._node_pull_bundle_history_payload(service_id))
+                existing_doc_index = self._read_remote_json(sftp, doc_index_path) or updated_manifest.get("doc_index", {})
 
         record = {
             "service_id": service_id,
@@ -713,6 +725,8 @@ class CollectionCoordinator:
             "target": "node",
             "include_scope_snapshot": request.include_scope_snapshot,
             "include_runtime_config": request.include_runtime_config,
+            "managed_docs": [entry.model_dump(mode="json") for entry in service.managed_docs],
+            "doc_index": existing_doc_index,
         }
         self.snapshots.persist_node_sync(service_id, location.location_id, record)
         return {
@@ -880,6 +894,9 @@ class CollectionCoordinator:
     def _local_pull_bundle_history_path(self, root: str) -> Path:
         return Path(root) / "switchboard" / "evidence" / "pull-bundle-history.json"
 
+    def _local_doc_index_path(self, root: str) -> Path:
+        return Path(root) / "switchboard" / "evidence" / "doc-index.json"
+
     def _remote_node_manifest_path(self, root: str) -> str:
         return posixpath.join(root.rstrip("/"), "switchboard", "node.manifest.json")
 
@@ -888,6 +905,9 @@ class CollectionCoordinator:
 
     def _remote_pull_bundle_history_path(self, root: str) -> str:
         return posixpath.join(root.rstrip("/"), "switchboard", "evidence", "pull-bundle-history.json")
+
+    def _remote_doc_index_path(self, root: str) -> str:
+        return posixpath.join(root.rstrip("/"), "switchboard", "evidence", "doc-index.json")
 
     def _collect_service(
         self,
@@ -1680,6 +1700,7 @@ class CollectionCoordinator:
         updated["docs_paths"] = flattened_scope["docs_paths"] or updated.get("docs_paths", [])
         updated["log_paths"] = flattened_scope["log_paths"] or updated.get("log_paths", [])
         updated["exclude_patterns"] = flattened_scope["exclude_globs"] or updated.get("exclude_patterns", [])
+        updated["managed_docs"] = [entry.model_dump(mode="json") for entry in service.managed_docs]
         if include_runtime_config:
             updated["runtime"] = location.runtime.model_dump(mode="json")
         updated["updated_at"] = utc_now_iso()
