@@ -554,6 +554,23 @@ class CollectionCoordinator:
         self.snapshots.persist_runtime_check(service_id, location.location_id, result)
         return result
 
+    def workspace_health_check(self, workspace_id: str, runtime_passwords: dict[str, str] | None = None) -> dict[str, Any]:
+        results = []
+        services = self.manifests.get_workspace_services(workspace_id)
+        passwords = runtime_passwords or {}
+        for service in services:
+            for location in service.locations:
+                req = RuntimeActionRequest(
+                    location_id=location.location_id,
+                    runtime_password=passwords.get(location.server_id, "")
+                )
+                try:
+                    res = self.runtime_check(service.service_id, req)
+                    results.append(res)
+                except Exception as e:
+                    results.append({"service_id": service.service_id, "location_id": location.location_id, "status": "error", "error": str(e)})
+        return {"workspace_id": workspace_id, "results": results, "timestamp": utc_now_iso()}
+
     def sync_from_node(self, service_id: str, request: NodeSyncRequest) -> dict[str, Any]:
         service = self.manifests.get_service(service_id)
         location = self._select_location(service, location_id=request.location_id)
@@ -569,6 +586,8 @@ class CollectionCoordinator:
             {server_id: request.runtime_password} if request.runtime_password else {},
         )
 
+        completed_tasks: dict[str, Any] | None = None
+
         if server.connection_type == "local":
             node_manifest_path = self._local_node_manifest_path(location.root)
             scope_snapshot_path = self._local_scope_snapshot_path(location.root)
@@ -576,6 +595,8 @@ class CollectionCoordinator:
             node_manifest = self._read_local_json(node_manifest_path)
             scope_snapshot = self._read_local_json(scope_snapshot_path)
             doc_index = self._read_local_json(doc_index_path)
+            if request.include_task_ledger:
+                completed_tasks = self._read_local_json(self._local_completed_tasks_path(location.root))
         else:
             with self._open_ssh(server) as connection:
                 if connection is None:
@@ -584,9 +605,15 @@ class CollectionCoordinator:
                 node_manifest = self._read_remote_json(sftp, self._remote_node_manifest_path(location.root))
                 scope_snapshot = self._read_remote_json(sftp, self._remote_scope_snapshot_path(location.root))
                 doc_index = self._read_remote_json(sftp, self._remote_doc_index_path(location.root))
+                if request.include_task_ledger:
+                    completed_tasks = self._read_remote_json(sftp, self._remote_completed_tasks_path(location.root))
 
         if not node_manifest:
             return {"status": "path_missing", "message": "Node manifest not found at selected location."}
+
+        # Persist task ledger if available
+        if request.include_task_ledger and completed_tasks and completed_tasks.get("tasks"):
+            self.snapshots.persist_task_ledger(service_id, location.location_id, completed_tasks["tasks"])
 
         updated_locations = [item.model_dump(mode="json") for item in service.locations]
         for item in updated_locations:
@@ -624,6 +651,7 @@ class CollectionCoordinator:
             )
 
         updated_service = self.manifests.patch_service(service_id, ServicePatchRequest(**patch_payload))
+        task_ledger_count = len(completed_tasks.get("tasks", [])) if completed_tasks else 0
         record = {
             "service_id": service_id,
             "location_id": location.location_id,
@@ -636,6 +664,11 @@ class CollectionCoordinator:
             "include_runtime_config": request.include_runtime_config,
             "managed_docs": node_manifest.get("managed_docs", []),
             "doc_index": doc_index or node_manifest.get("doc_index", {}),
+            "task_ledger_count": task_ledger_count,
+            "bootstrap_version": node_manifest.get("bootstrap_version", ""),
+            "runtime_services": node_manifest.get("runtime_services", []),
+            "dependencies": node_manifest.get("dependencies", []),
+            "cross_dependencies": node_manifest.get("cross_dependencies", []),
         }
         self.snapshots.persist_node_sync(service_id, location.location_id, record)
         return {
@@ -897,6 +930,9 @@ class CollectionCoordinator:
     def _local_doc_index_path(self, root: str) -> Path:
         return Path(root) / "switchboard" / "evidence" / "doc-index.json"
 
+    def _local_completed_tasks_path(self, root: str) -> Path:
+        return Path(root) / "switchboard" / "evidence" / "completed-tasks.json"
+
     def _remote_node_manifest_path(self, root: str) -> str:
         return posixpath.join(root.rstrip("/"), "switchboard", "node.manifest.json")
 
@@ -908,6 +944,9 @@ class CollectionCoordinator:
 
     def _remote_doc_index_path(self, root: str) -> str:
         return posixpath.join(root.rstrip("/"), "switchboard", "evidence", "doc-index.json")
+
+    def _remote_completed_tasks_path(self, root: str) -> str:
+        return posixpath.join(root.rstrip("/"), "switchboard", "evidence", "completed-tasks.json")
 
     def _collect_service(
         self,
@@ -1703,6 +1742,18 @@ class CollectionCoordinator:
         updated["managed_docs"] = [entry.model_dump(mode="json") for entry in service.managed_docs]
         if include_runtime_config:
             updated["runtime"] = location.runtime.model_dump(mode="json")
+        
+        task_ledger = self.snapshots.get_service_task_ledger(service.service_id)
+        tasks = task_ledger.get("tasks", [])
+        latest_task = tasks[0] if tasks else {}
+        if latest_task:
+            updated["bootstrap_version"] = latest_task.get("bootstrap_version", "")
+            updated["runtime_services"] = latest_task.get("runtime_services", [])
+            updated["dependencies"] = latest_task.get("dependencies", [])
+            updated["cross_dependencies"] = latest_task.get("cross_dependencies", [])
+            if "diagram" in latest_task:
+                updated["diagram"] = latest_task.get("diagram", "")
+
         updated["updated_at"] = utc_now_iso()
         return updated
 

@@ -63,6 +63,7 @@ export async function loadFallbackWorkspaceList(): Promise<Workspace[]> {
           service_id: service.service_id,
           workspace_id: service.workspace_id,
           display_name: service.display_name,
+          kind: service.kind ?? 'service',
           tags: service.tags ?? [],
           favorite_tier:
             service.favorite_tier === 'primary'

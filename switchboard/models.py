@@ -39,6 +39,21 @@ ActionStatus = Literal[
     "permission_limited",
     "skipped_by_exclude",
     "unverified",
+    "action_in_progress",
+]
+ServiceKind = Literal[
+    "service",
+    "external_service",
+    "database",
+    "deployment_host",
+    "dependency_node",
+]
+DependencyKind = Literal[
+    "service",
+    "database",
+    "deployment_host",
+    "saas",
+    "shared_data",
 ]
 
 
@@ -137,11 +152,61 @@ class RepoPolicy(BaseModel):
         return trimmed
 
 
+class RuntimeService(BaseModel):
+    name: str
+    host: str = ""
+    port: int | None = None
+    purpose: str = ""
+    health_path: str = ""
+    owner: str = ""
+
+
+class DependencyNode(BaseModel):
+    kind: DependencyKind
+    name: str
+    host: str = ""
+    port: int | None = None
+    notes: str = ""
+
+
+class TaskLedgerEntry(BaseModel):
+    timestamp: str
+    title: str
+    task_id: str | None = None
+    agent: str = ""
+    tool: str = ""
+    tags: list[str] = Field(default_factory=list)
+    summary: str = ""
+    changed_paths: list[str] = Field(default_factory=list)
+    version: str = ""
+    bootstrap_version: str = ""
+    runtime_services: list[RuntimeService] = Field(default_factory=list)
+    dependencies: list[DependencyNode] = Field(default_factory=list)
+    cross_dependencies: list[DependencyNode] = Field(default_factory=list)
+    diagram: str = ""
+    notes: list[str] = Field(default_factory=list)
+    scope_entries: list[dict] = Field(default_factory=list)
+    runtime: dict = Field(default_factory=dict)
+    readme: str = ""
+    api: str = ""
+    changelog: str = ""
+
+
+class ProjectManifest(BaseModel):
+    project_id: str
+    workspace_id: str
+    display_name: str
+    parent_project_id: str | None = None
+    service_ids: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    notes: str = ""
+
+
 class ServiceManifest(BaseModel):
     service_id: str
     workspace_id: str
     display_name: str
-    kind: str = "service"
+    kind: ServiceKind = "service"
     ownership_tier: OwnershipTier = "owned"
     tags: list[str] = Field(default_factory=list)
     favorite_tier: FavoriteTier = "none"
@@ -186,7 +251,7 @@ class CollectRequest(BaseModel):
 class ServiceCreateRequest(BaseModel):
     service_id: str
     display_name: str
-    kind: str = "service"
+    kind: ServiceKind = "service"
     ownership_tier: OwnershipTier = "owned"
     tags: list[str] = Field(default_factory=list)
     favorite_tier: FavoriteTier = "none"
@@ -205,7 +270,7 @@ class ServiceCreateRequest(BaseModel):
 
 class ServicePatchRequest(BaseModel):
     display_name: str | None = None
-    kind: str | None = None
+    kind: ServiceKind | None = None
     ownership_tier: OwnershipTier | None = None
     tags: list[str] | None = None
     favorite_tier: FavoriteTier | None = None
@@ -319,6 +384,49 @@ class NodeSyncRequest(BaseModel):
     runtime_password: str | None = None
     include_scope_snapshot: bool = True
     include_runtime_config: bool = True
+    include_task_ledger: bool = True
+    include_dependency_context: bool = True
+
+
+class ActionLockRequest(BaseModel):
+    action_key: str
+
+
+class ProjectCreateRequest(BaseModel):
+    project_id: str
+    display_name: str
+    parent_project_id: str | None = None
+    service_ids: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    notes: str = ""
+
+
+class ProjectPatchRequest(BaseModel):
+    display_name: str | None = None
+    parent_project_id: str | None = None
+    service_ids: list[str] | None = None
+    tags: list[str] | None = None
+    notes: str | None = None
+
+
+class ServerCreateRequest(BaseModel):
+    server_id: str
+    name: str
+    connection_type: ConnectionType
+    host: str
+    username: str
+    port: int = 22
+    tags: list[str] = Field(default_factory=list)
+    notes: str = ""
+
+
+class ServerPatchRequest(BaseModel):
+    name: str | None = None
+    host: str | None = None
+    username: str | None = None
+    port: int | None = None
+    tags: list[str] | None = None
+    notes: str | None = None
 
 
 class SecretPathQuery(BaseModel):

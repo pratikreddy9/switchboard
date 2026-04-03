@@ -1,6 +1,6 @@
 {
   "name": "switchboard-dashboard",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,6 +12,7 @@
     "sync-evidence": "mkdir -p src/data && cp docs/evidence/*.json src/data/ 2>/dev/null || echo 'No evidence files found'"
   },
   "dependencies": {
+    "@headlessui/react": "^2.2.9",
     "lucide-react": "^0.511.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

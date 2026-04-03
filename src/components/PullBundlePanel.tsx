@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Archive, ChevronDown, ChevronRight, Download, LoaderCircle, PackagePlus } from 'lucide-react'
-import { createPullBundle, listPullBundles } from '../api/client'
+import { createPullBundle, listPullBundles, acquireActionLock, releaseActionLock } from '../api/client'
 import type { PullBundleRecord, ScopeEntry, Service } from '../types/switchboard'
 import { isApiError } from '../types/switchboard'
 import { StatusBadge } from './StatusBadge'
+import { ConfirmationModal, ACTION_EXPLAIN } from './ConfirmationModal'
 
 interface Props {
   service: Service
@@ -30,6 +31,17 @@ export function PullBundlePanel({ service, disabled }: Props) {
   const [creating, setCreating] = useState(false)
   const [message, setMessage] = useState('')
   const [expandedHistory, setExpandedHistory] = useState<Record<string, boolean>>({})
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [pendingActions, setPendingActions] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    const keys = Object.keys(sessionStorage)
+    const pending: Record<string, boolean> = {}
+    for (const key of keys) {
+      if (key.startsWith('pending:')) pending[key] = true
+    }
+    setPendingActions(pending)
+  }, [])
 
   useEffect(() => {
     if (disabled) return
@@ -70,24 +82,50 @@ export function PullBundlePanel({ service, disabled }: Props) {
     setIncludePath('')
   }
 
+  function initiateCreate() {
+    setConfirmOpen(true)
+  }
+
   async function handleCreate() {
+    const actionKey = 'pull_bundle'
+    const sessionKey = `pending:${actionKey}:${service.service_id}`
+    
+    sessionStorage.setItem(sessionKey, 'true')
+    setPendingActions(prev => ({ ...prev, [sessionKey]: true }))
+    setConfirmOpen(false)
     setCreating(true)
     setMessage('')
-    const result = await createPullBundle(service.service_id, {
-      extra_includes: extraIncludes,
-      extra_excludes: extraExcludes
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean),
-    })
-    setCreating(false)
-    if (isApiError(result)) {
-      setMessage(result.message)
+
+    const lockRes = await acquireActionLock(service.service_id, actionKey)
+    if (isApiError(lockRes) || lockRes.status !== 'ok') {
+      setMessage((lockRes as any)?.message || 'Action is already in progress.')
+      setCreating(false)
+      sessionStorage.removeItem(sessionKey)
+      setPendingActions(prev => { const next = { ...prev }; delete next[sessionKey]; return next })
       return
     }
-    setBundleResult(result)
-    setHistory((current) => [result, ...current])
-    setMessage(`Bundle ${result.bundle_id} created.`)
+
+    try {
+      const result = await createPullBundle(service.service_id, {
+        extra_includes: extraIncludes,
+        extra_excludes: extraExcludes
+          .split('\n')
+          .map((line) => line.trim())
+          .filter(Boolean),
+      })
+      if (isApiError(result)) {
+        setMessage(result.message)
+        return
+      }
+      setBundleResult(result)
+      setHistory((current) => [result, ...current])
+      setMessage(`Bundle ${result.bundle_id} created.`)
+    } finally {
+      await releaseActionLock(service.service_id, actionKey)
+      setCreating(false)
+      sessionStorage.removeItem(sessionKey)
+      setPendingActions(prev => { const next = { ...prev }; delete next[sessionKey]; return next })
+    }
   }
 
   return (
@@ -104,12 +142,12 @@ export function PullBundlePanel({ service, disabled }: Props) {
             </p>
           </div>
           <button
-            onClick={handleCreate}
-            disabled={disabled || creating}
+            onClick={initiateCreate}
+            disabled={disabled || creating || pendingActions[`pending:pull_bundle:${service.service_id}`]}
             className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-gray-200 disabled:opacity-50"
           >
-            {creating ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
-            {creating ? 'Creating' : 'Create bundle'}
+            {creating || pendingActions[`pending:pull_bundle:${service.service_id}`] ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
+            {creating || pendingActions[`pending:pull_bundle:${service.service_id}`] ? 'Creating' : 'Create bundle'}
           </button>
         </div>
 
@@ -354,6 +392,65 @@ export function PullBundlePanel({ service, disabled }: Props) {
           )}
         </div>
       </div>
+
+      <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
+        <div className="flex items-center gap-2 text-sm font-medium text-white mb-3">
+          <Archive className="h-4 w-4 text-gray-500" />
+          Left Out Scope
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-lg border border-gray-800 bg-gray-900 p-3">
+            <div className="text-xs uppercase tracking-[0.16em] text-gray-500 mb-2">Saved Excludes</div>
+            <div className="space-y-1 max-h-40 overflow-auto">
+              {service.scope_entries.filter(e => e.kind === 'exclude' && e.enabled).length === 0 ? (
+                <div className="text-xs text-gray-600">None</div>
+              ) : (
+                service.scope_entries.filter(e => e.kind === 'exclude' && e.enabled).map((e, idx) => (
+                  <div key={idx} className="font-mono text-[10px] text-gray-400 break-all">{e.path}</div>
+                ))
+              )}
+            </div>
+          </div>
+          <div className="rounded-lg border border-gray-800 bg-gray-900 p-3">
+            <div className="text-xs uppercase tracking-[0.16em] text-gray-500 mb-2">One-run Excludes</div>
+            <div className="space-y-1 max-h-40 overflow-auto">
+              {!extraExcludes.trim() ? (
+                <div className="text-xs text-gray-600">None</div>
+              ) : (
+                extraExcludes.split('\n').filter(Boolean).map((e, idx) => (
+                  <div key={idx} className="font-mono text-[10px] text-gray-400 break-all">{e.trim()}</div>
+                ))
+              )}
+            </div>
+          </div>
+          <div className="rounded-lg border border-gray-800 bg-gray-900 p-3">
+            <div className="text-xs uppercase tracking-[0.16em] text-gray-500 mb-2">Latest Skipped</div>
+            <div className="space-y-1 max-h-40 overflow-auto">
+              {(latestBundleWithFiles?.skipped_entries ?? []).length === 0 ? (
+                <div className="text-xs text-gray-600">None</div>
+              ) : (
+                (latestBundleWithFiles?.skipped_entries ?? []).map((entry, idx) => (
+                  <div key={idx} className="font-mono text-[10px] text-gray-400 break-all">
+                    {entry.path} <span className="text-gray-600">({entry.reason})</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {confirmOpen && ACTION_EXPLAIN['pull_bundle'] && (
+        <ConfirmationModal
+          open={confirmOpen}
+          title={ACTION_EXPLAIN['pull_bundle'].title}
+          willDo={ACTION_EXPLAIN['pull_bundle'].happens}
+          willNotChange={ACTION_EXPLAIN['pull_bundle'].untouched}
+          writesTo={ACTION_EXPLAIN['pull_bundle'].writesTo}
+          onConfirm={handleCreate}
+          onCancel={() => setConfirmOpen(false)}
+        />
+      )}
     </div>
   )
 }

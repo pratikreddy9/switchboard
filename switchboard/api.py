@@ -9,16 +9,21 @@ from .collectors import CollectionCoordinator
 from .config import get_settings
 from .manifests import ManifestStore
 from .models import (
+    ActionLockRequest,
     CollectRequest,
     DiscoveryTreeRequest,
     DownloadRequest,
     GitPullRequest,
     GitPushRequest,
     NodeSyncRequest,
+    ProjectCreateRequest,
+    ProjectPatchRequest,
     PullBundleRequest,
     RepoActionRequest,
     RuntimeActionRequest,
     ScanRootRequest,
+    ServerCreateRequest,
+    ServerPatchRequest,
     ServiceCreateRequest,
     ServicePatchRequest,
 )
@@ -56,6 +61,9 @@ def _enrich_service_payload(payload: dict[str, object]) -> dict[str, object]:
     runtime_state = snapshot_store.get_service_runtime_state(service_id)
     enriched["runtime_checks"] = runtime_state["runtime_checks"]
     enriched["node_sync"] = runtime_state["node_sync"]
+    
+    task_ledger = snapshot_store.get_service_task_ledger(service_id)
+    enriched["task_ledger"] = task_ledger.get("tasks", [])
     return enriched
 
 
@@ -342,3 +350,99 @@ def get_secret_paths(service_id: str) -> dict[str, object]:
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return snapshot_store.get_service_secret_paths(service_id)
+
+
+@app.get("/api/servers")
+def list_servers() -> dict[str, object]:
+    return {"servers": [s.model_dump(mode="json") for s in manifest_store.load_servers()]}
+
+@app.get("/api/services/{service_id}/task-ledger")
+def get_service_task_ledger(service_id: str) -> dict[str, object]:
+    ledger = snapshot_store.get_service_task_ledger(service_id)
+    return {"tasks": ledger.get("tasks", [])}
+
+
+@app.get("/api/services/{service_id}/action-locks")
+def get_service_action_locks(service_id: str) -> dict[str, object]:
+    cache = snapshot_store._read_runtime_cache()
+    locks = snapshot_store._prune_expired_locks(cache).get("action_locks", {})
+    return {"locks": [lock for key, lock in locks.items() if lock.get("service_id") == service_id]}
+
+
+@app.post("/api/services/{service_id}/action-locks")
+def acquire_service_action_lock(service_id: str, request: ActionLockRequest) -> dict[str, object]:
+    lock = snapshot_store.acquire_action_lock(request.action_key, service_id)
+    if lock is None:
+        raise HTTPException(status_code=409, detail="Lock already active")
+    return {"status": "ok", "lock": lock}
+
+
+@app.delete("/api/services/{service_id}/action-locks/{action_key}")
+def release_service_action_lock(service_id: str, action_key: str) -> dict[str, object]:
+    lock = snapshot_store.release_action_lock(action_key, service_id)
+    return {"status": "ok", "lock": lock}
+
+
+@app.post("/api/workspaces/{workspace_id}/health-check")
+def workspace_health_check(workspace_id: str, runtime_passwords: dict[str, str] | None = None) -> dict[str, object]:
+    return coordinator.workspace_health_check(workspace_id, runtime_passwords)
+
+
+@app.get("/api/workspaces/{workspace_id}/projects")
+def list_workspace_projects(workspace_id: str) -> dict[str, object]:
+    projects = manifest_store.get_workspace_projects(workspace_id)
+    return {"projects": [p.model_dump(mode="json") for p in projects]}
+
+
+@app.post("/api/workspaces/{workspace_id}/projects")
+def create_project(workspace_id: str, request: ProjectCreateRequest) -> dict[str, object]:
+    try:
+        project = manifest_store.create_project(workspace_id, request)
+        return {"status": "ok", "project": project.model_dump(mode="json")}
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.patch("/api/projects/{project_id}")
+def patch_project(project_id: str, request: ProjectPatchRequest) -> dict[str, object]:
+    try:
+        project = manifest_store.patch_project(project_id, request)
+        return {"status": "ok", "project": project.model_dump(mode="json")}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.delete("/api/projects/{project_id}")
+def delete_project(project_id: str) -> dict[str, object]:
+    try:
+        project = manifest_store.delete_project(project_id)
+        return {"status": "ok", "project": project.model_dump(mode="json")}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/servers")
+def create_server(request: ServerCreateRequest) -> dict[str, object]:
+    try:
+        server = manifest_store.create_server(request)
+        return {"status": "ok", "server": server.model_dump(mode="json")}
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.patch("/api/servers/{server_id}")
+def patch_server(server_id: str, request: ServerPatchRequest) -> dict[str, object]:
+    try:
+        server = manifest_store.patch_server(server_id, request)
+        return {"status": "ok", "server": server.model_dump(mode="json")}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.delete("/api/servers/{server_id}")
+def delete_server(server_id: str) -> dict[str, object]:
+    try:
+        server = manifest_store.delete_server(server_id)
+        return {"status": "ok", "server": server.model_dump(mode="json")}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

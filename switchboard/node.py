@@ -254,6 +254,7 @@ def _core_templates(service_id: str, display_name: str) -> dict[str, str]:
             "# Runtime Update Prompt\n\n"
             "For regular maintenance work:\n"
             "- Read `switchboard/core/playbook.md` first.\n"
+            "- Inspect system docs for dependencies and record agent/tool used.\n"
             "- Update only `switchboard/local/tasks-completed.md`.\n"
             "- Use one entry per meaningful update.\n"
             "- Include timestamp, title, summary, changed paths, and routing tags.\n"
@@ -433,6 +434,11 @@ def _manifest_payload(project_root: Path, service_id: str, display_name: str, ex
             },
         ),
         "managed_docs": _normalize_managed_docs(existing.get("managed_docs")),
+        "bootstrap_version": existing.get("bootstrap_version", ""),
+        "runtime_services": existing.get("runtime_services", []),
+        "dependencies": existing.get("dependencies", []),
+        "cross_dependencies": existing.get("cross_dependencies", []),
+        "diagram": existing.get("diagram", ""),
         "doc_index": existing.get("doc_index", {"generated": "", "docs": []}),
         "evidence_paths": {
             "completed_tasks": str(paths["completed_tasks_json"].relative_to(project_root)),
@@ -518,6 +524,53 @@ def _normalize_runtime_lines(lines: list[str]) -> dict[str, Any]:
     return runtime
 
 
+def _normalize_runtime_service_lines(lines: list[str]) -> list[dict[str, Any]]:
+    """Parse pipe-delimited runtime service lines: kind | name | host | port | purpose | health_path"""
+    services: list[dict[str, Any]] = []
+    for raw in lines:
+        payload = raw.strip()
+        if payload.startswith("- "):
+            payload = payload[2:].strip()
+        parts = [part.strip() for part in payload.split("|")]
+        if len(parts) < 2:
+            continue
+        port_str = parts[3].strip() if len(parts) > 3 else ""
+        port = int(port_str) if port_str.isdigit() else None
+        services.append({
+            "name": parts[1] if len(parts) > 1 else parts[0],
+            "host": parts[2] if len(parts) > 2 else "",
+            "port": port,
+            "purpose": parts[4] if len(parts) > 4 else "",
+            "health_path": parts[5] if len(parts) > 5 else "",
+            "owner": parts[6] if len(parts) > 6 else "",
+        })
+    return services
+
+
+def _normalize_dependency_lines(lines: list[str]) -> list[dict[str, Any]]:
+    """Parse pipe-delimited dependency lines: kind | name | host | port | notes"""
+    deps: list[dict[str, Any]] = []
+    for raw in lines:
+        payload = raw.strip()
+        if payload.startswith("- "):
+            payload = payload[2:].strip()
+        parts = [part.strip() for part in payload.split("|")]
+        if len(parts) < 2:
+            continue
+        port_str = parts[3].strip() if len(parts) > 3 else ""
+        port = int(port_str) if port_str.isdigit() else None
+        if port_str.lower() in ("null", "none", ""):
+            port = None
+        deps.append({
+            "kind": parts[0] if len(parts) > 0 else "service",
+            "name": parts[1] if len(parts) > 1 else "",
+            "host": parts[2] if len(parts) > 2 else "",
+            "port": port,
+            "notes": parts[4] if len(parts) > 4 else "",
+        })
+    return deps
+
+
 def parse_tasks_completed(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
@@ -534,6 +587,10 @@ def parse_tasks_completed(path: Path) -> list[dict[str, Any]]:
         summary = ""
         version = ""
         changed_paths: list[str] = []
+        task_id = ""
+        agent = ""
+        tool = ""
+        bootstrap_version = ""
         sections: dict[str, list[str]] = {
             "notes": [],
             "scope": [],
@@ -541,13 +598,17 @@ def parse_tasks_completed(path: Path) -> list[dict[str, Any]]:
             "readme": [],
             "api": [],
             "changelog": [],
+            "runtime_services": [],
+            "dependencies": [],
+            "cross_dependencies": [],
+            "diagram": [],
         }
         current_section: str | None = None
 
         for raw_line in block.splitlines():
             line = raw_line.rstrip()
             stripped = line.strip()
-            if not stripped and current_section in {"notes", "readme", "api", "changelog"}:
+            if not stripped and current_section in {"notes", "readme", "api", "changelog", "diagram"}:
                 sections[current_section].append("")
                 continue
             if not stripped:
@@ -569,6 +630,22 @@ def parse_tasks_completed(path: Path) -> list[dict[str, Any]]:
                 version = line.split(":", 1)[1].strip()
                 current_section = None
                 continue
+            if line.startswith("- Task ID:"):
+                task_id = line.split(":", 1)[1].strip()
+                current_section = None
+                continue
+            if line.startswith("- Agent:"):
+                agent = line.split(":", 1)[1].strip()
+                current_section = None
+                continue
+            if line.startswith("- Tool:"):
+                tool = line.split(":", 1)[1].strip()
+                current_section = None
+                continue
+            if line.startswith("- Bootstrap Version:"):
+                bootstrap_version = line.split(":", 1)[1].strip()
+                current_section = None
+                continue
 
             next_section = None
             payload = ""
@@ -584,6 +661,14 @@ def parse_tasks_completed(path: Path) -> list[dict[str, Any]]:
                 next_section = "api"
             elif line.startswith("- Changelog:"):
                 next_section = "changelog"
+            elif line.startswith("- Runtime Services:"):
+                next_section = "runtime_services"
+            elif line.startswith("- Dependencies:"):
+                next_section = "dependencies"
+            elif line.startswith("- Cross Dependencies:"):
+                next_section = "cross_dependencies"
+            elif line.startswith("- Diagram:"):
+                next_section = "diagram"
 
             if next_section is not None:
                 current_section = next_section
@@ -603,9 +688,17 @@ def parse_tasks_completed(path: Path) -> list[dict[str, Any]]:
                 "version": version,
                 "summary": summary or title,
                 "changed_paths": changed_paths,
+                "task_id": task_id or None,
+                "agent": agent,
+                "tool": tool,
+                "bootstrap_version": bootstrap_version,
                 "notes": [line for line in sections["notes"] if line.strip()],
                 "scope_entries": _normalize_scope_lines(sections["scope"]),
                 "runtime": _normalize_runtime_lines(sections["runtime"]),
+                "runtime_services": _normalize_runtime_service_lines(sections["runtime_services"]),
+                "dependencies": _normalize_dependency_lines(sections["dependencies"]),
+                "cross_dependencies": _normalize_dependency_lines(sections["cross_dependencies"]),
+                "diagram": _join_markdown_lines(sections["diagram"]),
                 "readme": _join_markdown_lines(sections["readme"]),
                 "api": _join_markdown_lines(sections["api"]),
                 "changelog": _join_markdown_lines(sections["changelog"]),
@@ -625,12 +718,20 @@ def _render_multiline_block(label: str, content: str) -> list[str]:
 def _render_entry(entry: dict[str, Any]) -> str:
     lines = [
         f"## {entry['timestamp']} | {entry['title']}",
-        f"- Tags: {', '.join(entry['tags'])}" if entry.get("tags") else "- Tags: task",
-        f"- Summary: {entry['summary']}",
-        f"- Changed Paths: {', '.join(entry['changed_paths'])}" if entry.get("changed_paths") else "- Changed Paths:",
     ]
+    if entry.get("task_id"):
+        lines.append(f"- Task ID: {entry['task_id']}")
+    lines.append(f"- Tags: {', '.join(entry['tags'])}" if entry.get("tags") else "- Tags: task")
+    lines.append(f"- Summary: {entry['summary']}")
+    lines.append(f"- Changed Paths: {', '.join(entry['changed_paths'])}" if entry.get("changed_paths") else "- Changed Paths:")
+    if entry.get("agent"):
+        lines.append(f"- Agent: {entry['agent']}")
+    if entry.get("tool"):
+        lines.append(f"- Tool: {entry['tool']}")
     if entry.get("version"):
         lines.append(f"- Version: {entry['version']}")
+    if entry.get("bootstrap_version"):
+        lines.append(f"- Bootstrap Version: {entry['bootstrap_version']}")
     lines.extend(_render_multiline_block("Readme", entry.get("readme", "")))
     lines.extend(_render_multiline_block("API", entry.get("api", "")))
     lines.extend(_render_multiline_block("Changelog", entry.get("changelog", "")))
@@ -657,6 +758,25 @@ def _render_entry(entry: dict[str, Any]) -> str:
         lines.append(f"  - monitoring_mode: {runtime.get('monitoring_mode', 'manual')}")
         if runtime.get("notes"):
             lines.append(f"  - notes: {runtime['notes']}")
+    if entry.get("runtime_services"):
+        lines.append("- Runtime Services:")
+        for svc in entry["runtime_services"]:
+            port_str = str(svc.get("port", "")) if svc.get("port") is not None else ""
+            lines.append(f"  - service | {svc['name']} | {svc.get('host', '')} | {port_str} | {svc.get('purpose', '')} | {svc.get('health_path', '')}")
+    if entry.get("dependencies"):
+        lines.append("- Dependencies:")
+        for dep in entry["dependencies"]:
+            port_str = str(dep.get("port", "")) if dep.get("port") is not None else "null"
+            lines.append(f"  - {dep.get('kind', 'service')} | {dep['name']} | {dep.get('host', '')} | {port_str} | {dep.get('notes', '')}")
+    if entry.get("cross_dependencies"):
+        lines.append("- Cross Dependencies:")
+        for dep in entry["cross_dependencies"]:
+            port_str = str(dep.get("port", "")) if dep.get("port") is not None else "null"
+            lines.append(f"  - {dep.get('kind', 'service')} | {dep['name']} | {dep.get('host', '')} | {port_str} | {dep.get('notes', '')}")
+    if entry.get("diagram"):
+        lines.append("- Diagram:")
+        for diagram_line in entry["diagram"].splitlines():
+            lines.append(f"  {diagram_line}" if diagram_line else "")
     return "\n".join(lines)
 
 
@@ -904,6 +1024,27 @@ def snapshot_node(project_root: str | Path) -> dict[str, Any]:
 
     if runtime_entries_from_tasks:
         manifest["runtime"] = runtime_entries_from_tasks[-1]["runtime"]
+
+    # Extract new 0.1.8 fields from latest task entries
+    runtime_services_entries = [entry for entry in tasks if entry.get("runtime_services")]
+    if runtime_services_entries:
+        manifest["runtime_services"] = runtime_services_entries[-1]["runtime_services"]
+
+    dependency_entries = [entry for entry in tasks if entry.get("dependencies")]
+    if dependency_entries:
+        manifest["dependencies"] = dependency_entries[-1]["dependencies"]
+
+    cross_dep_entries = [entry for entry in tasks if entry.get("cross_dependencies")]
+    if cross_dep_entries:
+        manifest["cross_dependencies"] = cross_dep_entries[-1]["cross_dependencies"]
+
+    bootstrap_version_entries = [entry for entry in tasks if entry.get("bootstrap_version")]
+    if bootstrap_version_entries:
+        manifest["bootstrap_version"] = bootstrap_version_entries[-1]["bootstrap_version"]
+
+    diagram_entries = [entry for entry in tasks if entry.get("diagram")]
+    if diagram_entries:
+        manifest["diagram"] = diagram_entries[-1]["diagram"]
 
     generated_at = utc_now_iso()
     if managed_docs_by_id.get("doc_index_md", {}).get("enabled", False):

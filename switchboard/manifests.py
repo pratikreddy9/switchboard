@@ -228,6 +228,7 @@ class ManifestStore:
         self._servers_path = settings.manifest_dir / "servers.json"
         self._workspaces_path = settings.manifest_dir / "workspaces.json"
         self._services_path = settings.manifest_dir / "services.json"
+        self._projects_path = settings.manifest_dir / "projects.json"
 
     def load_servers(self) -> list[ServerManifest]:
         return [ServerManifest.model_validate(item) for item in load_json(self._servers_path)]
@@ -237,6 +238,9 @@ class ManifestStore:
 
     def load_services(self) -> list[ServiceManifest]:
         return [ServiceManifest.model_validate(_normalize_service_record(item)) for item in load_json(self._services_path)]
+
+    def load_projects(self) -> list[ProjectManifest]:
+        return [ProjectManifest.model_validate(item) for item in load_json(self._projects_path)]
 
     def get_server(self, server_id: str) -> ServerManifest:
         for server in self.load_servers():
@@ -357,4 +361,93 @@ class ManifestStore:
             services_list = workspace.setdefault("services", [])
             workspace["services"] = [item for item in services_list if item != service_id]
         save_json(self._workspaces_path, workspaces)
+        return removed
+
+    def get_project(self, project_id: str) -> ProjectManifest:
+        for project in self.load_projects():
+            if project.project_id == project_id:
+                return project
+        raise KeyError(f"Unknown project: {project_id}")
+
+    def get_workspace_projects(self, workspace_id: str) -> list[ProjectManifest]:
+        return [project for project in self.load_projects() if project.workspace_id == workspace_id]
+
+    def create_project(self, workspace_id: str, payload: ProjectCreateRequest) -> ProjectManifest:
+        self.get_workspace(workspace_id)
+        existing = self.load_projects()
+        if any(project.project_id == payload.project_id for project in existing):
+            raise ValueError(f"Project already exists: {payload.project_id}")
+        project = ProjectManifest.model_validate(
+            {
+                "workspace_id": workspace_id,
+                **payload.model_dump(mode="json"),
+            }
+        )
+        save_json(self._projects_path, [*load_json(self._projects_path), project.model_dump(mode="json")])
+        return project
+
+    def patch_project(self, project_id: str, payload: ProjectPatchRequest) -> ProjectManifest:
+        projects = load_json(self._projects_path)
+        updated: ProjectManifest | None = None
+        for index, item in enumerate(projects):
+            if item["project_id"] != project_id:
+                continue
+            merged = {**item, **payload.model_dump(exclude_none=True, mode="json")}
+            updated = ProjectManifest.model_validate(merged)
+            projects[index] = updated.model_dump(mode="json")
+            break
+        if updated is None:
+            raise KeyError(f"Unknown project: {project_id}")
+        save_json(self._projects_path, projects)
+        return updated
+
+    def delete_project(self, project_id: str) -> ProjectManifest:
+        projects = load_json(self._projects_path)
+        removed: ProjectManifest | None = None
+        retained: list[dict[str, Any]] = []
+        for item in projects:
+            if item["project_id"] == project_id:
+                removed = ProjectManifest.model_validate(item)
+                continue
+            retained.append(item)
+        if removed is None:
+            raise KeyError(f"Unknown project: {project_id}")
+        save_json(self._projects_path, retained)
+        return removed
+
+    def create_server(self, payload: ServerCreateRequest) -> ServerManifest:
+        existing = self.load_servers()
+        if any(server.server_id == payload.server_id for server in existing):
+            raise ValueError(f"Server already exists: {payload.server_id}")
+        server = ServerManifest.model_validate(payload.model_dump(mode="json"))
+        save_json(self._servers_path, [*load_json(self._servers_path), server.model_dump(mode="json")])
+        return server
+
+    def patch_server(self, server_id: str, payload: ServerPatchRequest) -> ServerManifest:
+        servers = load_json(self._servers_path)
+        updated: ServerManifest | None = None
+        for index, item in enumerate(servers):
+            if item["server_id"] != server_id:
+                continue
+            merged = {**item, **payload.model_dump(exclude_none=True, mode="json")}
+            updated = ServerManifest.model_validate(merged)
+            servers[index] = updated.model_dump(mode="json")
+            break
+        if updated is None:
+            raise KeyError(f"Unknown server: {server_id}")
+        save_json(self._servers_path, servers)
+        return updated
+
+    def delete_server(self, server_id: str) -> ServerManifest:
+        servers = load_json(self._servers_path)
+        removed: ServerManifest | None = None
+        retained: list[dict[str, Any]] = []
+        for item in servers:
+            if item["server_id"] == server_id:
+                removed = ServerManifest.model_validate(item)
+                continue
+            retained.append(item)
+        if removed is None:
+            raise KeyError(f"Unknown server: {server_id}")
+        save_json(self._servers_path, retained)
         return removed

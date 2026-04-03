@@ -1,6 +1,12 @@
+import { useEffect, useState } from 'react'
 import { ArrowRight, FolderKanban, Server, Shield } from 'lucide-react'
-import type { Workspace, WorkspaceLatest } from '../types/switchboard'
+import type { Workspace, WorkspaceLatest, ServerRecord } from '../types/switchboard'
 import { StatusBadge } from '../components/StatusBadge'
+import { ServerCRUDPanel } from '../components/ServerCRUDPanel'
+
+import { InfoDropdown } from '../components/InfoDropdown'
+import { TECH_STACK_LINES, HOW_TO_USE_LINES } from '../App'
+import { listWorkspaces } from '../api/client'
 
 interface Props {
   workspaces: Workspace[]
@@ -15,6 +21,21 @@ export function ControlCenterPage({
   online,
   onOpenWorkspace,
 }: Props) {
+  const [servers, setServers] = useState<ServerRecord[]>([])
+
+  useEffect(() => {
+    if (online) {
+      loadServers()
+    }
+  }, [online])
+
+  async function loadServers() {
+    const res = await fetch('/api/servers').then(r => r.json())
+    if (res && res.servers) {
+      setServers(res.servers)
+    }
+  }
+
   return (
     <div className="space-y-8">
       <section className="rounded-2xl border border-gray-800 bg-gradient-to-br from-gray-900 via-gray-950 to-slate-900 p-6">
@@ -22,9 +43,13 @@ export function ControlCenterPage({
           <div>
             <div className="text-xs uppercase tracking-[0.2em] text-cyan-400">Framework</div>
             <h1 className="mt-2 text-3xl font-semibold text-white">Switchboard Control Center</h1>
-            <p className="mt-2 max-w-2xl text-sm text-gray-400">
+            <p className="mt-2 max-w-2xl text-sm text-gray-400 mb-4">
               Central view for umbrella workspaces, server pulls, repo actions, docs, and logs.
             </p>
+            <div className="flex items-center gap-2">
+              <InfoDropdown label="Tech" title="Framework Stack" lines={TECH_STACK_LINES} />
+              <InfoDropdown label="How To" title="Control Center Usage" lines={HOW_TO_USE_LINES} />
+            </div>
           </div>
           <div className="rounded-xl border border-gray-800 bg-black/20 px-4 py-3 text-sm text-gray-300">
             <div>Mode: control center</div>
@@ -34,6 +59,8 @@ export function ControlCenterPage({
           </div>
         </div>
       </section>
+
+      <ServerCRUDPanel servers={servers} offline={!online} onReload={loadServers} />
 
       <section className="grid gap-4 md:grid-cols-2">
         {workspaces.map((workspace) => {

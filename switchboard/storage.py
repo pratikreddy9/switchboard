@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +18,15 @@ def utc_now_iso() -> str:
 
 def archive_token(timestamp: str) -> str:
     return timestamp.replace(":", "-")
+
+
+def iso_plus_seconds(iso_str: str, seconds: int) -> str:
+    """Add seconds to an ISO timestamp string and return a new ISO string."""
+    try:
+        dt = datetime.fromisoformat(iso_str)
+    except (ValueError, TypeError):
+        dt = datetime.now(timezone.utc).replace(microsecond=0)
+    return (dt + timedelta(seconds=seconds)).isoformat()
 
 
 def read_json(path: Path, default: Any) -> Any:
@@ -105,12 +114,14 @@ class SnapshotStore:
     def _read_runtime_cache(self) -> dict[str, Any]:
         return read_json(
             self._runtime_cache_path(),
-            {"generated": utc_now_iso(), "runtime_checks": {}, "node_sync": {}},
+            {"generated": utc_now_iso(), "runtime_checks": {}, "node_sync": {}, "action_locks": {}, "task_ledger": {}},
         )
 
     def _write_runtime_cache(self, cache: dict[str, Any]) -> None:
         cache.setdefault("runtime_checks", {})
         cache.setdefault("node_sync", {})
+        cache.setdefault("action_locks", {})
+        cache.setdefault("task_ledger", {})
         cache["generated"] = cache.get("generated") or utc_now_iso()
         write_json(self._runtime_cache_path(), cache)
 
@@ -143,6 +154,98 @@ class SnapshotStore:
             "service_id": service_id,
             "runtime_checks": runtime_checks,
             "node_sync": node_sync,
+        }
+
+    # --- Action locks ---
+
+    def _prune_expired_locks(self, cache: dict[str, Any]) -> dict[str, Any]:
+        locks = cache.get("action_locks", {})
+        now = utc_now_iso()
+        expired = [key for key, lock in locks.items() if lock.get("expires_at", "") <= now]
+        for key in expired:
+            del locks[key]
+        return cache
+
+    def acquire_action_lock(self, action_key: str, service_id: str, ttl_seconds: int = 900) -> dict[str, Any] | None:
+        cache = self._read_runtime_cache()
+        cache = self._prune_expired_locks(cache)
+        locks = cache.setdefault("action_locks", {})
+        composite_key = f"{action_key}:{service_id}"
+        now = utc_now_iso()
+        existing = locks.get(composite_key)
+        if existing and existing.get("expires_at", "") > now:
+            return None  # lock still active
+        lock_record = {
+            "action_key": action_key,
+            "service_id": service_id,
+            "started_at": now,
+            "expires_at": iso_plus_seconds(now, ttl_seconds),
+            "ttl_seconds": ttl_seconds,
+            "status": "pending",
+        }
+        locks[composite_key] = lock_record
+        cache["generated"] = now
+        self._write_runtime_cache(cache)
+        return lock_record
+
+    def release_action_lock(self, action_key: str, service_id: str, status: str = "completed") -> dict[str, Any]:
+        cache = self._read_runtime_cache()
+        locks = cache.setdefault("action_locks", {})
+        composite_key = f"{action_key}:{service_id}"
+        now = utc_now_iso()
+        lock = locks.pop(composite_key, None)
+        record = {
+            "action_key": action_key,
+            "service_id": service_id,
+            "released_at": now,
+            "status": status,
+        }
+        if lock:
+            record["started_at"] = lock.get("started_at", "")
+        cache["generated"] = now
+        self._write_runtime_cache(cache)
+        return record
+
+    def get_active_locks(self, service_id: str | None = None) -> list[dict[str, Any]]:
+        cache = self._read_runtime_cache()
+        cache = self._prune_expired_locks(cache)
+        locks = cache.get("action_locks", {})
+        results = list(locks.values())
+        if service_id:
+            results = [lock for lock in results if lock.get("service_id") == service_id]
+        return results
+
+    # --- Task ledger ---
+
+    def persist_task_ledger(self, service_id: str, location_id: str, tasks: list[dict[str, Any]]) -> dict[str, Any]:
+        cache = self._read_runtime_cache()
+        ledger = cache.setdefault("task_ledger", {})
+        service_ledger = ledger.setdefault(service_id, {})
+        now = utc_now_iso()
+        service_ledger[location_id] = {
+            "tasks": tasks,
+            "last_synced": now,
+        }
+        cache["generated"] = now
+        self._write_runtime_cache(cache)
+        return {"service_id": service_id, "location_id": location_id, "task_count": len(tasks), "last_synced": now}
+
+    def get_service_task_ledger(self, service_id: str) -> dict[str, Any]:
+        cache = self._read_runtime_cache()
+        ledger = cache.get("task_ledger", {}).get(service_id, {})
+        all_tasks: list[dict[str, Any]] = []
+        seen_keys: set[str] = set()
+        for location_id, location_data in ledger.items():
+            for task in location_data.get("tasks", []):
+                dedup_key = f"{task.get('timestamp', '')}|{task.get('title', '')}|{task.get('task_id', '')}"
+                if dedup_key not in seen_keys:
+                    seen_keys.add(dedup_key)
+                    all_tasks.append({**task, "node_id": location_id})
+        all_tasks.sort(key=lambda t: t.get("timestamp", ""), reverse=True)
+        return {
+            "service_id": service_id,
+            "tasks": all_tasks,
+            "task_count": len(all_tasks),
         }
 
     def persist_collect_snapshot(self, snapshot: dict[str, Any]) -> dict[str, Any]:

@@ -115,10 +115,127 @@ export interface DocIndexState {
   docs: DocIndexEntry[]
 }
 
+export type ServiceKind = 'service' | 'external_service' | 'database' | 'deployment_host' | 'dependency_node'
+
+export interface RuntimeService {
+  name: string
+  host?: string
+  port?: number
+  purpose?: string
+  health_path?: string
+  owner?: string
+}
+
+export type DependencyKind = 'service' | 'database' | 'deployment_host' | 'saas' | 'shared_data'
+
+export interface DependencyNode {
+  kind: DependencyKind
+  name: string
+  host?: string
+  port?: number
+  notes?: string
+}
+
+export interface TaskLedgerEntry {
+  timestamp: string
+  title: string
+  task_id?: string
+  agent?: string
+  tool?: string
+  tags?: string[]
+  summary?: string
+  changed_paths?: string[]
+  version?: string
+  bootstrap_version?: string
+  runtime_services?: RuntimeService[]
+  dependencies?: DependencyNode[]
+  cross_dependencies?: DependencyNode[]
+  diagram?: string
+  notes?: string
+  scope_entries?: ScopeEntry[]
+  runtime?: RuntimeConfig
+  readme?: string
+  api?: string
+  changelog?: string
+  node_id?: string
+  service_name?: string
+}
+
+export interface ActionLock {
+  action_key: string
+  service_id: string
+  started_at: string
+  expires_at: string
+  ttl_seconds: number
+  status: string
+}
+
+export interface ProjectManifest {
+  project_id: string
+  workspace_id: string
+  display_name: string
+  parent_project_id?: string
+  service_ids: string[]
+  tags: string[]
+  notes: string
+}
+
+export interface ServerCreateRequest {
+  server_id: string
+  name: string
+  connection_type: 'local' | 'ssh'
+  host?: string
+  username?: string
+  port?: number
+  tags: string[]
+  notes: string
+}
+
+export interface ServerPatchRequest {
+  name?: string
+  host?: string
+  username?: string
+  port?: number
+  tags?: string[]
+  notes?: string
+}
+
+export interface ProjectCreateRequest {
+  project_id: string
+  display_name: string
+  parent_project_id?: string
+  service_ids?: string[]
+  tags?: string[]
+  notes?: string
+}
+
+export interface ProjectPatchRequest {
+  display_name?: string
+  parent_project_id?: string
+  service_ids?: string[]
+  tags?: string[]
+  notes?: string
+}
+
+export type PendingActionKey = `${string}:${string}:${'pull_bundle'|'sync_to_node'|'sync_from_node'|'runtime_check'}`
+
+export interface PendingActionState {
+  startedAt: string
+  label: string
+}
+
+export interface ActionExplainConfig {
+  title: string
+  happens: string[]
+  untouched: string[]
+  writesTo: string[]
+}
+
 export interface Service {
   service_id: string
   workspace_id: string
   display_name: string
+  kind: ServiceKind
   tags: string[]
   favorite_tier: number
   locations: ServiceLocation[]
@@ -134,6 +251,7 @@ export interface Service {
   path_aliases: string[]
   runtime_checks?: RuntimeCheckResult[]
   node_sync?: NodeSyncResult[]
+  task_ledger?: TaskLedgerEntry[]
 }
 
 export interface ServiceRunResult {
@@ -191,12 +309,13 @@ export interface ServerInfo {
 
 export interface ServerRecord {
   server_id: string
-  name: string
-  connection_type: 'local' | 'ssh'
-  host: string
-  username: string
-  port: number
-  tags: string[]
+  name?: string
+  connection_type?: 'local' | 'ssh'
+  host?: string
+  username?: string
+  port?: number
+  tags?: string[]
+  notes?: string
 }
 
 export interface CollectSummary {
@@ -260,6 +379,8 @@ export interface RuntimeActionRequest {
 export interface NodeSyncRequest extends RuntimeActionRequest {
   include_scope_snapshot?: boolean
   include_runtime_config?: boolean
+  include_task_ledger?: boolean
+  include_dependency_context?: boolean
 }
 
 export interface GitPullRequest extends RepoActionRequest {}

@@ -1,4 +1,11 @@
 import type {
+  ActionLock,
+  ProjectManifest,
+  ProjectCreateRequest,
+  ProjectPatchRequest,
+  ServerCreateRequest,
+  ServerPatchRequest,
+  TaskLedgerEntry,
   ApiResult,
   ApiError,
   CollectOptions,
@@ -47,6 +54,7 @@ function normalizeService(service: any) {
     service_id: service.service_id,
     workspace_id: service.workspace_id,
     display_name: service.display_name,
+    kind: service.kind ?? 'service',
     tags: service.tags ?? [],
     favorite_tier: favoriteRank(service.favorite_tier),
     locations: (service.locations ?? []).map((location: any) => ({
@@ -71,6 +79,7 @@ function normalizeService(service: any) {
     path_aliases: service.path_aliases ?? [],
     runtime_checks: (service.runtime_checks ?? []).map(normalizeRuntimeCheck),
     node_sync: (service.node_sync ?? []).map(normalizeNodeSync),
+    task_ledger: (service.task_ledger ?? []).map(normalizeTaskLedgerEntry),
   } satisfies Service
 }
 
@@ -603,4 +612,128 @@ export const listPullBundles = (
       return { status: 'unverified', message: 'Invalid pull bundle history response' }
     }
     return res.bundles as PullBundleRecord[]
+  })
+
+export function normalizeTaskLedgerEntry(entry: any): TaskLedgerEntry {
+  return {
+    timestamp: entry.timestamp ?? '',
+    title: entry.title ?? '',
+    task_id: entry.task_id,
+    agent: entry.agent,
+    tool: entry.tool,
+    tags: entry.tags ?? [],
+    summary: entry.summary,
+    changed_paths: entry.changed_paths ?? [],
+    version: entry.version,
+    bootstrap_version: entry.bootstrap_version,
+    runtime_services: entry.runtime_services ?? [],
+    dependencies: entry.dependencies ?? [],
+    cross_dependencies: entry.cross_dependencies ?? [],
+    diagram: entry.diagram,
+    notes: entry.notes,
+    scope_entries: (entry.scope_entries ?? []).map(normalizeScopeEntry),
+    runtime: entry.runtime ? normalizeRuntimeConfig(entry.runtime) : undefined,
+    readme: entry.readme,
+    api: entry.api,
+    changelog: entry.changelog,
+    node_id: entry.node_id,
+  }
+}
+
+export function normalizeActionLock(lock: any): ActionLock {
+  return {
+    action_key: lock.action_key ?? '',
+    service_id: lock.service_id ?? '',
+    started_at: lock.started_at ?? '',
+    expires_at: lock.expires_at ?? '',
+    ttl_seconds: lock.ttl_seconds ?? 0,
+    status: lock.status ?? '',
+  }
+}
+
+export const getTaskLedger = (serviceId: string): Promise<ApiResult<{ tasks: TaskLedgerEntry[] }>> =>
+  apiFetch<{ tasks: any[] }>(`/services/${serviceId}/task-ledger`).then((res) => {
+    if (isApiError(res)) return res
+    return { tasks: res.tasks.map(normalizeTaskLedgerEntry) }
+  })
+
+export const getActionLocks = (serviceId: string): Promise<ApiResult<{ locks: ActionLock[] }>> =>
+  apiFetch<{ locks: any[] }>(`/services/${serviceId}/action-locks`).then((res) => {
+    if (isApiError(res)) return res
+    return { locks: res.locks.map(normalizeActionLock) }
+  })
+
+export const acquireActionLock = (serviceId: string, actionKey: string): Promise<ApiResult<{ status: string; lock?: ActionLock }>> =>
+  apiFetch<{ status: string; lock: any }>(`/services/${serviceId}/action-locks`, {
+    method: 'POST',
+    body: JSON.stringify({ action_key: actionKey }),
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return { status: res.status, lock: res.lock ? normalizeActionLock(res.lock) : undefined }
+  })
+
+export const releaseActionLock = (serviceId: string, actionKey: string): Promise<ApiResult<{ status: string }>> =>
+  apiFetch<{ status: string }>(`/services/${serviceId}/action-locks/${actionKey}`, {
+    method: 'DELETE',
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return { status: res.status }
+  })
+
+export const workspaceHealthCheck = (workspaceId: string, runtimePasswords: Record<string, string> = {}): Promise<ApiResult<{ results: RuntimeCheckResult[] }>> =>
+  apiFetch<{ results: any[] }>(`/workspaces/${workspaceId}/health-check`, {
+    method: 'POST',
+    body: JSON.stringify(runtimePasswords),
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return { results: res.results.map(normalizeRuntimeCheck) }
+  })
+
+export const listProjects = (workspaceId: string): Promise<ApiResult<{ projects: ProjectManifest[] }>> =>
+  apiFetch<{ projects: any[] }>(`/workspaces/${workspaceId}/projects`).then((res) => {
+    if (isApiError(res)) return res
+    return { projects: res.projects }
+  })
+
+export const createProject = (workspaceId: string, req: ProjectCreateRequest): Promise<ApiResult<{ project: ProjectManifest }>> =>
+  apiFetch<{ project: any }>(`/workspaces/${workspaceId}/projects`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return { project: res.project }
+  })
+
+export const updateProject = (projectId: string, req: ProjectPatchRequest): Promise<ApiResult<{ project: ProjectManifest }>> =>
+  apiFetch<{ project: any }>(`/projects/${projectId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(req),
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return { project: res.project }
+  })
+
+export const deleteProject = (projectId: string): Promise<ApiResult<{ project: ProjectManifest }>> =>
+  apiFetch<{ project: any }>(`/projects/${projectId}`, {
+    method: 'DELETE',
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return { project: res.project }
+  })
+
+export const createServer = (req: ServerCreateRequest): Promise<ApiResult<{ server: any }>> =>
+  apiFetch<{ server: any }>('/servers', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  })
+
+export const updateServer = (serverId: string, req: ServerPatchRequest): Promise<ApiResult<{ server: any }>> =>
+  apiFetch<{ server: any }>(`/servers/${serverId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(req),
+  })
+
+export const deleteServer = (serverId: string): Promise<ApiResult<{ server: any }>> =>
+  apiFetch<{ server: any }>(`/servers/${serverId}`, {
+    method: 'DELETE',
   })

@@ -3,13 +3,12 @@ import type { Workspace, ServiceRunResult, WorkspaceLatest } from './types/switc
 import { getHealth, listWorkspaces, getWorkspaceLatest } from './api/client'
 import { isApiError } from './types/switchboard'
 import { WorkspaceSwitcher } from './components/WorkspaceSwitcher'
-import { InfoDropdown } from './components/InfoDropdown'
 import { WorkspacePage } from './pages/WorkspacePage'
 import { ServiceDetailPage } from './pages/ServiceDetailPage'
 import { ControlCenterPage } from './pages/ControlCenterPage'
 import { loadFallbackWorkspaceList } from './data/fallback'
 
-const TECH_STACK_LINES = [
+export const TECH_STACK_LINES = [
   'Backend: FastAPI, Pydantic Settings, Paramiko SSH/SFTP, file-based evidence JSON.',
   'Frontend: React 19, Vite, TypeScript, Tailwind, Lucide icons.',
   'Versioning: Git for repo status/pull/push actions and commit metadata.',
@@ -19,7 +18,7 @@ const TECH_STACK_LINES = [
   'Testing: Vitest for frontend contract checks and Python unittest for backend regressions.',
 ]
 
-const HOW_TO_USE_LINES = [
+export const HOW_TO_USE_LINES = [
   'Pick a workspace, then run Collect to refresh ports, repo state, docs, and logs.',
   'Use Add Project to open one root path, expand the tree, and uncheck dump paths you do not want.',
   'Category rules are simple: repo, doc, log, or exclude. You can override the auto-suggestion.',
@@ -33,6 +32,7 @@ const HOW_TO_USE_LINES = [
 
 export default function App() {
   const [online, setOnline] = useState<boolean | null>(null)
+  const [apiVersion, setApiVersion] = useState<string | null>(null)
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null)
   const [selectedService, setSelectedService] = useState<string | null>(null)
@@ -41,7 +41,12 @@ export default function App() {
   // Check backend health
   useEffect(() => {
     getHealth().then((res) => {
-      setOnline(!isApiError(res))
+      if (!isApiError(res)) {
+        setOnline(true)
+        if (res.version) setApiVersion(res.version)
+      } else {
+        setOnline(false)
+      }
     })
   }, [])
 
@@ -138,9 +143,12 @@ export default function App() {
             />
           )}
 
-          <div className="ml-auto flex items-center gap-2">
-            <InfoDropdown label="Tech" title="Framework Stack" lines={TECH_STACK_LINES} />
-            <InfoDropdown label="How To" title="Control Center Usage" lines={HOW_TO_USE_LINES} />
+          <div className="ml-auto flex items-center gap-3">
+            {apiVersion && (
+              <span className="text-xs font-mono text-gray-600 bg-gray-900 border border-gray-800 px-2 py-0.5 rounded">
+                v{apiVersion}
+              </span>
+            )}
             <span
               className={`w-2 h-2 rounded-full ${
                 online === null ? 'bg-gray-600' : online ? 'bg-green-500' : 'bg-red-500'

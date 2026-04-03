@@ -18,6 +18,8 @@ import {
   syncFromNode,
   syncToNode,
   updateService,
+  acquireActionLock,
+  releaseActionLock,
 } from '../api/client'
 import { isApiError } from '../types/switchboard'
 import { StatusBadge } from '../components/StatusBadge'
@@ -25,6 +27,9 @@ import { RepoSummary } from '../components/RepoSummary'
 import { DownloadPanel } from '../components/DownloadPanel'
 import { SecretPathGuard } from '../components/SecretPathGuard'
 import { PullBundlePanel } from '../components/PullBundlePanel'
+import { ConfirmationModal, ACTION_EXPLAIN } from '../components/ConfirmationModal'
+import { TaskLedgerPanel } from '../components/TaskLedgerPanel'
+import { InfoDropdown } from '../components/InfoDropdown'
 
 interface Props {
   serviceId: string
@@ -66,6 +71,19 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
   const [checkingRuntimeLocation, setCheckingRuntimeLocation] = useState<string | null>(null)
   const [syncingFromLocation, setSyncingFromLocation] = useState<string | null>(null)
   const [syncingToLocation, setSyncingToLocation] = useState<string | null>(null)
+  const [confirmAction, setConfirmAction] = useState<string | null>(null)
+  const [confirmLocationId, setConfirmLocationId] = useState<string | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [pendingActions, setPendingActions] = useState<Record<string, boolean>>({})
+
+  useEffect(() => {
+    const keys = Object.keys(sessionStorage)
+    const pending: Record<string, boolean> = {}
+    for (const key of keys) {
+      if (key.startsWith('pending:')) pending[key] = true
+    }
+    setPendingActions(pending)
+  }, [])
 
   useEffect(() => {
     if (offline) return
@@ -294,6 +312,48 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
     setRuntimeMessage(result.node_manifest_path ? `Synced to node at ${result.node_manifest_path}.` : 'Synced to node.')
   }
 
+  function initiateAction(actionKey: string, locationId: string) {
+    setConfirmAction(actionKey)
+    setConfirmLocationId(locationId)
+    setConfirmOpen(true)
+  }
+
+  async function handleConfirmAction() {
+    if (!confirmAction || !confirmLocationId) return
+    const actionKey = confirmAction
+    const locationId = confirmLocationId
+    const compositeKey = `${actionKey}:${locationId}`
+    const sessionKey = `pending:${compositeKey}`
+    
+    sessionStorage.setItem(sessionKey, 'true')
+    setPendingActions(prev => ({ ...prev, [sessionKey]: true }))
+    setConfirmOpen(false)
+
+    const lockRes = await acquireActionLock(serviceId, actionKey)
+    if (isApiError(lockRes) || lockRes.status !== 'ok') {
+      setRuntimeMessage((lockRes as any)?.message || 'Action is already in progress.')
+      sessionStorage.removeItem(sessionKey)
+      setPendingActions(prev => { const next = { ...prev }; delete next[sessionKey]; return next })
+      return
+    }
+
+    try {
+      if (actionKey === 'runtime_check') {
+        await handleRuntimeCheck(locationId)
+      } else if (actionKey === 'sync_from_node') {
+        await handleSyncFromNode(locationId)
+      } else if (actionKey === 'sync_to_node') {
+        await handleSyncToNode(locationId)
+      }
+    } finally {
+      await releaseActionLock(serviceId, actionKey)
+      sessionStorage.removeItem(sessionKey)
+      setPendingActions(prev => { const next = { ...prev }; delete next[sessionKey]; return next })
+      setConfirmAction(null)
+      setConfirmLocationId(null)
+    }
+  }
+
   function addScopeEntry() {
     const trimmed = newScopePath.trim()
     if (!trimmed) return
@@ -336,7 +396,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
   return (
     <div>
       {/* Back + header */}
-      <div className="mb-6 flex items-start justify-between gap-4">
+      <div className="mb-4 flex items-start justify-between gap-4">
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
@@ -362,15 +422,88 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => setDeleteConfirmOpen(true)}
-          disabled={offline || deleting || !service}
-          className="inline-flex items-center gap-2 rounded-lg border border-red-900 bg-red-950/70 px-3 py-2 text-sm font-medium text-red-200 transition-colors hover:border-red-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Trash2 className="h-4 w-4" />
-          {deleting ? 'Deleting…' : 'Delete Service'}
-        </button>
+        <div className="flex items-center gap-3">
+          {service && (
+            <div className="hidden md:flex items-center gap-2">
+              <InfoDropdown
+                label="Node Commands"
+                title="Switchboard Node Commands"
+                lines={[
+                  'switchboard node snapshot',
+                  'switchboard node start',
+                  'switchboard node stop',
+                  'switchboard node status',
+                ]}
+              />
+              <InfoDropdown
+                label="Health Check Commands"
+                title="Location Health Checks"
+                lines={
+                  service.locations.map(
+                    (loc) => `[${loc.location_id}]: ${loc.runtime?.healthcheck_command || 'None'}`
+                  ) || ['No locations configured']
+                }
+              />
+              <InfoDropdown
+                label="Diagnostics"
+                title="Diagnostics & Hints"
+                lines={[
+                  `Bootstrap Version: ${service.task_ledger?.[0]?.bootstrap_version || 'Unknown'}`,
+                  ...service.locations.map(
+                    (loc) =>
+                      `[${loc.location_id}] Hint: ${loc.runtime?.run_command_hint || 'None'} | Mode: ${loc.runtime?.monitoring_mode}`
+                  ),
+                ]}
+              />
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setDeleteConfirmOpen(true)}
+            disabled={offline || deleting || !service}
+            className="inline-flex items-center gap-2 rounded-lg border border-red-900 bg-red-950/70 px-3 py-2 text-sm font-medium text-red-200 transition-colors hover:border-red-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Trash2 className="h-4 w-4" />
+            {deleting ? 'Deleting…' : 'Delete Service'}
+          </button>
+        </div>
+      </div>
+
+      <div className="mb-6 flex md:hidden items-center gap-2 flex-wrap">
+        {service && (
+          <>
+            <InfoDropdown
+              label="Node Commands"
+              title="Switchboard Node Commands"
+              lines={[
+                'switchboard node snapshot',
+                'switchboard node start',
+                'switchboard node stop',
+                'switchboard node status',
+              ]}
+            />
+            <InfoDropdown
+              label="Health Checks"
+              title="Location Health Checks"
+              lines={
+                service.locations.map(
+                  (loc) => `[${loc.location_id}]: ${loc.runtime?.healthcheck_command || 'None'}`
+                ) || ['No locations configured']
+              }
+            />
+            <InfoDropdown
+              label="Diagnostics"
+              title="Diagnostics & Hints"
+              lines={[
+                `Bootstrap Version: ${service.task_ledger?.[0]?.bootstrap_version || 'Unknown'}`,
+                ...service.locations.map(
+                  (loc) =>
+                    `[${loc.location_id}] Hint: ${loc.runtime?.run_command_hint || 'None'} | Mode: ${loc.runtime?.monitoring_mode}`
+                ),
+              ]}
+            />
+          </>
+        )}
       </div>
 
       {deleteError && (
@@ -529,12 +662,12 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() => handleRuntimeCheck(location.location_id)}
-                        disabled={offline || checkingRuntimeLocation === location.location_id}
+                        onClick={() => initiateAction('runtime_check', location.location_id)}
+                        disabled={offline || checkingRuntimeLocation === location.location_id || pendingActions[`pending:runtime_check:${location.location_id}`]}
                         className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
                       >
-                        <RefreshCw className={`h-3.5 w-3.5 ${checkingRuntimeLocation === location.location_id ? 'animate-spin' : ''}`} />
-                        {checkingRuntimeLocation === location.location_id ? 'Checking…' : 'Run Runtime Check'}
+                        <RefreshCw className={`h-3.5 w-3.5 ${checkingRuntimeLocation === location.location_id || pendingActions[`pending:runtime_check:${location.location_id}`] ? 'animate-spin' : ''}`} />
+                        {checkingRuntimeLocation === location.location_id || pendingActions[`pending:runtime_check:${location.location_id}`] ? 'Checking…' : 'Run Runtime Check'}
                       </button>
                       <button
                         type="button"
@@ -556,7 +689,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                   </div>
 
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <label className="text-sm text-gray-300">
+                    <div className="text-sm text-gray-300">
                       <div className="mb-1">Expected ports</div>
                       {editingRuntime ? (
                         <input
@@ -565,11 +698,23 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                           className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500"
                         />
                       ) : (
-                        <div className="rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-gray-200">
-                          {portsValue || 'Not configured'}
+                        <div className="rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-gray-200 min-h-[38px]">
+                          {service?.task_ledger?.[0]?.runtime_services?.length ? (
+                            <div className="space-y-1">
+                              {service.task_ledger[0].runtime_services.map((rs, idx) => (
+                                <div key={idx} className="flex flex-wrap items-center gap-2">
+                                  <span className="font-mono text-cyan-300">{rs.port || 'any'}</span>
+                                  <span className="text-gray-300">{rs.name}</span>
+                                  {rs.purpose && <span className="text-xs text-gray-500">({rs.purpose})</span>}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            portsValue || 'Not configured'
+                          )}
                         </div>
                       )}
-                    </label>
+                    </div>
 
                     <label className="text-sm text-gray-300">
                       <div className="mb-1">Monitoring mode</div>
@@ -844,6 +989,12 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         </section>
       )}
 
+      {service && service.task_ledger && service.task_ledger.length > 0 && (
+        <section className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <TaskLedgerPanel tasks={service.task_ledger} />
+        </section>
+      )}
+
       {/* Repos */}
       <section className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
         <h3 className="text-sm font-medium text-gray-300 mb-3">Repositories</h3>
@@ -1081,6 +1232,18 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
             ))}
           </ul>
         </section>
+      )}
+
+      {confirmOpen && confirmAction && ACTION_EXPLAIN[confirmAction] && (
+        <ConfirmationModal
+          open={confirmOpen}
+          title={ACTION_EXPLAIN[confirmAction].title}
+          willDo={ACTION_EXPLAIN[confirmAction].happens}
+          willNotChange={ACTION_EXPLAIN[confirmAction].untouched}
+          writesTo={ACTION_EXPLAIN[confirmAction].writesTo}
+          onConfirm={handleConfirmAction}
+          onCancel={() => setConfirmOpen(false)}
+        />
       )}
     </div>
   )
