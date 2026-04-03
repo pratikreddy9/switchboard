@@ -1,0 +1,175 @@
+{
+  "node_id": "dashboard-d5e528e36a",
+  "service_id": "dashboard",
+  "display_name": "Dashboard",
+  "project_root": "/Users/p/Desktop/dashboard",
+  "mode": "node",
+  "installed_version": "0.1.9",
+  "repo_paths": [
+    "/Users/p/Desktop/dashboard"
+  ],
+  "docs_paths": [
+    "/Users/p/Desktop/dashboard/switchboard/core",
+    "/Users/p/Desktop/dashboard/switchboard/local",
+    "/Users/p/Desktop/dashboard/switchboard/evidence"
+  ],
+  "log_paths": [],
+  "exclude_patterns": [],
+  "runtime": {
+    "expected_ports": [],
+    "healthcheck_command": "",
+    "run_command_hint": "",
+    "monitoring_mode": "manual",
+    "notes": ""
+  },
+  "managed_docs": [
+    {
+      "doc_id": "readme",
+      "path": "README.md",
+      "enabled": false,
+      "generated_from": "switchboard/local/tasks-completed.md",
+      "last_generated_at": null
+    },
+    {
+      "doc_id": "api",
+      "path": "API.md",
+      "enabled": false,
+      "generated_from": "switchboard/local/tasks-completed.md",
+      "last_generated_at": null
+    },
+    {
+      "doc_id": "changelog",
+      "path": "CHANGELOG.md",
+      "enabled": false,
+      "generated_from": "switchboard/local/tasks-completed.md",
+      "last_generated_at": null
+    },
+    {
+      "doc_id": "handoff",
+      "path": "switchboard/local/control-center-handoff.md",
+      "enabled": true,
+      "generated_from": "switchboard/local/tasks-completed.md",
+      "last_generated_at": "2026-04-03T12:13:28+00:00"
+    },
+    {
+      "doc_id": "runbook",
+      "path": "switchboard/local/runbook.md",
+      "enabled": true,
+      "generated_from": "switchboard/local/tasks-completed.md",
+      "last_generated_at": "2026-04-03T12:13:28+00:00"
+    },
+    {
+      "doc_id": "approach_history",
+      "path": "switchboard/local/approach-history.md",
+      "enabled": true,
+      "generated_from": "switchboard/local/tasks-completed.md",
+      "last_generated_at": "2026-04-03T12:13:28+00:00"
+    },
+    {
+      "doc_id": "doc_index_md",
+      "path": "switchboard/local/doc-index.md",
+      "enabled": true,
+      "generated_from": "switchboard/local/tasks-completed.md",
+      "last_generated_at": "2026-04-03T12:13:28+00:00"
+    },
+    {
+      "doc_id": "doc_index_json",
+      "path": "switchboard/evidence/doc-index.json",
+      "enabled": true,
+      "generated_from": "switchboard/local/tasks-completed.md",
+      "last_generated_at": "2026-04-03T12:13:28+00:00"
+    }
+  ],
+  "bootstrap_version": "",
+  "runtime_services": [],
+  "dependencies": [],
+  "cross_dependencies": [],
+  "diagram": "",
+  "doc_index": {
+    "generated": "2026-04-03T12:13:28+00:00",
+    "service_id": "dashboard",
+    "project_root": "/Users/p/Desktop/dashboard",
+    "docs": [
+      {
+        "doc_id": "readme",
+        "label": "README",
+        "path": "README.md",
+        "enabled": false,
+        "generated_at": null,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "contributor_timestamps": []
+      },
+      {
+        "doc_id": "api",
+        "label": "API",
+        "path": "API.md",
+        "enabled": false,
+        "generated_at": null,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "contributor_timestamps": []
+      },
+      {
+        "doc_id": "changelog",
+        "label": "CHANGELOG",
+        "path": "CHANGELOG.md",
+        "enabled": false,
+        "generated_at": null,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "contributor_timestamps": []
+      },
+      {
+        "doc_id": "handoff",
+        "label": "Control Center Handoff",
+        "path": "switchboard/local/control-center-handoff.md",
+        "enabled": true,
+        "generated_at": "2026-04-03T12:13:28+00:00",
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "contributor_timestamps": []
+      },
+      {
+        "doc_id": "runbook",
+        "label": "Runbook",
+        "path": "switchboard/local/runbook.md",
+        "enabled": true,
+        "generated_at": "2026-04-03T12:13:28+00:00",
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "contributor_timestamps": []
+      },
+      {
+        "doc_id": "approach_history",
+        "label": "Approach History",
+        "path": "switchboard/local/approach-history.md",
+        "enabled": true,
+        "generated_at": "2026-04-03T12:13:28+00:00",
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "contributor_timestamps": []
+      },
+      {
+        "doc_id": "doc_index_md",
+        "label": "Doc Index Markdown",
+        "path": "switchboard/local/doc-index.md",
+        "enabled": true,
+        "generated_at": "2026-04-03T12:13:28+00:00",
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "contributor_timestamps": []
+      },
+      {
+        "doc_id": "doc_index_json",
+        "label": "Doc Index JSON",
+        "path": "switchboard/evidence/doc-index.json",
+        "enabled": true,
+        "generated_at": "2026-04-03T12:13:28+00:00",
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "contributor_timestamps": []
+      }
+    ]
+  },
+  "evidence_paths": {
+    "completed_tasks": "switchboard/evidence/completed-tasks.json",
+    "doc_index": "switchboard/evidence/doc-index.json",
+    "repo_safety_history": "switchboard/evidence/repo-safety-history.json",
+    "pull_bundle_history": "switchboard/evidence/pull-bundle-history.json",
+    "scope_snapshot": "switchboard/evidence/scope.snapshot.json"
+  },
+  "updated_at": "2026-04-03T12:13:28+00:00"
+}

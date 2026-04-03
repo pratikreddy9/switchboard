@@ -140,25 +140,9 @@ export function WorkspacePage({ workspaceId, offline, onSelectService }: Props) 
         />
       </div>
 
-      {/* Service grid */}
-      {loading ? (
-        <div className="text-gray-500 text-sm">Loading…</div>
-      ) : services.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-800 bg-gray-900 px-4 py-6 text-gray-500 text-sm italic">
-          No services found. {offline ? 'Backend offline.' : 'Use Add Project to seed this workspace manually.'}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {services.map((svc: Service) => (
-            <ServiceCard
-              key={svc.service_id}
-              service={svc}
-              result={resultMap[svc.service_id]}
-              onClick={() => onSelectService(svc.service_id)}
-            />
-          ))}
-        </div>
-      )}
+      <div className="mb-6">
+        <ProjectsPanel workspaceId={workspaceId} offline={offline} />
+      </div>
 
       {/* Service grid */}
       {loading ? (

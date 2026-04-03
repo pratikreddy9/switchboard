@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react'
-import { ArrowRight, FolderKanban, Server, Shield } from 'lucide-react'
+import { ArrowRight, FolderKanban, Server, Shield, ChevronDown, ChevronRight, BookOpen, HelpCircle } from 'lucide-react'
 import type { Workspace, WorkspaceLatest, ServerRecord } from '../types/switchboard'
 import { StatusBadge } from '../components/StatusBadge'
 import { ServerCRUDPanel } from '../components/ServerCRUDPanel'
-
-import { InfoDropdown } from '../components/InfoDropdown'
 import { TECH_STACK_LINES, HOW_TO_USE_LINES } from '../App'
 import { listWorkspaces } from '../api/client'
 
@@ -22,6 +20,8 @@ export function ControlCenterPage({
   onOpenWorkspace,
 }: Props) {
   const [servers, setServers] = useState<ServerRecord[]>([])
+  const [techOpen, setTechOpen] = useState(false)
+  const [howToOpen, setHowToOpen] = useState(false)
 
   useEffect(() => {
     if (online) {
@@ -46,10 +46,6 @@ export function ControlCenterPage({
             <p className="mt-2 max-w-2xl text-sm text-gray-400 mb-4">
               Central view for umbrella workspaces, server pulls, repo actions, docs, and logs.
             </p>
-            <div className="flex items-center gap-2">
-              <InfoDropdown label="Tech" title="Framework Stack" lines={TECH_STACK_LINES} />
-              <InfoDropdown label="How To" title="Control Center Usage" lines={HOW_TO_USE_LINES} />
-            </div>
           </div>
           <div className="rounded-xl border border-gray-800 bg-black/20 px-4 py-3 text-sm text-gray-300">
             <div>Mode: control center</div>
@@ -58,6 +54,48 @@ export function ControlCenterPage({
             </div>
           </div>
         </div>
+      </section>
+
+      {/* Tech Stack accordion */}
+      <section className="rounded-2xl border border-gray-800 bg-gray-900">
+        <button
+          className="flex w-full items-center justify-between px-5 py-4 text-left"
+          onClick={() => setTechOpen((o) => !o)}
+        >
+          <div className="flex items-center gap-2 text-sm font-medium text-gray-200">
+            <BookOpen className="h-4 w-4 text-cyan-400" />
+            Tech Stack
+          </div>
+          {techOpen ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+        </button>
+        {techOpen && (
+          <ul className="border-t border-gray-800 px-5 py-4 space-y-2">
+            {TECH_STACK_LINES.map((line, i) => (
+              <li key={i} className="text-sm text-gray-400">{line}</li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* How To Use accordion */}
+      <section className="rounded-2xl border border-gray-800 bg-gray-900">
+        <button
+          className="flex w-full items-center justify-between px-5 py-4 text-left"
+          onClick={() => setHowToOpen((o) => !o)}
+        >
+          <div className="flex items-center gap-2 text-sm font-medium text-gray-200">
+            <HelpCircle className="h-4 w-4 text-cyan-400" />
+            How To Use
+          </div>
+          {howToOpen ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+        </button>
+        {howToOpen && (
+          <ul className="border-t border-gray-800 px-5 py-4 space-y-2">
+            {HOW_TO_USE_LINES.map((line, i) => (
+              <li key={i} className="text-sm text-gray-400">{line}</li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <ServerCRUDPanel servers={servers} offline={!online} onReload={loadServers} />
