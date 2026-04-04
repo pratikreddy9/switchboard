@@ -38,6 +38,7 @@ import type {
   ServerRecord,
   ScopeEntry,
   ManagedDocConfig,
+  NodeActionResult,
   NodeViewerEntry,
   Workspace,
   WorkspaceLatest,
@@ -645,49 +646,69 @@ export const getNodeViewer = (
 export const inspectNode = (
   id: string,
   locationId?: string,
-): Promise<ApiResult<{ node: NodeViewerEntry }>> =>
+): Promise<ApiResult<NodeActionResult>> =>
   apiFetch<any>(`/services/${id}/actions/node-inspect`, {
     method: 'POST',
     body: JSON.stringify({ location_id: locationId }),
   }).then((res) => {
     if (isApiError(res)) return res
-    return { node: normalizeNodeViewer(res.node) }
+    return {
+      node: normalizeNodeViewer(res.node),
+      before: res.before ? normalizeNodeViewer(res.before) : undefined,
+      after: res.after ? normalizeNodeViewer(res.after) : undefined,
+      message: res.message,
+    }
   })
 
 export const deployNode = (
   id: string,
   locationId?: string,
-): Promise<ApiResult<{ node: NodeViewerEntry }>> =>
+): Promise<ApiResult<NodeActionResult>> =>
   apiFetch<any>(`/services/${id}/actions/node-deploy`, {
     method: 'POST',
     body: JSON.stringify({ location_id: locationId }),
   }).then((res) => {
     if (isApiError(res)) return res
-    return { node: normalizeNodeViewer(res.node) }
+    return {
+      node: normalizeNodeViewer(res.node),
+      before: res.before ? normalizeNodeViewer(res.before) : undefined,
+      after: res.after ? normalizeNodeViewer(res.after) : undefined,
+      message: res.message,
+    }
   })
 
 export const upgradeNode = (
   id: string,
   locationId?: string,
-): Promise<ApiResult<{ node: NodeViewerEntry }>> =>
+): Promise<ApiResult<NodeActionResult>> =>
   apiFetch<any>(`/services/${id}/actions/node-upgrade`, {
     method: 'POST',
     body: JSON.stringify({ location_id: locationId }),
   }).then((res) => {
     if (isApiError(res)) return res
-    return { node: normalizeNodeViewer(res.node) }
+    return {
+      node: normalizeNodeViewer(res.node),
+      before: res.before ? normalizeNodeViewer(res.before) : undefined,
+      after: res.after ? normalizeNodeViewer(res.after) : undefined,
+      message: res.message,
+    }
   })
 
 export const restartNode = (
   id: string,
   locationId?: string,
-): Promise<ApiResult<{ node: NodeViewerEntry }>> =>
+): Promise<ApiResult<NodeActionResult>> =>
   apiFetch<any>(`/services/${id}/actions/node-restart`, {
     method: 'POST',
     body: JSON.stringify({ location_id: locationId }),
   }).then((res) => {
     if (isApiError(res)) return res
-    return { node: normalizeNodeViewer(res.node) }
+    return {
+      node: normalizeNodeViewer(res.node),
+      before: res.before ? normalizeNodeViewer(res.before) : undefined,
+      after: res.after ? normalizeNodeViewer(res.after) : undefined,
+      message: res.message,
+    }
   })
 
 export const createPullBundle = (

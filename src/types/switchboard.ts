@@ -603,6 +603,13 @@ export interface NodeViewerEntry {
   last_error?: string
 }
 
+export interface NodeActionResult {
+  node: NodeViewerEntry
+  before?: NodeViewerEntry
+  after?: NodeViewerEntry
+  message?: string
+}
+
 export interface PullBundleRecord {
   bundle_id: string
   created_at: string

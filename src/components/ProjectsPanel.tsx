@@ -23,6 +23,8 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
   const [draftName, setDraftName] = useState('')
   const [draftParent, setDraftParent] = useState('')
   const [draftNotes, setDraftNotes] = useState('')
+  const [draftServiceIds, setDraftServiceIds] = useState('')
+  const [draftTags, setDraftTags] = useState('')
   const [openProjects, setOpenProjects] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
@@ -46,6 +48,8 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
     setDraftName('')
     setDraftParent('')
     setDraftNotes('')
+    setDraftServiceIds('')
+    setDraftTags('')
     setError(null)
   }
 
@@ -56,6 +60,8 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
     setDraftName(p.display_name)
     setDraftParent(p.parent_project_id || '')
     setDraftNotes(p.notes || '')
+    setDraftServiceIds((p.service_ids ?? []).join(', '))
+    setDraftTags((p.tags ?? []).join(', '))
     setError(null)
   }
 
@@ -76,8 +82,9 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
         project_id: draftId,
         display_name: draftName,
         parent_project_id: draftParent || undefined,
+        service_ids: draftServiceIds.split(',').map((v) => v.trim()).filter(Boolean),
+        tags: draftTags.split(',').map((v) => v.trim()).filter(Boolean),
         notes: draftNotes,
-        tags: [],
       })
       if (isApiError(res)) {
         setError(res.message)
@@ -90,6 +97,8 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
         project_id: draftId,
         display_name: draftName,
         parent_project_id: draftParent || undefined,
+        service_ids: draftServiceIds.split(',').map((v) => v.trim()).filter(Boolean),
+        tags: draftTags.split(',').map((v) => v.trim()).filter(Boolean),
         notes: draftNotes,
       })
       if (isApiError(res)) {
@@ -186,6 +195,24 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
                     className="w-full bg-gray-900 border border-gray-800 rounded px-2 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-cyan-500"
                   />
                 </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Service IDs</label>
+                  <input
+                    value={draftServiceIds}
+                    onChange={e => setDraftServiceIds(e.target.value)}
+                    placeholder="aichat, sys_docs"
+                    className="w-full bg-gray-900 border border-gray-800 rounded px-2 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Tags</label>
+                  <input
+                    value={draftTags}
+                    onChange={e => setDraftTags(e.target.value)}
+                    placeholder="docs, ops"
+                    className="w-full bg-gray-900 border border-gray-800 rounded px-2 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
               </div>
               <div className="mt-4 flex justify-end gap-2">
                 <button onClick={cancel} className="px-3 py-1.5 text-xs text-gray-400 hover:text-white transition-colors">Cancel</button>
@@ -255,6 +282,27 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
                               <div className="mt-1 text-gray-300">{p.service_ids?.length ?? 0}</div>
                             </div>
                           </div>
+                          {(p.tags?.length ?? 0) > 0 && (
+                            <div className="mb-3 flex flex-wrap gap-1">
+                              {p.tags.map((tag) => (
+                                <span key={tag} className="rounded-full border border-cyan-900/40 bg-cyan-950/30 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-cyan-200">
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {(p.service_ids?.length ?? 0) > 0 && (
+                            <div className="mb-3 rounded border border-gray-800 bg-black/20 px-3 py-2">
+                              <div className="text-[10px] uppercase tracking-[0.14em] text-gray-600">Assigned services</div>
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {p.service_ids.map((serviceId) => (
+                                  <span key={serviceId} className="rounded border border-gray-700 px-2 py-0.5 text-[10px] font-mono text-gray-300">
+                                    {serviceId}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                           <div className="space-y-2">
                             {children.length === 0 ? (
                               <div className="rounded border border-dashed border-gray-800 px-3 py-2 text-xs italic text-gray-600">

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, FileStack, FolderTree, Pencil, RefreshCw, Save, Server, Trash2, X } from 'lucide-react'
 import type {
   ManagedDocConfig,
+  NodeActionResult,
   RuntimeCheckResult,
   Service,
   ServiceLocationDraft,
@@ -18,6 +19,7 @@ import {
   listServers,
   getWorkspaceRuns,
   inspectNode,
+  listPullBundles,
   restartNode,
   runRuntimeCheck,
   syncFromNode,
@@ -36,6 +38,7 @@ import { PullBundlePanel } from '../components/PullBundlePanel'
 import { ConfirmationModal, ACTION_EXPLAIN } from '../components/ConfirmationModal'
 import { TaskLedgerPanel } from '../components/TaskLedgerPanel'
 import { InfoDropdown } from '../components/InfoDropdown'
+import { AccordionSection } from '../components/AccordionSection'
 
 interface Props {
   serviceId: string
@@ -50,6 +53,13 @@ function parsePorts(value: string): number[] {
     .split(',')
     .map((token) => Number(token.trim()))
     .filter((port) => Number.isFinite(port) && port > 0 && port <= 65535)
+}
+
+const SERVICE_PANEL_KEYS = ['network', 'runtime', 'managed_docs', 'task_ledger', 'repositories', 'scope', 'pull_bundles', 'secret_paths', 'run_history'] as const
+type ServicePanelKey = (typeof SERVICE_PANEL_KEYS)[number]
+
+function panelStorageKey(serviceId: string, key: string) {
+  return `service-panel:${serviceId}:${key}`
 }
 
 export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDeleted }: Props) {
@@ -82,6 +92,10 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [servers, setServers] = useState<ServerRecord[]>([])
   const [pendingActions, setPendingActions] = useState<Record<string, boolean>>({})
+  const [panelOpen, setPanelOpen] = useState<Record<string, boolean>>({})
+  const [locationPanels, setLocationPanels] = useState<Record<string, boolean>>({})
+  const [nodeActionResults, setNodeActionResults] = useState<Record<string, NodeActionResult>>({})
+  const [bundleHistoryMeta, setBundleHistoryMeta] = useState<{ count: number; latestCreatedAt: string }>({ count: 0, latestCreatedAt: '' })
 
   useEffect(() => {
     const keys = Object.keys(sessionStorage)
@@ -91,6 +105,14 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
     }
     setPendingActions(pending)
   }, [])
+
+  useEffect(() => {
+    const next: Record<string, boolean> = {}
+    for (const key of SERVICE_PANEL_KEYS) {
+      next[key] = sessionStorage.getItem(panelStorageKey(serviceId, key)) === 'true'
+    }
+    setPanelOpen(next)
+  }, [serviceId])
 
   useEffect(() => {
     if (offline) return
@@ -122,6 +144,18 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
       if (!isApiError(result)) setServers(result)
     })
   }, [offline])
+
+  useEffect(() => {
+    if (offline) return
+    listPullBundles(serviceId).then((result) => {
+      if (!isApiError(result)) {
+        setBundleHistoryMeta({
+          count: result.length,
+          latestCreatedAt: result[0]?.created_at ?? '',
+        })
+      }
+    })
+  }, [offline, serviceId])
 
   const docs = runResult?.docs_files ?? []
   const logs = runResult?.logs_files ?? []
@@ -185,6 +219,46 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
       (service?.scope_entries ?? []).some((entry) => entry.enabled && entry.path.endsWith('switchboard/node.manifest.json')),
     [service?.scope_entries],
   )
+
+  const scopeSummary = useMemo(() => {
+    const counts = { repo: 0, doc: 0, log: 0, exclude: 0 }
+    for (const entry of scopeEntries) {
+      if (!entry.enabled) continue
+      counts[entry.kind] += 1
+    }
+    return counts
+  }, [scopeEntries])
+
+  const enabledManagedDocs = useMemo(
+    () => (service?.managed_docs ?? []).filter((entry) => entry.enabled),
+    [service?.managed_docs],
+  )
+
+  const latestManagedDocGeneratedAt = useMemo(() => {
+    const values = enabledManagedDocs.map((entry) => entry.last_generated_at).filter(Boolean) as string[]
+    return values.sort().reverse()[0] ?? ''
+  }, [enabledManagedDocs])
+
+  const runtimeAttentionCount = useMemo(
+    () =>
+      (service?.locations ?? []).filter((location) => {
+        const nodeViewer = nodeViewerByLocation.get(location.location_id)
+        return Boolean(nodeViewer?.needs_install || nodeViewer?.needs_upgrade || nodeViewer?.needs_bootstrap)
+      }).length,
+    [nodeViewerByLocation, service?.locations],
+  )
+
+  function togglePanel(key: ServicePanelKey) {
+    setPanelOpen((current) => {
+      const next = !current[key]
+      sessionStorage.setItem(panelStorageKey(serviceId, key), String(next))
+      return { ...current, [key]: next }
+    })
+  }
+
+  function toggleLocationPanel(locationId: string) {
+    setLocationPanels((current) => ({ ...current, [locationId]: !current[locationId] }))
+  }
 
   function updateRuntimeDraftField(
     locationId: string,
@@ -266,14 +340,16 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
       return
     }
     setNodeViewerEntry(result.node)
+    setNodeActionResults((current) => ({ ...current, [locationId]: result }))
     setRuntimeMessage(
-      action === 'inspect'
-        ? 'Node viewer refreshed.'
-        : action === 'deploy'
-          ? 'Node deployed.'
-          : action === 'upgrade'
-            ? 'Node updated.'
-            : 'Node restarted.',
+      result.message ||
+        (action === 'inspect'
+          ? 'Node viewer refreshed.'
+          : action === 'deploy'
+            ? 'Node deployed.'
+            : action === 'upgrade'
+              ? 'Node updated.'
+              : 'Node restarted.'),
     )
   }
 
@@ -624,13 +700,19 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         </div>
       )}
 
-      {/* Ports + firewall */}
-      {runResult && (runResult.ports.length > 0 || runResult.firewall_active !== undefined) && (
-        <section className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
-          <h3 className="text-sm font-medium text-gray-300 mb-3 flex items-center gap-2">
-            <Server className="w-4 h-4 text-cyan-400" />
-            Network
-          </h3>
+      <AccordionSection
+        title="Network"
+        icon={<Server className="w-4 h-4 text-cyan-400" />}
+        open={Boolean(panelOpen.network)}
+        onToggle={() => togglePanel('network')}
+        summary={
+          runResult
+            ? `${runResult.ports.length} open ports · firewall ${runResult.firewall_status || (runResult.firewall_active ? 'active' : 'inactive')}`
+            : 'No network snapshot captured yet'
+        }
+      >
+        {runResult ? (
+          <>
           <div className="flex flex-wrap gap-2 mb-2">
             {runResult.ports.map((p) => (
               <span key={p.port} className="font-mono text-sm bg-gray-800 text-cyan-400 px-3 py-1 rounded-md">
@@ -646,14 +728,22 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
               {runResult.firewall_status || (runResult.firewall_active ? 'active' : 'inactive')}
             </span>
           </div>
-        </section>
-      )}
+          </>
+        ) : (
+          <div className="text-sm text-gray-500">No network snapshot captured yet.</div>
+        )}
+      </AccordionSection>
 
       {service && (
-        <section className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <AccordionSection
+          title="Runtime"
+          icon={<RefreshCw className="h-4 w-4 text-cyan-400" />}
+          open={Boolean(panelOpen.runtime)}
+          onToggle={() => togglePanel('runtime')}
+          summary={`${service.locations.length} locations · ${runtimeAttentionCount} need attention`}
+        >
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <h3 className="text-sm font-medium text-gray-300">Runtime</h3>
               <div className="mt-1 text-xs text-gray-500">
                 Per-location ports, health checks, run-command hints, and node sync.
               </div>
@@ -710,26 +800,44 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
               const latestSync = nodeSyncByLocation.get(location.location_id)
               const nodeViewer = nodeViewerByLocation.get(location.location_id)
               const serverMeta = servers.find((server) => server.server_id === location.server_id)
+              const nodeTransition = nodeActionResults[location.location_id]
+              const locationOpen = Boolean(locationPanels[location.location_id])
               const portsValue = location.runtime.expected_ports.join(', ')
               return (
                 <div key={location.location_id} className="rounded-xl border border-gray-800 bg-gray-950 p-4">
-                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <div className="text-xs uppercase tracking-[0.16em] text-gray-500">{location.location_id}</div>
-                      <div className="mt-1 text-sm font-medium text-white">{location.server_id}</div>
-                      <div className="mt-1 font-mono text-xs text-gray-400 break-all">{location.root}</div>
-                      {serverMeta && (
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <button
+                        type="button"
+                        onClick={() => toggleLocationPanel(location.location_id)}
+                        className="min-w-0 flex-1 text-left"
+                      >
+                        <div className="text-xs uppercase tracking-[0.16em] text-gray-500">{location.location_id}</div>
+                        <div className="mt-1 text-sm font-medium text-white">{location.server_id}</div>
+                        <div className="mt-1 font-mono text-xs text-gray-400 break-all">{location.root}</div>
                         <div className="mt-2 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.16em]">
-                          <span className={`rounded-full border px-2 py-1 ${serverMeta.vpn_required ? 'border-amber-400/30 bg-amber-400/10 text-amber-200' : 'border-gray-700 bg-gray-900 text-gray-400'}`}>
-                            {serverMeta.vpn_required ? 'VPN required' : 'No VPN needed'}
+                          {serverMeta && (
+                            <>
+                              <span className={`rounded-full border px-2 py-1 ${serverMeta.vpn_required ? 'border-amber-400/30 bg-amber-400/10 text-amber-200' : 'border-gray-700 bg-gray-900 text-gray-400'}`}>
+                                {serverMeta.vpn_required ? 'VPN required' : 'No VPN needed'}
+                              </span>
+                              <span className={`rounded-full border px-2 py-1 ${serverMeta.deployment_mode === 'local_bundle_only' ? 'border-cyan-400/30 bg-cyan-400/10 text-cyan-200' : 'border-gray-700 bg-gray-900 text-gray-400'}`}>
+                                {serverMeta.deployment_mode === 'local_bundle_only' ? 'Local bundle only' : 'Native agent allowed'}
+                              </span>
+                            </>
+                          )}
+                          <span className="rounded-full border border-gray-700 bg-gray-900 px-2 py-1 text-gray-300">
+                            install {nodeViewer?.installed_version || 'not installed'}
                           </span>
-                          <span className={`rounded-full border px-2 py-1 ${serverMeta.deployment_mode === 'local_bundle_only' ? 'border-cyan-400/30 bg-cyan-400/10 text-cyan-200' : 'border-gray-700 bg-gray-900 text-gray-400'}`}>
-                            {serverMeta.deployment_mode === 'local_bundle_only' ? 'Local bundle only' : 'Native agent allowed'}
+                          <span className="rounded-full border border-gray-700 bg-gray-900 px-2 py-1 text-gray-300">
+                            bootstrap {nodeViewer?.bootstrap_ready ? 'ready' : 'not ready'}
+                          </span>
+                          <span className="rounded-full border border-gray-700 bg-gray-900 px-2 py-1 text-gray-300">
+                            runtime {nodeViewer?.runtime_status || 'missing'}
                           </span>
                         </div>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
+                      </button>
+                      <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
                         onClick={() => handleNodeAction('inspect', location.location_id)}
@@ -749,7 +857,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                             : 'border-gray-700 text-gray-200 hover:border-cyan-500 hover:text-white'
                         }`}
                       >
-                        {nodeViewer?.node_present ? 'Update Node' : 'Deploy Node'}
+                        {!nodeViewer?.node_present ? 'Deploy Latest Node' : nodeViewer?.needs_upgrade ? 'Update Node' : 'Refresh Latest Node'}
                       </button>
                       <button
                         type="button"
@@ -785,7 +893,10 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                         {syncingToLocation === location.location_id ? 'Syncing…' : 'Sync To Node'}
                       </button>
                     </div>
-                  </div>
+                    </div>
+
+                    {locationOpen && (
+                      <>
 
                   <div className="mt-4 rounded-xl border border-gray-800 bg-gray-900 p-3">
                     <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Node Viewer</div>
@@ -799,6 +910,16 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                         {nodeViewer.node_present && !nodeViewer.bootstrap_ready && (
                           <div className="md:col-span-2 text-xs text-amber-200">
                             Node scaffold is present, but sync stays blocked until bootstrap writes the first task entry.
+                          </div>
+                        )}
+                        {nodeTransition?.before && nodeTransition?.after && (
+                          <div className="md:col-span-2 mt-2 rounded-lg border border-amber-900/40 bg-amber-950/20 px-3 py-2 text-xs text-amber-100">
+                            <div className="uppercase tracking-[0.14em] text-amber-300">Latest action delta</div>
+                            <div className="mt-1 flex flex-wrap gap-4">
+                              <span>Installed: {nodeTransition.before.installed_version || 'none'} → {nodeTransition.after.installed_version || 'none'}</span>
+                              <span>Bootstrap: {nodeTransition.before.bootstrap_ready ? 'ready' : 'not ready'} → {nodeTransition.after.bootstrap_ready ? 'ready' : 'not ready'}</span>
+                              <span>Runtime: {nodeTransition.before.runtime_status} → {nodeTransition.after.runtime_status}</span>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -958,18 +1079,26 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                       )}
                     </div>
                   </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               )
             })}
           </div>
-        </section>
+        </AccordionSection>
       )}
 
       {service && (
-        <section className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <AccordionSection
+          title="Managed Docs"
+          icon={<FileStack className="h-4 w-4 text-cyan-400" />}
+          open={Boolean(panelOpen.managed_docs)}
+          onToggle={() => togglePanel('managed_docs')}
+          summary={`${enabledManagedDocs.length} enabled${latestManagedDocGeneratedAt ? ` · latest ${new Date(latestManagedDocGeneratedAt).toLocaleString()}` : ''}`}
+        >
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <h3 className="text-sm font-medium text-gray-300">Managed Docs</h3>
               <div className="mt-1 text-xs text-gray-500">
                 Framework-owned derived docs generated from <code>switchboard/local/tasks-completed.md</code>.
               </div>
@@ -1105,32 +1234,45 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
               <div className="mt-2 text-sm text-gray-500">No doc index metadata synced from the node yet.</div>
             )}
           </div>
-        </section>
+        </AccordionSection>
       )}
 
       {service && service.task_ledger && service.task_ledger.length > 0 && (
-        <section className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <AccordionSection
+          title="Task Ledger"
+          icon={<FileStack className="h-4 w-4 text-cyan-400" />}
+          open={Boolean(panelOpen.task_ledger)}
+          onToggle={() => togglePanel('task_ledger')}
+          summary={`${service.task_ledger.length} entries · latest ${new Date(service.task_ledger[0].timestamp).toLocaleString()}`}
+        >
           <TaskLedgerPanel tasks={service.task_ledger} />
-        </section>
+        </AccordionSection>
       )}
 
-      {/* Repos */}
-      <section className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
-        <h3 className="text-sm font-medium text-gray-300 mb-3">Repositories</h3>
+      <AccordionSection
+        title="Repositories"
+        icon={<FolderTree className="h-4 w-4 text-cyan-400" />}
+        open={Boolean(panelOpen.repositories)}
+        onToggle={() => togglePanel('repositories')}
+        summary={`${repos.length} tracked repositories`}
+      >
         <RepoSummary
           serviceId={serviceId}
           repos={repos}
           allowedPaths={service?.allowed_git_pull_paths}
           disabled={offline}
         />
-      </section>
+      </AccordionSection>
 
-      <section className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
+      <AccordionSection
+        title="Scope"
+        icon={<FolderTree className="h-4 w-4 text-cyan-400" />}
+        open={Boolean(panelOpen.scope)}
+        onToggle={() => togglePanel('scope')}
+        summary={`${scopeSummary.repo} repo · ${scopeSummary.doc} doc · ${scopeSummary.log} log · ${scopeSummary.exclude} exclude`}
+      >
         <div className="mb-3 flex items-center justify-between gap-3">
-          <h3 className="flex items-center gap-2 text-sm font-medium text-gray-300">
-            <FolderTree className="h-4 w-4 text-cyan-400" />
-            Scope
-          </h3>
+          <div className="text-xs text-gray-500">Scope summary, detailed entries, and collected file downloads live here.</div>
           <div className="flex items-center gap-2">
             {editingScope ? (
               <>
@@ -1313,33 +1455,56 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
             </div>
           </div>
         )}
-      </section>
-
-      {/* Downloads */}
-      <section className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
-        <h3 className="text-sm font-medium text-gray-300 mb-3">Files</h3>
-        <DownloadPanel serviceId={serviceId} docs={docs} logs={logs} disabled={offline} />
-      </section>
+        <div className="mt-4 rounded-xl border border-gray-800 bg-gray-950 p-4">
+          <div className="mb-3 text-xs uppercase tracking-[0.16em] text-gray-500">Collected Files</div>
+          <div className="mb-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-lg border border-gray-800 bg-gray-900 px-3 py-3">
+              <div className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Repositories</div>
+              <div className="mt-1 text-lg font-medium text-white">{repos.length}</div>
+            </div>
+            <div className="rounded-lg border border-gray-800 bg-gray-900 px-3 py-3">
+              <div className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Documents</div>
+              <div className="mt-1 text-lg font-medium text-white">{docs.length}</div>
+            </div>
+            <div className="rounded-lg border border-gray-800 bg-gray-900 px-3 py-3">
+              <div className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Logs</div>
+              <div className="mt-1 text-lg font-medium text-white">{logs.length}</div>
+            </div>
+          </div>
+          <DownloadPanel serviceId={serviceId} docs={docs} logs={logs} disabled={offline} />
+        </div>
+      </AccordionSection>
 
       {service && (
-        <section className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-gray-300">
-            <FileStack className="h-4 w-4 text-cyan-400" />
-            Pull bundles
-          </h3>
+        <AccordionSection
+          title="Pull Bundles"
+          icon={<FileStack className="h-4 w-4 text-cyan-400" />}
+          open={Boolean(panelOpen.pull_bundles)}
+          onToggle={() => togglePanel('pull_bundles')}
+          summary={bundleHistoryMeta.count > 0 ? `${bundleHistoryMeta.count} bundles · latest ${new Date(bundleHistoryMeta.latestCreatedAt).toLocaleString()}` : 'No bundle history yet'}
+        >
           <PullBundlePanel service={service} disabled={offline} />
-        </section>
+        </AccordionSection>
       )}
 
-      {/* Secret paths */}
-      <section className="mb-6">
+      <AccordionSection
+        title="Secret Paths"
+        icon={<FileStack className="h-4 w-4 text-cyan-400" />}
+        open={Boolean(panelOpen.secret_paths)}
+        onToggle={() => togglePanel('secret_paths')}
+        summary="Protected path exposure checks"
+      >
         <SecretPathGuard serviceId={serviceId} disabled={offline} />
-      </section>
+      </AccordionSection>
 
-      {/* Run history */}
-      {runs.length > 0 && (
-        <section className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-          <h3 className="text-sm font-medium text-gray-300 mb-3">Run History</h3>
+      <AccordionSection
+        title="Run History"
+        icon={<RefreshCw className="h-4 w-4 text-cyan-400" />}
+        open={Boolean(panelOpen.run_history)}
+        onToggle={() => togglePanel('run_history')}
+        summary={runs.length > 0 ? `${runs.length} runs · latest ${new Date(runs[0].timestamp).toLocaleString()}` : 'No run history yet'}
+      >
+        {runs.length > 0 ? (
           <ul className="space-y-2">
             {runs.slice(0, 5).map((r) => (
               <li key={r.run_id} className="flex items-center justify-between text-sm">
@@ -1350,8 +1515,10 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
               </li>
             ))}
           </ul>
-        </section>
-      )}
+        ) : (
+          <div className="text-sm text-gray-500">No run history captured yet.</div>
+        )}
+      </AccordionSection>
 
       {confirmOpen && confirmAction && ACTION_EXPLAIN[confirmAction] && (
         <ConfirmationModal

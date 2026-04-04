@@ -5,6 +5,7 @@ import type { PullBundleRecord, ScopeEntry, Service } from '../types/switchboard
 import { isApiError } from '../types/switchboard'
 import { StatusBadge } from './StatusBadge'
 import { ConfirmationModal, ACTION_EXPLAIN } from './ConfirmationModal'
+import { AccordionSection } from './AccordionSection'
 
 interface Props {
   service: Service
@@ -34,6 +35,9 @@ export function PullBundlePanel({ service, disabled }: Props) {
   const [expandedHistory, setExpandedHistory] = useState<Record<string, boolean>>({})
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [pendingActions, setPendingActions] = useState<Record<string, boolean>>({})
+  const [createOpen, setCreateOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [leftOutOpen, setLeftOutOpen] = useState(false)
 
   useEffect(() => {
     const keys = Object.keys(sessionStorage)
@@ -55,15 +59,17 @@ export function PullBundlePanel({ service, disabled }: Props) {
     () => service.scope_entries.filter((entry) => entry.enabled && entry.kind !== 'exclude'),
     [service.scope_entries],
   )
+  const savedScopeSummary = useMemo(() => {
+    const counts = { repo: 0, doc: 0, log: 0 }
+    for (const entry of savedScope) {
+      if (entry.kind === 'repo' || entry.kind === 'doc' || entry.kind === 'log') counts[entry.kind] += 1
+    }
+    return counts
+  }, [savedScope])
   const latestBundleWithFiles = useMemo(() => {
     if (bundleResult?.files?.length) return bundleResult
     return history.find((bundle) => (bundle.files?.length ?? 0) > 0) ?? null
   }, [bundleResult, history])
-
-  function matchingFilesForScope(scopePath: string) {
-    const files = latestBundleWithFiles?.files ?? []
-    return files.filter((file) => file.source_path.startsWith(scopePath))
-  }
 
   function addExtraInclude() {
     const trimmed = includePath.trim()
@@ -132,13 +138,15 @@ export function PullBundlePanel({ service, disabled }: Props) {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
+      <AccordionSection
+        title="Create Bundle"
+        open={createOpen}
+        onToggle={() => setCreateOpen((current) => !current)}
+        icon={<PackagePlus className="h-4 w-4 text-cyan-400" />}
+        summary={`${savedScope.length} saved entries · ${extraIncludes.length} one-run extras · ${extraExcludes.split('\n').map((line) => line.trim()).filter(Boolean).length} excludes`}
+      >
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2 text-sm font-medium text-white">
-              <PackagePlus className="h-4 w-4 text-cyan-400" />
-              Create pull bundle
-            </div>
             <p className="mt-1 text-sm text-gray-500">
               Pull saved scope plus one-run extras into a versioned local mirror of the source tree.
             </p>
@@ -155,35 +163,23 @@ export function PullBundlePanel({ service, disabled }: Props) {
 
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <div className="rounded-xl border border-gray-800 bg-gray-900 p-3">
-            <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Saved scope</div>
-            <div className="mt-3 space-y-2">
-              {savedScope.length === 0 ? (
-                <div className="text-sm text-gray-500">No saved scope entries yet.</div>
-              ) : (
-                savedScope.map((entry) => (
-                  <div key={`${entry.kind}:${entry.path}`} className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="font-mono text-xs text-gray-300 break-all">{entry.path}</div>
-                        {matchingFilesForScope(entry.path).length > 0 && (
-                          <div className="mt-2 max-h-32 space-y-1 overflow-auto rounded border border-gray-800 bg-black/20 p-2">
-                            {matchingFilesForScope(entry.path)
-                              .slice(0, 20)
-                              .map((file) => (
-                                <div key={`${file.target_path}:${file.sha256}`} className="font-mono text-[11px] text-gray-400 break-all">
-                                  {file.relative_path}
-                                </div>
-                              ))}
-                          </div>
-                        )}
-                      </div>
-                      <span className="rounded-full border border-gray-700 px-2 py-0.5 text-[11px] uppercase tracking-[0.14em] text-cyan-300">
-                        {entry.kind}
-                      </span>
-                    </div>
-                  </div>
-                ))
-              )}
+            <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Saved scope summary</div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-3 text-sm text-gray-300">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Repo</div>
+                <div className="mt-1 text-lg font-medium text-white">{savedScopeSummary.repo}</div>
+              </div>
+              <div className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-3 text-sm text-gray-300">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Doc</div>
+                <div className="mt-1 text-lg font-medium text-white">{savedScopeSummary.doc}</div>
+              </div>
+              <div className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-3 text-sm text-gray-300">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Log</div>
+                <div className="mt-1 text-lg font-medium text-white">{savedScopeSummary.log}</div>
+              </div>
+            </div>
+            <div className="mt-3 text-xs text-gray-500">
+              Saved scope paths are managed in the Scope panel. Bundle creation uses that snapshot without repeating the full list here.
             </div>
           </div>
 
@@ -337,13 +333,15 @@ export function PullBundlePanel({ service, disabled }: Props) {
             </div>
           </div>
         )}
-      </div>
+      </AccordionSection>
 
-      <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
-        <div className="flex items-center gap-2 text-sm font-medium text-white">
-          <Download className="h-4 w-4 text-cyan-400" />
-          Bundle history
-        </div>
+      <AccordionSection
+        title="Bundle History"
+        open={historyOpen}
+        onToggle={() => setHistoryOpen((current) => !current)}
+        icon={<Download className="h-4 w-4 text-cyan-400" />}
+        summary={history.length > 0 ? `${history.length} bundles · latest ${new Date(history[0].created_at).toLocaleString()}` : 'No bundle history yet'}
+      >
         <div className="mt-3 space-y-3">
           {history.length === 0 ? (
             <div className="text-sm text-gray-500">No bundle history yet.</div>
@@ -492,13 +490,15 @@ export function PullBundlePanel({ service, disabled }: Props) {
             ))
           )}
         </div>
-      </div>
+      </AccordionSection>
 
-      <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
-        <div className="flex items-center gap-2 text-sm font-medium text-white mb-3">
-          <Archive className="h-4 w-4 text-gray-500" />
-          Left Out Scope
-        </div>
+      <AccordionSection
+        title="Left Out"
+        open={leftOutOpen}
+        onToggle={() => setLeftOutOpen((current) => !current)}
+        icon={<Archive className="h-4 w-4 text-gray-500" />}
+        summary={`${service.scope_entries.filter(e => e.kind === 'exclude' && e.enabled).length} saved excludes · ${(latestBundleWithFiles?.skipped_entries ?? []).length} skipped entries`}
+      >
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-lg border border-gray-800 bg-gray-900 p-3">
             <div className="text-xs uppercase tracking-[0.16em] text-gray-500 mb-2">Saved Excludes</div>
@@ -539,7 +539,7 @@ export function PullBundlePanel({ service, disabled }: Props) {
             </div>
           </div>
         </div>
-      </div>
+      </AccordionSection>
 
       {confirmOpen && ACTION_EXPLAIN['pull_bundle'] && (
         <ConfirmationModal
