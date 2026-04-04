@@ -7,9 +7,11 @@ import type { ProjectManifest } from '../types/switchboard'
 interface Props {
   workspaceId: string
   offline: boolean
+  workspaceName?: string
+  workspaceNotes?: string
 }
 
-export function ProjectsPanel({ workspaceId, offline }: Props) {
+export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNotes }: Props) {
   const [projects, setProjects] = useState<ProjectManifest[]>([])
   const [expanded, setExpanded] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -194,6 +196,16 @@ export function ProjectsPanel({ workspaceId, offline }: Props) {
             <div className="text-xs text-gray-600 italic">No projects found.</div>
           ) : (
             <div className="space-y-4">
+              <div className="border border-amber-900/40 bg-amber-950/10 rounded-xl overflow-hidden">
+                <div className="p-3 flex items-center justify-between bg-amber-950/20">
+                  <div>
+                    <div className="text-sm font-medium text-amber-100">{workspaceName || workspaceId}</div>
+                    <div className="text-[10px] text-amber-300/70 font-mono mt-0.5">{workspaceId}</div>
+                  </div>
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-amber-300">root project</div>
+                </div>
+                {workspaceNotes && <div className="px-3 pb-3 text-xs text-amber-100/80">{workspaceNotes}</div>}
+              </div>
               {rootProjects.map(p => (
                 <div key={p.project_id} className="border border-gray-800 bg-gray-950 rounded-xl overflow-hidden">
                   <div className="p-3 flex items-center justify-between bg-gray-900/50">

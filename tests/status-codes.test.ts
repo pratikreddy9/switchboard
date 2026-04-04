@@ -37,7 +37,7 @@ describe('404 handling', () => {
 describe('git-pull safety', () => {
   it('refuses non-allowlisted path with error status', async () => {
     if (!backendUp) return
-    const res = await fetch(`${BASE}/services/docgenerator/actions/git-pull`, {
+    const res = await fetch(`${BASE}/services/aichat/actions/git-pull`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ repo_path: '/etc/passwd' }),
@@ -48,7 +48,7 @@ describe('git-pull safety', () => {
 
   it('refuses empty repo_path', async () => {
     if (!backendUp) return
-    const res = await fetch(`${BASE}/services/docgenerator/actions/git-pull`, {
+    const res = await fetch(`${BASE}/services/aichat/actions/git-pull`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ repo_path: '' }),

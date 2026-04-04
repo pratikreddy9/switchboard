@@ -36,6 +36,7 @@ import type {
   ServerRecord,
   ScopeEntry,
   ManagedDocConfig,
+  NodeViewerEntry,
   Workspace,
   WorkspaceLatest,
 } from '../types/switchboard'
@@ -80,6 +81,7 @@ function normalizeService(service: any) {
     runtime_checks: (service.runtime_checks ?? []).map(normalizeRuntimeCheck),
     node_sync: (service.node_sync ?? []).map(normalizeNodeSync),
     task_ledger: (service.task_ledger ?? []).map(normalizeTaskLedgerEntry),
+    node_viewer: (service.node_viewer ?? []).map(normalizeNodeViewer),
   } satisfies Service
 }
 
@@ -243,6 +245,32 @@ function normalizeNodeSync(result: any): NodeSyncResult {
     include_runtime_config: result.include_runtime_config ?? true,
     managed_docs: (result.managed_docs ?? []).map(normalizeManagedDoc),
     doc_index: result.doc_index ? normalizeDocIndex(result.doc_index) : undefined,
+  }
+}
+
+function normalizeNodeViewer(result: any): NodeViewerEntry {
+  return {
+    service_id: result.service_id ?? '',
+    location_id: result.location_id ?? '',
+    server_id: result.server_id ?? '',
+    root: result.root ?? '',
+    node_present: Boolean(result.node_present),
+    bootstrap_ready: Boolean(result.bootstrap_ready),
+    runtime_ready: Boolean(result.runtime_ready),
+    installed_version: result.installed_version ?? '',
+    bootstrap_version: result.bootstrap_version ?? '',
+    manifest_updated_at: result.manifest_updated_at ?? '',
+    runtime_status: result.runtime_status ?? 'missing',
+    runtime_pid: typeof result.runtime_pid === 'number' ? result.runtime_pid : undefined,
+    runtime_port: result.runtime_port ?? 8010,
+    needs_install: Boolean(result.needs_install),
+    needs_upgrade: Boolean(result.needs_upgrade),
+    needs_bootstrap: Boolean(result.needs_bootstrap),
+    attention_reason: result.attention_reason ?? '',
+    manifest_path: result.manifest_path ?? '',
+    runtime_dir: result.runtime_dir ?? '',
+    log_file: result.log_file ?? '',
+    last_error: result.last_error ?? '',
   }
 }
 
@@ -592,6 +620,62 @@ export const syncToNode = (
       sync: normalizeNodeSync(res.sync),
       node_manifest_path: res.node_manifest_path,
     }
+  })
+
+export const getNodeViewer = (
+  id: string,
+): Promise<ApiResult<{ locations: NodeViewerEntry[] }>> =>
+  apiFetch<any>(`/services/${id}/node-viewer`).then((res) => {
+    if (isApiError(res)) return res
+    return { locations: (res.locations ?? []).map(normalizeNodeViewer) }
+  })
+
+export const inspectNode = (
+  id: string,
+  locationId?: string,
+): Promise<ApiResult<{ node: NodeViewerEntry }>> =>
+  apiFetch<any>(`/services/${id}/actions/node-inspect`, {
+    method: 'POST',
+    body: JSON.stringify({ location_id: locationId }),
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return { node: normalizeNodeViewer(res.node) }
+  })
+
+export const deployNode = (
+  id: string,
+  locationId?: string,
+): Promise<ApiResult<{ node: NodeViewerEntry }>> =>
+  apiFetch<any>(`/services/${id}/actions/node-deploy`, {
+    method: 'POST',
+    body: JSON.stringify({ location_id: locationId }),
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return { node: normalizeNodeViewer(res.node) }
+  })
+
+export const upgradeNode = (
+  id: string,
+  locationId?: string,
+): Promise<ApiResult<{ node: NodeViewerEntry }>> =>
+  apiFetch<any>(`/services/${id}/actions/node-upgrade`, {
+    method: 'POST',
+    body: JSON.stringify({ location_id: locationId }),
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return { node: normalizeNodeViewer(res.node) }
+  })
+
+export const restartNode = (
+  id: string,
+  locationId?: string,
+): Promise<ApiResult<{ node: NodeViewerEntry }>> =>
+  apiFetch<any>(`/services/${id}/actions/node-restart`, {
+    method: 'POST',
+    body: JSON.stringify({ location_id: locationId }),
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return { node: normalizeNodeViewer(res.node) }
   })
 
 export const createPullBundle = (

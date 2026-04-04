@@ -372,11 +372,16 @@ class PullBundleRequest(BaseModel):
     runtime_password: str | None = None
     extra_includes: list[ScopeEntry] = Field(default_factory=list)
     extra_excludes: list[str] = Field(default_factory=list)
+    note: str = ""
 
 
 class RuntimeActionRequest(BaseModel):
     location_id: str | None = None
     runtime_password: str | None = None
+
+
+class NodeActionRequest(RuntimeActionRequest):
+    pass
 
 
 class NodeSyncRequest(BaseModel):
@@ -390,6 +395,52 @@ class NodeSyncRequest(BaseModel):
 
 class ActionLockRequest(BaseModel):
     action_key: str
+
+
+class PullBundleDiffEntry(BaseModel):
+    change: Literal["added", "removed", "changed"]
+    relative_path: str
+    kind: Literal["repo", "doc", "log"]
+
+
+class PullBundleDiffSummary(BaseModel):
+    added_count: int = 0
+    removed_count: int = 0
+    changed_count: int = 0
+    unchanged_count: int = 0
+    summary: str = ""
+
+
+class ExposureFinding(BaseModel):
+    relative_path: str
+    finding_kind: str
+    variable_name: str = ""
+    line_number: int = 0
+    redacted: bool = True
+
+
+class NodeInspectResult(BaseModel):
+    service_id: str
+    location_id: str
+    server_id: str
+    root: str
+    node_present: bool = False
+    bootstrap_ready: bool = False
+    runtime_ready: bool = False
+    installed_version: str = ""
+    bootstrap_version: str = ""
+    manifest_updated_at: str = ""
+    runtime_status: Literal["running", "stopped", "running_unmanaged", "missing"] = "missing"
+    runtime_pid: int | None = None
+    runtime_port: int = 8010
+    needs_install: bool = False
+    needs_upgrade: bool = False
+    needs_bootstrap: bool = False
+    attention_reason: str = ""
+    manifest_path: str = ""
+    runtime_dir: str = ""
+    log_file: str = ""
+    last_error: str = ""
 
 
 class ProjectCreateRequest(BaseModel):

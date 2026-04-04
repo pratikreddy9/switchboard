@@ -105,7 +105,7 @@ describe('GET /api/workspaces/:id/latest', () => {
 describe('GET /api/services/:id', () => {
   it('returns { service: {...} } wrapper with required fields', async () => {
     if (!backendUp) return
-    const { status, body } = await get('/services/docgenerator')
+    const { status, body } = await get('/services/aichat')
     expect(status).toBe(200)
     expect(body).toHaveProperty('service')
     for (const field of ['service_id', 'workspace_id', 'display_name', 'locations', 'tags']) {
@@ -115,7 +115,7 @@ describe('GET /api/services/:id', () => {
 
   it('includes runtime config on locations', async () => {
     if (!backendUp) return
-    const { status, body } = await get('/services/docgenerator')
+    const { status, body } = await get('/services/aichat')
     expect(status).toBe(200)
     expect(Array.isArray(body.service.locations)).toBe(true)
     if (body.service.locations.length > 0) {
@@ -128,7 +128,7 @@ describe('GET /api/services/:id', () => {
 describe('GET /api/services/:id/secret-paths', () => {
   it('returns count field (never exposes paths in contract)', async () => {
     if (!backendUp) return
-    const { status, body } = await get('/services/docgenerator/secret-paths')
+    const { status, body } = await get('/services/aichat/secret-paths')
     expect(status).toBe(200)
     expect(body).toHaveProperty('count')
     expect(typeof body.count).toBe('number')

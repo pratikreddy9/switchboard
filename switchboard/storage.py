@@ -100,7 +100,7 @@ class SnapshotStore:
         write_json(self.settings.private_state_dir / "repo-safety-findings.json", {"generated": generated, "checks": []})
         write_json(
             self.settings.private_state_dir / "runtime-cache.json",
-            {"generated": generated, "runtime_checks": {}, "node_sync": {}},
+            {"generated": generated, "runtime_checks": {}, "node_sync": {}, "action_locks": {}, "task_ledger": {}, "node_viewer": {}},
         )
         return {
             "workspace_registry": workspace_registry,
@@ -114,7 +114,7 @@ class SnapshotStore:
     def _read_runtime_cache(self) -> dict[str, Any]:
         return read_json(
             self._runtime_cache_path(),
-            {"generated": utc_now_iso(), "runtime_checks": {}, "node_sync": {}, "action_locks": {}, "task_ledger": {}},
+            {"generated": utc_now_iso(), "runtime_checks": {}, "node_sync": {}, "action_locks": {}, "task_ledger": {}, "node_viewer": {}},
         )
 
     def _write_runtime_cache(self, cache: dict[str, Any]) -> None:
@@ -122,6 +122,7 @@ class SnapshotStore:
         cache.setdefault("node_sync", {})
         cache.setdefault("action_locks", {})
         cache.setdefault("task_ledger", {})
+        cache.setdefault("node_viewer", {})
         cache["generated"] = cache.get("generated") or utc_now_iso()
         write_json(self._runtime_cache_path(), cache)
 
@@ -247,6 +248,22 @@ class SnapshotStore:
             "tasks": all_tasks,
             "task_count": len(all_tasks),
         }
+
+    def persist_node_viewer(self, service_id: str, location_id: str, record: dict[str, Any]) -> dict[str, Any]:
+        cache = self._read_runtime_cache()
+        viewer = cache.setdefault("node_viewer", {})
+        service_viewer = viewer.setdefault(service_id, {})
+        service_viewer[location_id] = record
+        cache["generated"] = utc_now_iso()
+        self._write_runtime_cache(cache)
+        return record
+
+    def get_service_node_viewer(self, service_id: str) -> list[dict[str, Any]]:
+        cache = self._read_runtime_cache()
+        service_viewer = cache.get("node_viewer", {}).get(service_id, {})
+        rows = list(service_viewer.values())
+        rows.sort(key=lambda entry: entry.get("location_id", ""))
+        return rows
 
     def persist_collect_snapshot(self, snapshot: dict[str, Any]) -> dict[str, Any]:
         generated = snapshot["generated"]

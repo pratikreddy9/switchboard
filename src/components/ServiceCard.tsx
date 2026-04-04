@@ -13,6 +13,7 @@ export function ServiceCard({ service, result, onClick }: Props) {
   const ports = result?.ports ?? []
   const firewallActive = result?.firewall_active ?? false
   const dirty = result?.repo_summaries?.some((r) => r.dirty) ?? false
+  const nodeViewer = service.node_viewer?.[0]
 
   return (
     <button
@@ -46,6 +47,21 @@ export function ServiceCard({ service, result, onClick }: Props) {
         </div>
       )}
 
+      {nodeViewer && (
+        <div className="mb-3 flex flex-wrap gap-1">
+          <span className={`text-xs px-2 py-0.5 rounded border ${
+            nodeViewer.needs_install || nodeViewer.needs_upgrade
+              ? 'border-amber-700 bg-amber-950/30 text-amber-200'
+              : 'border-gray-800 bg-gray-900 text-gray-400'
+          }`}>
+            node {nodeViewer.installed_version || 'missing'}
+          </span>
+          <span className="text-xs px-2 py-0.5 rounded border border-gray-800 bg-gray-900 text-gray-400">
+            bootstrap {nodeViewer.bootstrap_version || 'pending'}
+          </span>
+        </div>
+      )}
+
       {/* Ports */}
       {ports.length > 0 && (
         <div className="flex flex-wrap gap-1 mb-2">
@@ -69,7 +85,7 @@ export function ServiceCard({ service, result, onClick }: Props) {
             <GitBranch className="w-3 h-3" /> Dirty
           </span>
         )}
-        {result && (
+        {result?.collected_at && !isNaN(new Date(result.collected_at).getTime()) && (
           <span className="ml-auto text-xs text-gray-600">
             {new Date(result.collected_at).toLocaleTimeString()}
           </span>

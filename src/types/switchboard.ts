@@ -252,6 +252,7 @@ export interface Service {
   runtime_checks?: RuntimeCheckResult[]
   node_sync?: NodeSyncResult[]
   task_ledger?: TaskLedgerEntry[]
+  node_viewer?: NodeViewerEntry[]
 }
 
 export interface ServiceRunResult {
@@ -518,6 +519,60 @@ export interface PullBundleRequest {
   runtime_password?: string
   extra_includes: ScopeEntry[]
   extra_excludes: string[]
+  note?: string
+}
+
+export interface ExposureFinding {
+  relative_path: string
+  finding_kind: string
+  variable_name?: string
+  line_number: number
+  redacted: boolean
+}
+
+export interface PullBundleDiffSummary {
+  added_count: number
+  removed_count: number
+  changed_count: number
+  unchanged_count: number
+  summary: string
+}
+
+export interface PullBundleDiffEntry {
+  change: 'added' | 'removed' | 'changed'
+  relative_path: string
+  kind: 'repo' | 'doc' | 'log'
+}
+
+export interface DependencyContext {
+  dependencies: DependencyNode[]
+  cross_dependencies: DependencyNode[]
+  notes: string[]
+  diagram: string
+}
+
+export interface NodeViewerEntry {
+  service_id: string
+  location_id: string
+  server_id: string
+  root: string
+  node_present: boolean
+  bootstrap_ready: boolean
+  runtime_ready: boolean
+  installed_version: string
+  bootstrap_version: string
+  manifest_updated_at: string
+  runtime_status: 'running' | 'stopped' | 'running_unmanaged' | 'missing'
+  runtime_pid?: number
+  runtime_port: number
+  needs_install: boolean
+  needs_upgrade: boolean
+  needs_bootstrap: boolean
+  attention_reason?: string
+  manifest_path: string
+  runtime_dir: string
+  log_file: string
+  last_error?: string
 }
 
 export interface PullBundleRecord {
@@ -533,6 +588,12 @@ export interface PullBundleRecord {
   source_tree_path?: string
   manifest_path: string
   repo_commits: string[]
+  note?: string
+  compared_to_bundle_id?: string
+  diff_summary?: PullBundleDiffSummary
+  diff_entries?: PullBundleDiffEntry[]
+  exposure_findings?: ExposureFinding[]
+  dependency_context?: DependencyContext
   skipped_entry_count?: number
   skipped_entries?: Array<{
     path: string

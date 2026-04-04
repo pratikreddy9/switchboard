@@ -28,6 +28,7 @@ export function PullBundlePanel({ service, disabled }: Props) {
   const [includePathType, setIncludePathType] = useState<'file' | 'dir' | 'glob'>('file')
   const [extraIncludes, setExtraIncludes] = useState<ScopeEntry[]>([])
   const [extraExcludes, setExtraExcludes] = useState('')
+  const [note, setNote] = useState('')
   const [creating, setCreating] = useState(false)
   const [message, setMessage] = useState('')
   const [expandedHistory, setExpandedHistory] = useState<Record<string, boolean>>({})
@@ -112,6 +113,7 @@ export function PullBundlePanel({ service, disabled }: Props) {
           .split('\n')
           .map((line) => line.trim())
           .filter(Boolean),
+        note,
       })
       if (isApiError(result)) {
         setMessage(result.message)
@@ -256,6 +258,17 @@ export function PullBundlePanel({ service, disabled }: Props) {
                 disabled={disabled}
               />
             </label>
+
+            <label className="mt-4 block text-sm text-gray-300">
+              <div className="mb-1">Pull note</div>
+              <textarea
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                className="min-h-24 w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500"
+                placeholder="Optional note for this pull bundle."
+                disabled={disabled}
+              />
+            </label>
           </div>
         </div>
 
@@ -273,6 +286,16 @@ export function PullBundlePanel({ service, disabled }: Props) {
               </div>
               <StatusBadge status="ok" />
             </div>
+            {bundleResult.diff_summary && (
+              <div className="mt-3 rounded-lg border border-amber-800/40 bg-amber-950/20 px-3 py-2 text-xs text-amber-200">
+                {bundleResult.diff_summary.summary}
+              </div>
+            )}
+            {bundleResult.note && (
+              <div className="mt-3 rounded-lg border border-gray-800 bg-black/20 px-3 py-2 text-xs text-gray-200">
+                {bundleResult.note}
+              </div>
+            )}
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               <div className="rounded-lg border border-green-900/40 bg-black/20 p-3">
                 <div className="text-xs uppercase tracking-[0.16em] text-green-300/80">Pulled files</div>
@@ -290,6 +313,11 @@ export function PullBundlePanel({ service, disabled }: Props) {
                 </div>
               </div>
               <div className="rounded-lg border border-yellow-900/40 bg-black/20 p-3">
+                {(bundleResult.exposure_findings?.length ?? 0) > 0 && (
+                  <div className="mb-3 rounded-lg border border-yellow-900/30 bg-yellow-950/20 px-3 py-2 text-xs text-yellow-200">
+                    {bundleResult.exposure_findings?.length} exposure finding{bundleResult.exposure_findings?.length === 1 ? '' : 's'} in pulled files.
+                  </div>
+                )}
                 <div className="text-xs uppercase tracking-[0.16em] text-yellow-200/80">Missed scope</div>
                 <div className="mt-2 max-h-56 space-y-1 overflow-auto">
                   {(bundleResult.skipped_entries ?? []).length === 0 ? (
@@ -343,6 +371,11 @@ export function PullBundlePanel({ service, disabled }: Props) {
                       <div className="mt-1 text-xs text-gray-500">
                         {new Date(bundle.created_at).toLocaleString()} · {bundle.file_count} files
                       </div>
+                      {bundle.diff_summary && (
+                        <div className="mt-2 inline-flex rounded-full border border-amber-900/50 bg-amber-950/20 px-2 py-0.5 text-[11px] text-amber-200">
+                          {bundle.diff_summary.summary}
+                        </div>
+                      )}
                     </div>
                   </button>
                   <div className="text-right text-xs text-gray-400">
@@ -352,7 +385,74 @@ export function PullBundlePanel({ service, disabled }: Props) {
                   </div>
                 </div>
                 {expandedHistory[bundle.bundle_id] && (
-                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <div className="mt-3 space-y-3">
+                    {(bundle.note || bundle.dependency_context || (bundle.exposure_findings?.length ?? 0) > 0) && (
+                      <div className="rounded-lg border border-gray-800 bg-gray-950 p-3">
+                        <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Bundle Notes</div>
+                        {bundle.note && <div className="mt-2 text-sm text-gray-300">{bundle.note}</div>}
+                        {bundle.dependency_context && (
+                          <div className="mt-3 grid gap-3 md:grid-cols-2">
+                            <div>
+                              <div className="text-[11px] uppercase tracking-[0.16em] text-gray-500">Dependencies</div>
+                              <div className="mt-2 space-y-1">
+                                {(bundle.dependency_context.dependencies ?? []).length === 0 ? (
+                                  <div className="text-xs text-gray-600">None</div>
+                                ) : (
+                                  bundle.dependency_context.dependencies?.map((dep, idx) => (
+                                    <div key={idx} className="text-xs text-gray-300">
+                                      {dep.kind} · {dep.name} · {dep.host || 'local'}{dep.port ? `:${dep.port}` : ''}
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-[11px] uppercase tracking-[0.16em] text-gray-500">Cross-System Notes</div>
+                              <div className="mt-2 space-y-1">
+                                {(bundle.dependency_context.cross_dependencies ?? []).length === 0 ? (
+                                  <div className="text-xs text-gray-600">None</div>
+                                ) : (
+                                  bundle.dependency_context.cross_dependencies?.map((dep, idx) => (
+                                    <div key={idx} className="text-xs text-gray-300">
+                                      {dep.kind} · {dep.name} · {dep.host || 'local'}{dep.port ? `:${dep.port}` : ''}
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {(bundle.exposure_findings?.length ?? 0) > 0 && (
+                          <div className="mt-3">
+                            <div className="text-[11px] uppercase tracking-[0.16em] text-yellow-300">Exposure Notes</div>
+                            <div className="mt-2 space-y-1">
+                              {bundle.exposure_findings?.map((finding, idx) => (
+                                <div key={idx} className="text-xs text-yellow-100/90">
+                                  {finding.relative_path} · {finding.finding_kind}{finding.variable_name ? ` · ${finding.variable_name}` : ''} · line {finding.line_number}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {(bundle.diff_entries?.length ?? 0) > 0 && (
+                      <div className="rounded-lg border border-gray-800 bg-gray-950 p-3">
+                        <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Diff</div>
+                        <div className="mt-2 max-h-48 space-y-1 overflow-auto">
+                          {bundle.diff_entries?.map((entry, idx) => (
+                            <div key={`${bundle.bundle_id}:${entry.relative_path}:${idx}`} className="flex items-center gap-2 rounded border border-gray-800 px-2 py-1 text-xs">
+                              <span className={entry.change === 'added' ? 'text-green-400' : entry.change === 'removed' ? 'text-red-400' : 'text-amber-300'}>
+                                {entry.change === 'added' ? '+' : entry.change === 'removed' ? '-' : '~'}
+                              </span>
+                              <span className="font-mono text-gray-300 break-all">{entry.relative_path}</span>
+                              <span className="ml-auto uppercase tracking-[0.14em] text-gray-500">{entry.kind}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  <div className="grid gap-3 md:grid-cols-2">
                     <div className="rounded-lg border border-gray-800 bg-gray-950 p-3">
                       <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Pulled files</div>
                       <div className="mt-2 max-h-56 space-y-1 overflow-auto">
@@ -385,6 +485,7 @@ export function PullBundlePanel({ service, disabled }: Props) {
                         )}
                       </div>
                     </div>
+                  </div>
                   </div>
                 )}
               </div>

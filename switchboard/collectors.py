@@ -11,6 +11,8 @@ import shutil
 import socket
 import stat
 import subprocess
+import sys
+import tempfile
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -19,6 +21,7 @@ from typing import Any, Iterator
 
 from pathspec import PathSpec
 
+from . import __version__
 from .config import Settings
 from .defaults import DEFAULT_EXCLUDE_GLOBS, DEFAULT_SECRET_PATTERNS, GIT_STATUS_COMMANDS, SAFE_REMOTE_COMMANDS
 from .manifests import ManifestStore
@@ -28,6 +31,7 @@ from .models import (
     DownloadRequest,
     GitPushRequest,
     GitPullRequest,
+    NodeActionRequest,
     NodeSyncRequest,
     PullBundleRequest,
     RepoActionRequest,
@@ -37,6 +41,8 @@ from .models import (
     ServicePatchRequest,
     ServiceManifest,
 )
+from .node import install_node, upgrade_node
+from .node_runtime import node_status, start_node_runtime, stop_node_runtime
 from .storage import SnapshotStore, utc_now_iso
 
 SECRET_CONTENT_PATTERNS = [
@@ -46,6 +52,13 @@ SECRET_CONTENT_PATTERNS = [
     ("credential_assignment", re.compile(r"(?i)(api[_-]?key|secret|token|password|passwd|client[_-]?secret)\s*[:=]\s*['\"][^'\"]{4,}['\"]")),
     ("mongodb_uri", re.compile(r"mongodb(?:\+srv)?://[^/\s:@]+:[^/\s:@]+@")),
 ]
+EXPOSURE_LINE_PATTERNS = [
+    ("openai_key", re.compile(r"\bsk-[A-Za-z0-9]{20,}\b")),
+    ("anthropic_key", re.compile(r"\bsk-ant-[A-Za-z0-9\-_]{20,}\b")),
+    ("google_api_key", re.compile(r"\bAIza[0-9A-Za-z\-_]{20,}\b")),
+    ("slack_token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
+    ("generic_token", re.compile(r"(?i)\b(api[_-]?key|secret|token|client[_-]?secret|password)\b")),
+]
 
 
 class CollectionCoordinator:
@@ -53,6 +66,24 @@ class CollectionCoordinator:
         self.settings = settings
         self.manifests = manifests
         self.snapshots = snapshots
+
+    @contextmanager
+    def _action_guard(self, action_key: str, service_id: str, ttl_seconds: int = 900) -> Iterator[dict[str, Any] | None]:
+        lock = self.snapshots.acquire_action_lock(action_key, service_id, ttl_seconds=ttl_seconds)
+        if lock is None:
+            yield {
+                "status": "action_in_progress",
+                "message": f"{action_key} is already running for {service_id}.",
+                "service_id": service_id,
+                "action_key": action_key,
+            }
+            return
+        try:
+            yield None
+            self.snapshots.release_action_lock(action_key, service_id, status="completed")
+        except Exception:
+            self.snapshots.release_action_lock(action_key, service_id, status="failed")
+            raise
 
     def collect_workspace(self, workspace_id: str, request: CollectRequest) -> dict[str, Any]:
         workspace = self.manifests.get_workspace(workspace_id)
@@ -572,161 +603,135 @@ class CollectionCoordinator:
         return {"workspace_id": workspace_id, "results": results, "timestamp": utc_now_iso()}
 
     def sync_from_node(self, service_id: str, request: NodeSyncRequest) -> dict[str, Any]:
-        service = self.manifests.get_service(service_id)
-        location = self._select_location(service, location_id=request.location_id)
-        if location is None:
-            return {"status": "path_missing", "message": "No service location available."}
+        with self._action_guard("sync_from_node", service_id) as lock_error:
+            if lock_error is not None:
+                return lock_error
+            service = self.manifests.get_service(service_id)
+            location = self._select_location(service, location_id=request.location_id)
+            if location is None:
+                return {"status": "path_missing", "message": "No service location available."}
 
-        node_manifest: dict[str, Any] | None = None
-        scope_snapshot: dict[str, Any] | None = None
-        doc_index: dict[str, Any] | None = None
-        server_id = location.server_id
-        server = self.manifests.resolve_server(
-            server_id,
-            {server_id: request.runtime_password} if request.runtime_password else {},
-        )
+            node_manifest: dict[str, Any] | None = None
+            scope_snapshot: dict[str, Any] | None = None
+            doc_index: dict[str, Any] | None = None
+            server_id = location.server_id
+            server = self.manifests.resolve_server(
+                server_id,
+                {server_id: request.runtime_password} if request.runtime_password else {},
+            )
 
-        completed_tasks: dict[str, Any] | None = None
+            completed_tasks: dict[str, Any] | None = None
 
-        if server.connection_type == "local":
-            node_manifest_path = self._local_node_manifest_path(location.root)
-            scope_snapshot_path = self._local_scope_snapshot_path(location.root)
-            doc_index_path = self._local_doc_index_path(location.root)
-            node_manifest = self._read_local_json(node_manifest_path)
-            scope_snapshot = self._read_local_json(scope_snapshot_path)
-            doc_index = self._read_local_json(doc_index_path)
-            if request.include_task_ledger:
-                completed_tasks = self._read_local_json(self._local_completed_tasks_path(location.root))
-        else:
-            with self._open_ssh(server) as connection:
-                if connection is None:
-                    return {"status": "unreachable", "message": "SSH connection failed."}
-                _, sftp = connection
-                node_manifest = self._read_remote_json(sftp, self._remote_node_manifest_path(location.root))
-                scope_snapshot = self._read_remote_json(sftp, self._remote_scope_snapshot_path(location.root))
-                doc_index = self._read_remote_json(sftp, self._remote_doc_index_path(location.root))
+            if server.connection_type == "local":
+                node_manifest_path = self._local_node_manifest_path(location.root)
+                scope_snapshot_path = self._local_scope_snapshot_path(location.root)
+                doc_index_path = self._local_doc_index_path(location.root)
+                node_manifest = self._read_local_json(node_manifest_path)
+                scope_snapshot = self._read_local_json(scope_snapshot_path)
+                doc_index = self._read_local_json(doc_index_path)
                 if request.include_task_ledger:
-                    completed_tasks = self._read_remote_json(sftp, self._remote_completed_tasks_path(location.root))
+                    completed_tasks = self._read_local_json(self._local_completed_tasks_path(location.root))
+            else:
+                with self._open_ssh(server) as connection:
+                    if connection is None:
+                        return {"status": "unreachable", "message": "SSH connection failed."}
+                    _, sftp = connection
+                    node_manifest = self._read_remote_json(sftp, self._remote_node_manifest_path(location.root))
+                    scope_snapshot = self._read_remote_json(sftp, self._remote_scope_snapshot_path(location.root))
+                    doc_index = self._read_remote_json(sftp, self._remote_doc_index_path(location.root))
+                    if request.include_task_ledger:
+                        completed_tasks = self._read_remote_json(sftp, self._remote_completed_tasks_path(location.root))
 
-        if not node_manifest:
-            return {"status": "path_missing", "message": "Node manifest not found at selected location."}
+            if not node_manifest:
+                return {"status": "path_missing", "message": "Node manifest not found at selected location."}
+            if request.include_task_ledger and completed_tasks and completed_tasks.get("tasks"):
+                self.snapshots.persist_task_ledger(service_id, location.location_id, completed_tasks["tasks"])
 
-        # Persist task ledger if available
-        if request.include_task_ledger and completed_tasks and completed_tasks.get("tasks"):
-            self.snapshots.persist_task_ledger(service_id, location.location_id, completed_tasks["tasks"])
+            updated_locations = [item.model_dump(mode="json") for item in service.locations]
+            for item in updated_locations:
+                if item["location_id"] == location.location_id and request.include_runtime_config:
+                    item["runtime"] = node_manifest.get("runtime", item.get("runtime", {}))
 
-        updated_locations = [item.model_dump(mode="json") for item in service.locations]
-        for item in updated_locations:
-            if item["location_id"] == location.location_id and request.include_runtime_config:
-                item["runtime"] = node_manifest.get("runtime", item.get("runtime", {}))
-
-        patch_payload: dict[str, Any] = {"locations": updated_locations}
-        if node_manifest.get("managed_docs"):
-            patch_payload["managed_docs"] = node_manifest["managed_docs"]
-        should_import_scope = (
-            request.include_scope_snapshot
-            and scope_snapshot is not None
-            and scope_snapshot.get("scope_entries")
-            and (
-                scope_snapshot.get("scope_updates")
-                or any(
-                    entry.get("source") not in {"node_manifest", "seeded"}
-                    for entry in scope_snapshot.get("scope_entries", [])
+            patch_payload: dict[str, Any] = {"locations": updated_locations}
+            if node_manifest.get("managed_docs"):
+                patch_payload["managed_docs"] = node_manifest["managed_docs"]
+            should_import_scope = (
+                request.include_scope_snapshot
+                and scope_snapshot is not None
+                and scope_snapshot.get("scope_entries")
+                and (
+                    scope_snapshot.get("scope_updates")
+                    or any(
+                        entry.get("source") not in {"node_manifest", "seeded"}
+                        for entry in scope_snapshot.get("scope_entries", [])
+                    )
                 )
             )
-        )
-        if should_import_scope:
-            scope_entries = scope_snapshot["scope_entries"]
-            flattened = self._flatten_scope_entries(scope_entries)
-            patch_payload.update(
-                {
-                    "scope_entries": scope_entries,
-                    "repo_paths": flattened["repo_paths"],
-                    "docs_paths": flattened["docs_paths"],
-                    "log_paths": flattened["log_paths"],
-                    "exclude_globs": flattened["exclude_globs"],
-                    "allowed_git_pull_paths": flattened["repo_paths"],
-                    "repo_policies": self._repo_policies_for_paths(flattened["repo_paths"]),
-                }
-            )
+            if should_import_scope:
+                scope_entries = scope_snapshot["scope_entries"]
+                flattened = self._flatten_scope_entries(scope_entries)
+                patch_payload.update(
+                    {
+                        "scope_entries": scope_entries,
+                        "repo_paths": flattened["repo_paths"],
+                        "docs_paths": flattened["docs_paths"],
+                        "log_paths": flattened["log_paths"],
+                        "exclude_globs": flattened["exclude_globs"],
+                        "allowed_git_pull_paths": flattened["repo_paths"],
+                        "repo_policies": self._repo_policies_for_paths(flattened["repo_paths"]),
+                    }
+                )
 
-        updated_service = self.manifests.patch_service(service_id, ServicePatchRequest(**patch_payload))
-        task_ledger_count = len(completed_tasks.get("tasks", [])) if completed_tasks else 0
-        record = {
-            "service_id": service_id,
-            "location_id": location.location_id,
-            "direction": "from_node",
-            "timestamp": utc_now_iso(),
-            "status": "ok",
-            "source": "node",
-            "target": "control_center",
-            "include_scope_snapshot": request.include_scope_snapshot,
-            "include_runtime_config": request.include_runtime_config,
-            "managed_docs": node_manifest.get("managed_docs", []),
-            "doc_index": doc_index or node_manifest.get("doc_index", {}),
-            "task_ledger_count": task_ledger_count,
-            "bootstrap_version": node_manifest.get("bootstrap_version", ""),
-            "runtime_services": node_manifest.get("runtime_services", []),
-            "dependencies": node_manifest.get("dependencies", []),
-            "cross_dependencies": node_manifest.get("cross_dependencies", []),
-        }
-        self.snapshots.persist_node_sync(service_id, location.location_id, record)
-        return {
-            "status": "ok",
-            "service": updated_service.model_dump(mode="json"),
-            "sync": record,
-        }
+            updated_service = self.manifests.patch_service(service_id, ServicePatchRequest(**patch_payload))
+            task_ledger_count = len(completed_tasks.get("tasks", [])) if completed_tasks else 0
+            record = {
+                "service_id": service_id,
+                "location_id": location.location_id,
+                "direction": "from_node",
+                "timestamp": utc_now_iso(),
+                "status": "ok",
+                "source": "node",
+                "target": "control_center",
+                "include_scope_snapshot": request.include_scope_snapshot,
+                "include_runtime_config": request.include_runtime_config,
+                "managed_docs": node_manifest.get("managed_docs", []),
+                "doc_index": doc_index or node_manifest.get("doc_index", {}),
+                "task_ledger_count": task_ledger_count,
+                "bootstrap_version": node_manifest.get("bootstrap_version", ""),
+                "runtime_services": node_manifest.get("runtime_services", []),
+                "dependencies": node_manifest.get("dependencies", []),
+                "cross_dependencies": node_manifest.get("cross_dependencies", []),
+            }
+            self.snapshots.persist_node_sync(service_id, location.location_id, record)
+            return {
+                "status": "ok",
+                "service": updated_service.model_dump(mode="json"),
+                "sync": record,
+            }
 
     def sync_to_node(self, service_id: str, request: NodeSyncRequest) -> dict[str, Any]:
-        service = self.manifests.get_service(service_id)
-        location = self._select_location(service, location_id=request.location_id)
-        if location is None:
-            return {"status": "path_missing", "message": "No service location available."}
+        with self._action_guard("sync_to_node", service_id) as lock_error:
+            if lock_error is not None:
+                return lock_error
+            service = self.manifests.get_service(service_id)
+            location = self._select_location(service, location_id=request.location_id)
+            if location is None:
+                return {"status": "path_missing", "message": "No service location available."}
 
-        server_id = location.server_id
-        server = self.manifests.resolve_server(
-            server_id,
-            {server_id: request.runtime_password} if request.runtime_password else {},
-        )
-        location_scope_entries = self._scope_entries_for_location(service, location.root)
-        flattened = self._flatten_scope_entries(location_scope_entries)
-
-        if server.connection_type == "local":
-            manifest_path = self._local_node_manifest_path(location.root)
-            scope_path = self._local_scope_snapshot_path(location.root)
-            bundle_history_path = self._local_pull_bundle_history_path(location.root)
-            doc_index_path = self._local_doc_index_path(location.root)
-            existing_manifest = self._read_local_json(manifest_path)
-            if not existing_manifest:
-                return {"status": "path_missing", "message": "Node manifest not found at selected location."}
-            updated_manifest = self._updated_node_manifest(
-                existing_manifest,
-                service,
-                location,
-                flattened,
-                request.include_runtime_config,
+            server_id = location.server_id
+            server = self.manifests.resolve_server(
+                server_id,
+                {server_id: request.runtime_password} if request.runtime_password else {},
             )
-            self._write_local_json(manifest_path, updated_manifest)
-            if request.include_scope_snapshot:
-                scope_payload = self._updated_scope_snapshot(
-                    self._read_local_json(scope_path),
-                    service,
-                    location.root,
-                    location_scope_entries,
-                )
-                self._write_local_json(scope_path, scope_payload)
-            self._write_local_json(bundle_history_path, self._node_pull_bundle_history_payload(service_id))
-            existing_doc_index = self._read_local_json(doc_index_path) or updated_manifest.get("doc_index", {})
-        else:
-            with self._open_ssh(server) as connection:
-                if connection is None:
-                    return {"status": "unreachable", "message": "SSH connection failed."}
-                ssh, sftp = connection
-                manifest_path = self._remote_node_manifest_path(location.root)
-                scope_path = self._remote_scope_snapshot_path(location.root)
-                bundle_history_path = self._remote_pull_bundle_history_path(location.root)
-                doc_index_path = self._remote_doc_index_path(location.root)
-                existing_manifest = self._read_remote_json(sftp, manifest_path)
+            location_scope_entries = self._scope_entries_for_location(service, location.root)
+            flattened = self._flatten_scope_entries(location_scope_entries)
+
+            if server.connection_type == "local":
+                manifest_path = self._local_node_manifest_path(location.root)
+                scope_path = self._local_scope_snapshot_path(location.root)
+                bundle_history_path = self._local_pull_bundle_history_path(location.root)
+                doc_index_path = self._local_doc_index_path(location.root)
+                existing_manifest = self._read_local_json(manifest_path)
                 if not existing_manifest:
                     return {"status": "path_missing", "message": "Node manifest not found at selected location."}
                 updated_manifest = self._updated_node_manifest(
@@ -736,118 +741,259 @@ class CollectionCoordinator:
                     flattened,
                     request.include_runtime_config,
                 )
-                self._write_remote_json(ssh, sftp, manifest_path, updated_manifest)
+                self._write_local_json(manifest_path, updated_manifest)
                 if request.include_scope_snapshot:
                     scope_payload = self._updated_scope_snapshot(
-                        self._read_remote_json(sftp, scope_path),
+                        self._read_local_json(scope_path),
                         service,
                         location.root,
                         location_scope_entries,
                     )
-                    self._write_remote_json(ssh, sftp, scope_path, scope_payload)
-                self._write_remote_json(ssh, sftp, bundle_history_path, self._node_pull_bundle_history_payload(service_id))
-                existing_doc_index = self._read_remote_json(sftp, doc_index_path) or updated_manifest.get("doc_index", {})
+                    self._write_local_json(scope_path, scope_payload)
+                self._write_local_json(bundle_history_path, self._node_pull_bundle_history_payload(service_id))
+                existing_doc_index = self._read_local_json(doc_index_path) or updated_manifest.get("doc_index", {})
+            else:
+                with self._open_ssh(server) as connection:
+                    if connection is None:
+                        return {"status": "unreachable", "message": "SSH connection failed."}
+                    ssh, sftp = connection
+                    manifest_path = self._remote_node_manifest_path(location.root)
+                    scope_path = self._remote_scope_snapshot_path(location.root)
+                    bundle_history_path = self._remote_pull_bundle_history_path(location.root)
+                    doc_index_path = self._remote_doc_index_path(location.root)
+                    existing_manifest = self._read_remote_json(sftp, manifest_path)
+                    if not existing_manifest:
+                        return {"status": "path_missing", "message": "Node manifest not found at selected location."}
+                    updated_manifest = self._updated_node_manifest(
+                        existing_manifest,
+                        service,
+                        location,
+                        flattened,
+                        request.include_runtime_config,
+                    )
+                    self._write_remote_json(ssh, sftp, manifest_path, updated_manifest)
+                    if request.include_scope_snapshot:
+                        scope_payload = self._updated_scope_snapshot(
+                            self._read_remote_json(sftp, scope_path),
+                            service,
+                            location.root,
+                            location_scope_entries,
+                        )
+                        self._write_remote_json(ssh, sftp, scope_path, scope_payload)
+                    self._write_remote_json(ssh, sftp, bundle_history_path, self._node_pull_bundle_history_payload(service_id))
+                    existing_doc_index = self._read_remote_json(sftp, doc_index_path) or updated_manifest.get("doc_index", {})
 
-        record = {
-            "service_id": service_id,
-            "location_id": location.location_id,
-            "direction": "to_node",
-            "timestamp": utc_now_iso(),
-            "status": "ok",
-            "source": "control_center",
-            "target": "node",
-            "include_scope_snapshot": request.include_scope_snapshot,
-            "include_runtime_config": request.include_runtime_config,
-            "managed_docs": [entry.model_dump(mode="json") for entry in service.managed_docs],
-            "doc_index": existing_doc_index,
-        }
-        self.snapshots.persist_node_sync(service_id, location.location_id, record)
-        return {
-            "status": "ok",
-            "sync": record,
-            "node_manifest_path": self._remote_node_manifest_path(location.root)
-            if server.connection_type == "ssh"
-            else str(self._local_node_manifest_path(location.root)),
-        }
+            record = {
+                "service_id": service_id,
+                "location_id": location.location_id,
+                "direction": "to_node",
+                "timestamp": utc_now_iso(),
+                "status": "ok",
+                "source": "control_center",
+                "target": "node",
+                "include_scope_snapshot": request.include_scope_snapshot,
+                "include_runtime_config": request.include_runtime_config,
+                "managed_docs": [entry.model_dump(mode="json") for entry in service.managed_docs],
+                "doc_index": existing_doc_index,
+            }
+            self.snapshots.persist_node_sync(service_id, location.location_id, record)
+            return {
+                "status": "ok",
+                "sync": record,
+                "node_manifest_path": self._remote_node_manifest_path(location.root)
+                if server.connection_type == "ssh"
+                else str(self._local_node_manifest_path(location.root)),
+            }
 
     def pull_bundle(self, service_id: str, request: PullBundleRequest) -> dict[str, Any]:
+        with self._action_guard("pull_bundle", service_id) as lock_error:
+            if lock_error is not None:
+                return lock_error
+            service = self.manifests.get_service(service_id)
+            location = self._select_location(service, request.server_id)
+            if location is None:
+                return {"status": "path_missing", "message": "No service location available."}
+            server_id = location.server_id
+            server = self.manifests.resolve_server(
+                server_id,
+                {server_id: request.runtime_password} if request.runtime_password else {},
+            )
+            timestamp = utc_now_iso().replace(":", "").replace("-", "")
+            bundle_id = f"{service.workspace_id}__{service.service_id}__{server_id}__{timestamp}".replace("+0000", "Z")
+            bundle_root = self.settings.downloads_dir / service.workspace_id / service.service_id / bundle_id
+            mirrored_root = bundle_root / "source_tree"
+            mirrored_root.mkdir(parents=True, exist_ok=True)
+
+            scope_entries = [entry for entry in service.scope_entries if entry.enabled]
+            scope_entries.extend(request.extra_includes)
+            exclude_patterns = list(dict.fromkeys(DEFAULT_EXCLUDE_GLOBS + [entry.path for entry in service.scope_entries if entry.enabled and entry.kind == "exclude"] + request.extra_excludes))
+
+            copied_files: list[dict[str, Any]] = []
+            skipped_entries: list[dict[str, Any]] = []
+            if server.connection_type == "local":
+                copied_files, skipped_entries = self._copy_bundle_local(service, location.root, scope_entries, exclude_patterns, mirrored_root)
+            else:
+                with self._open_ssh(server) as connection:
+                    if connection is None:
+                        return {"status": "unreachable", "message": "SSH connection failed."}
+                    _, sftp = connection
+                    copied_files, skipped_entries = self._copy_bundle_remote(service, sftp, location.root, scope_entries, exclude_patterns, mirrored_root)
+
+            repo_metadata = []
+            for repo_path in service.repo_paths:
+                if repo_path.startswith(location.root):
+                    repo_metadata.append(self._repo_status(server, repo_path))
+
+            previous_bundle = next((bundle for bundle in self.snapshots.list_pull_bundles(service_id) if bundle.get("server_id") == server_id), None)
+            diff_summary, diff_entries = self._bundle_diff(previous_bundle, copied_files)
+            exposure_findings = self._bundle_exposure_findings(bundle_root / "source_tree", copied_files)
+            dependency_context = self._bundle_dependency_context(service)
+            manifest = {
+                "bundle_id": bundle_id,
+                "created_at": utc_now_iso(),
+                "workspace_id": service.workspace_id,
+                "service_id": service.service_id,
+                "server_id": server_id,
+                "location_root": location.root,
+                "saved_scope": [entry.model_dump(mode="json") for entry in service.scope_entries if entry.enabled],
+                "extra_includes": [entry.model_dump(mode="json") for entry in request.extra_includes],
+                "extra_excludes": request.extra_excludes,
+                "note": request.note,
+                "compared_to_bundle_id": previous_bundle.get("bundle_id") if previous_bundle else "",
+                "diff_summary": diff_summary,
+                "diff_entries": diff_entries,
+                "exposure_findings": exposure_findings,
+                "dependency_context": dependency_context,
+                "repo_metadata": repo_metadata,
+                "files": copied_files,
+                "skipped_entries": skipped_entries,
+            }
+            manifest_path = bundle_root / "bundle-manifest.json"
+            manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+            history_record = {
+                "bundle_id": bundle_id,
+                "created_at": manifest["created_at"],
+                "workspace_id": service.workspace_id,
+                "service_id": service.service_id,
+                "server_id": server_id,
+                "file_count": len(copied_files),
+                "docs_count": len([item for item in copied_files if item["kind"] == "doc"]),
+                "logs_count": len([item for item in copied_files if item["kind"] == "log"]),
+                "bundle_path": str(bundle_root),
+                "source_tree_path": str(mirrored_root),
+                "manifest_path": str(manifest_path),
+                "repo_commits": [item.get("last_commit", "") for item in repo_metadata if item.get("status") == "ok"],
+                "note": request.note,
+                "compared_to_bundle_id": previous_bundle.get("bundle_id") if previous_bundle else "",
+                "diff_summary": diff_summary,
+                "diff_entries": diff_entries,
+                "exposure_findings": exposure_findings,
+                "dependency_context": dependency_context,
+                "skipped_entry_count": len(skipped_entries),
+                "skipped_entries": skipped_entries,
+                "files": copied_files,
+            }
+            self.snapshots.append_pull_bundle(history_record)
+            return {
+                "status": "ok" if copied_files else "partial",
+                **history_record,
+                "files": copied_files,
+                "repo_metadata": repo_metadata,
+                "skipped_entries": skipped_entries,
+            }
+
+    def get_node_viewer(self, service_id: str) -> dict[str, Any]:
+        return {"service_id": service_id, "locations": self.snapshots.get_service_node_viewer(service_id)}
+
+    def node_inspect(self, service_id: str, request: NodeActionRequest) -> dict[str, Any]:
         service = self.manifests.get_service(service_id)
-        location = self._select_location(service, request.server_id)
+        location = self._select_location(service, location_id=request.location_id)
         if location is None:
             return {"status": "path_missing", "message": "No service location available."}
-        server_id = location.server_id
         server = self.manifests.resolve_server(
-            server_id,
-            {server_id: request.runtime_password} if request.runtime_password else {},
+            location.server_id,
+            {location.server_id: request.runtime_password} if request.runtime_password else {},
         )
-        timestamp = utc_now_iso().replace(":", "").replace("-", "")
-        bundle_id = f"{service.workspace_id}__{service.service_id}__{server_id}__{timestamp}".replace("+0000", "Z")
-        bundle_root = self.settings.downloads_dir / service.workspace_id / service.service_id / bundle_id
-        mirrored_root = bundle_root / "source_tree"
-        mirrored_root.mkdir(parents=True, exist_ok=True)
+        record = self._node_inspect_record(service, location, server)
+        self.snapshots.persist_node_viewer(service_id, location.location_id, record)
+        return {"status": "ok", "node": record}
 
-        scope_entries = [entry for entry in service.scope_entries if entry.enabled]
-        scope_entries.extend(request.extra_includes)
-        exclude_patterns = list(dict.fromkeys(DEFAULT_EXCLUDE_GLOBS + [entry.path for entry in service.scope_entries if entry.enabled and entry.kind == "exclude"] + request.extra_excludes))
+    def node_deploy(self, service_id: str, request: NodeActionRequest) -> dict[str, Any]:
+        with self._action_guard("node_deploy", service_id) as lock_error:
+            if lock_error is not None:
+                return lock_error
+            service = self.manifests.get_service(service_id)
+            location = self._select_location(service, location_id=request.location_id)
+            if location is None:
+                return {"status": "path_missing", "message": "No service location available."}
+            server = self.manifests.resolve_server(
+                location.server_id,
+                {location.server_id: request.runtime_password} if request.runtime_password else {},
+            )
+            inspected = self._node_inspect_record(service, location, server)
+            if inspected["node_present"]:
+                return {"status": "partial", "message": "Node already present at selected location.", "node": inspected}
 
-        copied_files: list[dict[str, Any]] = []
-        skipped_entries: list[dict[str, Any]] = []
-        if server.connection_type == "local":
-            copied_files, skipped_entries = self._copy_bundle_local(service, location.root, scope_entries, exclude_patterns, mirrored_root)
-        else:
-            with self._open_ssh(server) as connection:
-                if connection is None:
-                    return {"status": "unreachable", "message": "SSH connection failed."}
-                _, sftp = connection
-                copied_files, skipped_entries = self._copy_bundle_remote(service, sftp, location.root, scope_entries, exclude_patterns, mirrored_root)
+            if server.connection_type == "local":
+                install_node(location.root, service_id=service.service_id, display_name=service.display_name)
+                self._ensure_local_node_runtime(location.root)
+            else:
+                self._deploy_remote_node(server, location.root, service.service_id, service.display_name)
 
-        repo_metadata = []
-        for repo_path in service.repo_paths:
-            if repo_path.startswith(location.root):
-                repo_metadata.append(self._repo_status(server, repo_path))
+            record = self._node_inspect_record(service, location, server)
+            self.snapshots.persist_node_viewer(service_id, location.location_id, record)
+            return {"status": "ok", "node": record}
 
-        manifest = {
-            "bundle_id": bundle_id,
-            "created_at": utc_now_iso(),
-            "workspace_id": service.workspace_id,
-            "service_id": service.service_id,
-            "server_id": server_id,
-            "location_root": location.root,
-            "saved_scope": [entry.model_dump(mode="json") for entry in service.scope_entries if entry.enabled],
-            "extra_includes": [entry.model_dump(mode="json") for entry in request.extra_includes],
-            "extra_excludes": request.extra_excludes,
-            "repo_metadata": repo_metadata,
-            "files": copied_files,
-            "skipped_entries": skipped_entries,
-        }
-        manifest_path = bundle_root / "bundle-manifest.json"
-        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    def node_upgrade(self, service_id: str, request: NodeActionRequest) -> dict[str, Any]:
+        with self._action_guard("node_upgrade", service_id) as lock_error:
+            if lock_error is not None:
+                return lock_error
+            service = self.manifests.get_service(service_id)
+            location = self._select_location(service, location_id=request.location_id)
+            if location is None:
+                return {"status": "path_missing", "message": "No service location available."}
+            server = self.manifests.resolve_server(
+                location.server_id,
+                {location.server_id: request.runtime_password} if request.runtime_password else {},
+            )
+            inspected = self._node_inspect_record(service, location, server)
+            if not inspected["node_present"]:
+                return {"status": "path_missing", "message": "Node manifest not found at selected location."}
 
-        history_record = {
-            "bundle_id": bundle_id,
-            "created_at": manifest["created_at"],
-            "workspace_id": service.workspace_id,
-            "service_id": service.service_id,
-            "server_id": server_id,
-            "file_count": len(copied_files),
-            "docs_count": len([item for item in copied_files if item["kind"] == "doc"]),
-            "logs_count": len([item for item in copied_files if item["kind"] == "log"]),
-            "bundle_path": str(bundle_root),
-            "source_tree_path": str(mirrored_root),
-            "manifest_path": str(manifest_path),
-            "repo_commits": [item.get("last_commit", "") for item in repo_metadata if item.get("status") == "ok"],
-            "skipped_entry_count": len(skipped_entries),
-            "skipped_entries": skipped_entries,
-            "files": copied_files,
-        }
-        self.snapshots.append_pull_bundle(history_record)
-        return {
-            "status": "ok" if copied_files else "partial",
-            **history_record,
-            "files": copied_files,
-            "repo_metadata": repo_metadata,
-            "skipped_entries": skipped_entries,
-        }
+            if server.connection_type == "local":
+                upgrade_node(location.root)
+                self._ensure_local_node_runtime(location.root)
+            else:
+                self._deploy_remote_node(server, location.root, service.service_id, service.display_name, force=True)
+
+            record = self._node_inspect_record(service, location, server)
+            self.snapshots.persist_node_viewer(service_id, location.location_id, record)
+            return {"status": "ok", "node": record}
+
+    def node_restart(self, service_id: str, request: NodeActionRequest) -> dict[str, Any]:
+        with self._action_guard("node_restart", service_id) as lock_error:
+            if lock_error is not None:
+                return lock_error
+            service = self.manifests.get_service(service_id)
+            location = self._select_location(service, location_id=request.location_id)
+            if location is None:
+                return {"status": "path_missing", "message": "No service location available."}
+            server = self.manifests.resolve_server(
+                location.server_id,
+                {location.server_id: request.runtime_password} if request.runtime_password else {},
+            )
+            if server.connection_type == "local":
+                stop_node_runtime(location.root, port=8010)
+                start_node_runtime(location.root, host="127.0.0.1", port=8010)
+            else:
+                result = self._restart_remote_node(server, location.root)
+                if result["status"] != "ok":
+                    return result
+
+            record = self._node_inspect_record(service, location, server)
+            self.snapshots.persist_node_viewer(service_id, location.location_id, record)
+            return {"status": "ok", "node": record}
 
     def _collect_server_summary(self, server_id: str, server: ResolvedServer) -> dict[str, Any]:
         if server.connection_type == "local":
@@ -1791,6 +1937,292 @@ class CollectionCoordinator:
             "service_id": service_id,
             "bundles": bundles,
         }
+
+    def _bundle_diff(
+        self,
+        previous_bundle: dict[str, Any] | None,
+        copied_files: list[dict[str, Any]],
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+        previous_files = {item.get("relative_path", ""): item for item in (previous_bundle or {}).get("files", [])}
+        current_files = {item.get("relative_path", ""): item for item in copied_files}
+        added = sorted(path for path in current_files if path not in previous_files)
+        removed = sorted(path for path in previous_files if path not in current_files)
+        changed = sorted(
+            path for path in current_files
+            if path in previous_files and current_files[path].get("sha256") != previous_files[path].get("sha256")
+        )
+        unchanged_count = max(0, len(current_files) - len(added) - len(changed))
+        entries: list[dict[str, Any]] = []
+        for change, paths, source in (
+            ("added", added, current_files),
+            ("removed", removed, previous_files),
+            ("changed", changed, current_files),
+        ):
+            for path in paths:
+                entries.append(
+                    {
+                        "change": change,
+                        "relative_path": path,
+                        "kind": source.get(path, {}).get("kind", "doc"),
+                    }
+                )
+        summary = {
+            "added_count": len(added),
+            "removed_count": len(removed),
+            "changed_count": len(changed),
+            "unchanged_count": unchanged_count,
+            "summary": (
+                "Initial bundle snapshot."
+                if previous_bundle is None
+                else f"{len(added)} added, {len(removed)} removed, {len(changed)} changed, {unchanged_count} unchanged."
+            ),
+        }
+        return summary, entries
+
+    def _bundle_exposure_findings(self, mirrored_root: Path, copied_files: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        findings: list[dict[str, Any]] = []
+        for copied in copied_files:
+            relative_path = copied.get("relative_path", "")
+            target = mirrored_root / relative_path
+            if not target.exists() or target.is_dir():
+                continue
+            try:
+                content = target.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            for line_number, line in enumerate(content.splitlines(), start=1):
+                for finding_kind, pattern in EXPOSURE_LINE_PATTERNS:
+                    match = pattern.search(line)
+                    if not match:
+                        continue
+                    variable_name = match.group(1) if finding_kind == "generic_token" and match.lastindex else ""
+                    findings.append(
+                        {
+                            "relative_path": relative_path,
+                            "finding_kind": finding_kind,
+                            "variable_name": variable_name or "",
+                            "line_number": line_number,
+                            "redacted": True,
+                        }
+                    )
+        unique: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for item in findings:
+            key = f"{item['relative_path']}|{item['finding_kind']}|{item['variable_name']}|{item['line_number']}"
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(item)
+        return unique
+
+    def _bundle_dependency_context(self, service: ServiceManifest) -> dict[str, Any]:
+        ledger = self.snapshots.get_service_task_ledger(service.service_id)
+        latest_task = ledger.get("tasks", [{}])[0] if ledger.get("tasks") else {}
+        return {
+            "dependencies": latest_task.get("dependencies", []),
+            "cross_dependencies": latest_task.get("cross_dependencies", []),
+            "notes": latest_task.get("notes", []),
+            "diagram": latest_task.get("diagram", ""),
+        }
+
+    def _node_inspect_record(self, service: ServiceManifest, location: Any, server: ResolvedServer) -> dict[str, Any]:
+        runtime_port = 8010
+        manifest_path = self._remote_node_manifest_path(location.root) if server.connection_type == "ssh" else str(self._local_node_manifest_path(location.root))
+        manifest: dict[str, Any] | None = None
+        tasks: dict[str, Any] | None = None
+        runtime_state: dict[str, Any] = {"status": "missing", "pid": None, "runtime_dir": "", "log_file": ""}
+        last_error = ""
+
+        if server.connection_type == "local":
+            root_path = Path(location.root)
+            if not root_path.exists():
+                return self._node_missing_record(service, location, manifest_path, "Location root does not exist.")
+            manifest = self._read_local_json(self._local_node_manifest_path(location.root))
+            tasks = self._read_local_json(self._local_completed_tasks_path(location.root))
+            if manifest:
+                runtime_state = node_status(location.root, port=runtime_port)
+        else:
+            with self._open_ssh(server) as connection:
+                if connection is None:
+                    return self._node_missing_record(service, location, manifest_path, "SSH connection failed.")
+                ssh, sftp = connection
+                if not self._remote_exists(sftp, location.root):
+                    return self._node_missing_record(service, location, manifest_path, "Location root does not exist.")
+                manifest = self._read_remote_json(sftp, self._remote_node_manifest_path(location.root))
+                tasks = self._read_remote_json(sftp, self._remote_completed_tasks_path(location.root))
+                if manifest:
+                    runtime_state = self._remote_node_status(ssh, location.root, runtime_port)
+
+        node_present = manifest is not None
+        bootstrap_ready = bool(tasks and tasks.get("tasks"))
+        installed_version = str((manifest or {}).get("installed_version", ""))
+        bootstrap_version = str((manifest or {}).get("bootstrap_version", ""))
+        runtime_status = runtime_state.get("status", "missing")
+        record = {
+            "service_id": service.service_id,
+            "location_id": location.location_id,
+            "server_id": location.server_id,
+            "root": location.root,
+            "node_present": node_present,
+            "bootstrap_ready": bootstrap_ready,
+            "runtime_ready": runtime_status == "running",
+            "installed_version": installed_version,
+            "bootstrap_version": bootstrap_version,
+            "manifest_updated_at": str((manifest or {}).get("updated_at", "")),
+            "runtime_status": runtime_status,
+            "runtime_pid": runtime_state.get("pid"),
+            "runtime_port": runtime_port,
+            "needs_install": not node_present,
+            "needs_upgrade": bool(node_present and installed_version and installed_version != __version__),
+            "needs_bootstrap": bool(node_present and not bootstrap_ready),
+            "attention_reason": self._node_attention_reason(node_present, installed_version, bootstrap_ready),
+            "manifest_path": manifest_path,
+            "runtime_dir": runtime_state.get("runtime_dir", ""),
+            "log_file": runtime_state.get("log_file", ""),
+            "last_error": last_error,
+        }
+        return record
+
+    def _node_missing_record(self, service: ServiceManifest, location: Any, manifest_path: str, reason: str) -> dict[str, Any]:
+        return {
+            "service_id": service.service_id,
+            "location_id": location.location_id,
+            "server_id": location.server_id,
+            "root": location.root,
+            "node_present": False,
+            "bootstrap_ready": False,
+            "runtime_ready": False,
+            "installed_version": "",
+            "bootstrap_version": "",
+            "manifest_updated_at": "",
+            "runtime_status": "missing",
+            "runtime_pid": None,
+            "runtime_port": 8010,
+            "needs_install": True,
+            "needs_upgrade": False,
+            "needs_bootstrap": False,
+            "attention_reason": "deploy",
+            "manifest_path": manifest_path,
+            "runtime_dir": "",
+            "log_file": "",
+            "last_error": reason,
+        }
+
+    def _node_attention_reason(self, node_present: bool, installed_version: str, bootstrap_ready: bool) -> str:
+        if not node_present:
+            return "deploy"
+        if installed_version and installed_version != __version__:
+            return "update"
+        if not bootstrap_ready:
+            return "bootstrap"
+        return ""
+
+    def _ensure_local_node_runtime(self, project_root: str) -> None:
+        runtime_root = Path(project_root) / "switchboard" / "runtime"
+        venv_path = runtime_root / ".venv"
+        venv_python = venv_path / "bin" / "python"
+        if not venv_python.exists():
+            subprocess.run([sys.executable, "-m", "venv", str(venv_path)], check=False)
+        wheel_path = self._build_local_wheel()
+        if wheel_path and venv_python.exists():
+            subprocess.run([str(venv_python), "-m", "pip", "install", "--upgrade", str(wheel_path)], check=False)
+
+    def _build_local_wheel(self) -> Path | None:
+        dist_dir = Path(tempfile.mkdtemp(prefix="switchboard-wheel-"))
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "wheel", "--no-deps", ".", "-w", str(dist_dir)],
+            cwd=Path(__file__).resolve().parent.parent,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            return None
+        wheels = sorted(dist_dir.glob("switchboard-*.whl"))
+        return wheels[-1] if wheels else None
+
+    def _deploy_remote_node(self, server: ResolvedServer, project_root: str, service_id: str, display_name: str, force: bool = False) -> None:
+        with tempfile.TemporaryDirectory(prefix="switchboard-node-") as tmp_dir:
+            local_root = Path(tmp_dir) / "project"
+            install_node(local_root, service_id=service_id, display_name=display_name)
+            wheel_path = self._build_local_wheel()
+            with self._open_ssh(server) as connection:
+                if connection is None:
+                    raise RuntimeError("SSH connection failed.")
+                ssh, sftp = connection
+                self._run_remote(ssh, f"mkdir -p {self._quote(project_root)}")
+                self._upload_tree(sftp, local_root / "switchboard", posixpath.join(project_root, "switchboard"), force=force)
+                if wheel_path is not None:
+                    remote_wheel = posixpath.join(project_root, "switchboard", "runtime", wheel_path.name)
+                    self._run_remote(ssh, f"mkdir -p {self._quote(posixpath.dirname(remote_wheel))}")
+                    sftp.put(str(wheel_path), remote_wheel)
+                    venv_dir = posixpath.join(project_root, "switchboard", "runtime", ".venv")
+                    pip_cmd = (
+                        f"python3 -m venv {self._quote(venv_dir)} && "
+                        f"{self._quote(posixpath.join(venv_dir, 'bin', 'python'))} -m pip install --upgrade pip && "
+                        f"{self._quote(posixpath.join(venv_dir, 'bin', 'python'))} -m pip install --upgrade {self._quote(remote_wheel)}"
+                    )
+                    self._run_remote(ssh, pip_cmd)
+
+    def _upload_tree(self, sftp: Any, local_root: Path, remote_root: str, force: bool = False) -> None:
+        for path in sorted(local_root.rglob("*")):
+            relative = path.relative_to(local_root)
+            remote_path = posixpath.join(remote_root, str(relative).replace(os.sep, "/"))
+            if path.is_dir():
+                try:
+                    sftp.mkdir(remote_path)
+                except OSError:
+                    pass
+                continue
+            parent = posixpath.dirname(remote_path)
+            current = ""
+            for part in [p for p in parent.split("/") if p]:
+                current = f"{current}/{part}" if current else f"/{part}"
+                try:
+                    sftp.mkdir(current)
+                except OSError:
+                    pass
+            if not force and relative.parts[:2] == ("local", "tasks-completed.md") and self._remote_exists(sftp, remote_path):
+                continue
+            sftp.put(str(path), remote_path)
+
+    def _remote_node_status(self, ssh: Any, project_root: str, port: int) -> dict[str, Any]:
+        runtime_dir = posixpath.join(project_root, "switchboard", "runtime")
+        pid_file = posixpath.join(runtime_dir, "node.pid")
+        log_file = posixpath.join(runtime_dir, "node.log")
+        command = (
+            f"PID=''; test -f {self._quote(pid_file)} && PID=$(cat {self._quote(pid_file)}); "
+            f"STATUS=stopped; "
+            f"if [ -n \"$PID\" ] && kill -0 \"$PID\" 2>/dev/null; then STATUS=running; fi; "
+            f"PORT_PID=$(lsof -tiTCP:{port} -sTCP:LISTEN 2>/dev/null | head -n1); "
+            f"if [ \"$STATUS\" = stopped ] && [ -n \"$PORT_PID\" ]; then STATUS=running_unmanaged; fi; "
+            f"printf '%s|%s|%s|%s' \"$STATUS\" \"$PID\" \"$PORT_PID\" {self._quote(runtime_dir)}"
+        )
+        result = self._run_remote(ssh, command)
+        raw = result["stdout"].strip().split("|")
+        status = raw[0] if raw and raw[0] else "missing"
+        pid = int(raw[1]) if len(raw) > 1 and raw[1].isdigit() else None
+        return {"status": status, "pid": pid, "runtime_dir": runtime_dir, "log_file": log_file}
+
+    def _restart_remote_node(self, server: ResolvedServer, project_root: str) -> dict[str, Any]:
+        with self._open_ssh(server) as connection:
+            if connection is None:
+                return {"status": "unreachable", "message": "SSH connection failed."}
+            ssh, _ = connection
+            runtime_root = posixpath.join(project_root, "switchboard", "runtime")
+            venv_python = posixpath.join(runtime_root, ".venv", "bin", "python")
+            pid_file = posixpath.join(runtime_root, "node.pid")
+            log_file = posixpath.join(runtime_root, "node.log")
+            command = (
+                f"mkdir -p {self._quote(runtime_root)}; "
+                f"if [ -f {self._quote(pid_file)} ]; then PID=$(cat {self._quote(pid_file)}); kill \"$PID\" 2>/dev/null || true; rm -f {self._quote(pid_file)}; fi; "
+                f"nohup {self._quote(venv_python)} -m switchboard.cli node serve --project-root {self._quote(project_root)} --host 127.0.0.1 --port 8010 "
+                f">> {self._quote(log_file)} 2>&1 < /dev/null & echo $! > {self._quote(pid_file)}"
+            )
+            result = self._run_remote(ssh, command)
+            if result["returncode"] != 0:
+                return {"status": "partial", "message": (result["stderr"] or result["stdout"]).strip()}
+            return {"status": "ok"}
 
     @contextmanager
     def _open_ssh(self, server: ResolvedServer) -> Iterator[tuple[Any, Any] | None]:

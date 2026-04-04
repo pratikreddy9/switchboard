@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import type { Workspace, WorkspaceLatest, Service, ServiceRunResult } from '../types/switchboard'
+import type { Workspace, WorkspaceLatest, Service, ServiceRunResult, RuntimeCheckResult } from '../types/switchboard'
 import { getWorkspace, getWorkspaceLatest, triggerCollect } from '../api/client'
 import { isApiError } from '../types/switchboard'
 import { ServiceCard } from '../components/ServiceCard'
@@ -25,6 +25,7 @@ export function WorkspacePage({ workspaceId, offline, onSelectService }: Props) 
   const [collecting, setCollecting] = useState(false)
   const [healthChecking, setHealthChecking] = useState(false)
   const [healthConfirmOpen, setHealthConfirmOpen] = useState(false)
+  const [healthResults, setHealthResults] = useState<RuntimeCheckResult[] | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -61,7 +62,7 @@ export function WorkspacePage({ workspaceId, offline, onSelectService }: Props) 
     const result = await workspaceHealthCheck(workspaceId)
     setHealthChecking(false)
     if (!isApiError(result)) {
-      // Refresh latest workspace results to see health status
+      setHealthResults(result.results ?? [])
       getWorkspaceLatest(workspaceId).then((lat) => {
         if (!isApiError(lat)) setLatest(lat)
       })
@@ -120,7 +121,7 @@ export function WorkspacePage({ workspaceId, offline, onSelectService }: Props) 
       </div>
 
       {/* Run status bar */}
-      <div className="mb-6 bg-gray-900 border border-gray-800 rounded-xl px-4 py-3">
+      <div className="mb-2 bg-gray-900 border border-gray-800 rounded-xl px-4 py-3">
         <RunStatus
           summary={latest?.summary}
           onCollect={handleCollect}
@@ -130,6 +131,42 @@ export function WorkspacePage({ workspaceId, offline, onSelectService }: Props) 
           healthChecking={healthChecking}
         />
       </div>
+
+      {/* Health check results */}
+      {healthResults !== null && (
+        <div className="mb-6 rounded-xl border border-gray-800 bg-gray-900 px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-gray-300">Health Check Results</span>
+            <button onClick={() => setHealthResults(null)} className="text-xs text-gray-600 hover:text-gray-400">dismiss</button>
+          </div>
+          {healthResults.length === 0 ? (
+            <p className="text-sm text-gray-500">No services checked.</p>
+          ) : (
+            <div className="space-y-2">
+              {healthResults.map((r, i) => (
+                <div key={i} className="flex items-start gap-3 text-sm">
+                  <span className={`mt-0.5 h-2 w-2 rounded-full flex-shrink-0 ${r.status === 'ok' ? 'bg-green-400' : r.status === 'unreachable' || r.status === 'path_missing' ? 'bg-red-400' : 'bg-yellow-400'}`} />
+                  <div className="min-w-0">
+                    <span className="text-gray-200 font-mono">{r.service_id}</span>
+                    <span className="text-gray-500 ml-2">{r.location_id}</span>
+                    {r.detected_ports.length > 0 && (
+                      <span className="ml-2 text-cyan-400">{r.detected_ports.map(p => `:${p.port}`).join(' ')}</span>
+                    )}
+                    {r.missing_ports.length > 0 && (
+                      <span className="ml-2 text-red-400">missing: {r.missing_ports.join(', ')}</span>
+                    )}
+                    {r.healthcheck_status !== 'skipped' && (
+                      <span className={`ml-2 ${r.healthcheck_status === 'ok' ? 'text-green-400' : 'text-red-400'}`}>
+                        hc:{r.healthcheck_status}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mb-6">
         <ProjectOnboardingPanel
@@ -141,7 +178,12 @@ export function WorkspacePage({ workspaceId, offline, onSelectService }: Props) 
       </div>
 
       <div className="mb-6">
-        <ProjectsPanel workspaceId={workspaceId} offline={offline} />
+        <ProjectsPanel
+          workspaceId={workspaceId}
+          offline={offline}
+          workspaceName={workspace?.display_name}
+          workspaceNotes={latest?.workspace?.display_name ? undefined : undefined}
+        />
       </div>
 
       {/* Service grid */}

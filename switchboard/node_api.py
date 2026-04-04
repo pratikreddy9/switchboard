@@ -76,6 +76,8 @@ def create_node_app(project_root: str | Path | None = None) -> FastAPI:
         expected_ports = html.escape(", ".join(str(port) for port in runtime.get("expected_ports", [])) or "none")
         healthcheck_command = html.escape(str(runtime.get("healthcheck_command", "") or "Not configured"))
         run_command_hint = html.escape(str(runtime.get("run_command_hint", "") or "Not configured"))
+        installed_version = html.escape(str(manifest.get("installed_version", __version__)))
+        bootstrap_version = html.escape(str(manifest.get("bootstrap_version", "") or "not recorded"))
         generated = html.escape(str(scope_snapshot.get("generated", "")))
         doc_index_generated = html.escape(str(doc_index.get("generated", "")))
         project_root_command = html.escape(str(project_root))
@@ -120,6 +122,8 @@ def create_node_app(project_root: str | Path | None = None) -> FastAPI:
         <p><strong>Service:</strong> <code>{service_id}</code></p>
         <p><strong>Project root:</strong> <code>{project_root_text}</code></p>
         <p><strong>Last snapshot:</strong> <code>{last_snapshot}</code></p>
+        <p><strong>Installed version:</strong> <code>{installed_version}</code></p>
+        <p><strong>Bootstrap version:</strong> <code>{bootstrap_version}</code></p>
       </section>
         <section class="grid">
         <div class="card">

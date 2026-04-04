@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "switchboard"
-version = "0.1.9"
+version = "1.10.0"
 description = "Framework-first control center for project workspaces, server pulls, and dashboard snapshots."
 readme = "README.md"
 requires-python = ">=3.12"

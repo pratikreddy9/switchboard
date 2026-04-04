@@ -15,6 +15,7 @@ from .models import (
     DownloadRequest,
     GitPullRequest,
     GitPushRequest,
+    NodeActionRequest,
     NodeSyncRequest,
     ProjectCreateRequest,
     ProjectPatchRequest,
@@ -61,7 +62,7 @@ def _enrich_service_payload(payload: dict[str, object]) -> dict[str, object]:
     runtime_state = snapshot_store.get_service_runtime_state(service_id)
     enriched["runtime_checks"] = runtime_state["runtime_checks"]
     enriched["node_sync"] = runtime_state["node_sync"]
-    
+    enriched["node_viewer"] = snapshot_store.get_service_node_viewer(service_id)
     task_ledger = snapshot_store.get_service_task_ledger(service_id)
     enriched["task_ledger"] = task_ledger.get("tasks", [])
     return enriched
@@ -320,6 +321,39 @@ def sync_to_node(service_id: str, request: NodeSyncRequest) -> dict[str, object]
         result = coordinator.sync_to_node(service_id, request)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _raise_for_action_result(result)
+    return result
+
+
+@app.get("/api/services/{service_id}/node-viewer")
+def get_node_viewer(service_id: str) -> dict[str, object]:
+    return coordinator.get_node_viewer(service_id)
+
+
+@app.post("/api/services/{service_id}/actions/node-inspect")
+def node_inspect(service_id: str, request: NodeActionRequest) -> dict[str, object]:
+    result = coordinator.node_inspect(service_id, request)
+    _raise_for_action_result(result)
+    return result
+
+
+@app.post("/api/services/{service_id}/actions/node-deploy")
+def node_deploy(service_id: str, request: NodeActionRequest) -> dict[str, object]:
+    result = coordinator.node_deploy(service_id, request)
+    _raise_for_action_result(result)
+    return result
+
+
+@app.post("/api/services/{service_id}/actions/node-upgrade")
+def node_upgrade(service_id: str, request: NodeActionRequest) -> dict[str, object]:
+    result = coordinator.node_upgrade(service_id, request)
+    _raise_for_action_result(result)
+    return result
+
+
+@app.post("/api/services/{service_id}/actions/node-restart")
+def node_restart(service_id: str, request: NodeActionRequest) -> dict[str, object]:
+    result = coordinator.node_restart(service_id, request)
     _raise_for_action_result(result)
     return result
 

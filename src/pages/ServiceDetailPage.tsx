@@ -11,12 +11,16 @@ import type {
 } from '../types/switchboard'
 import {
   deleteService,
+  deployNode,
   getService,
   getServiceScope,
   getWorkspaceRuns,
+  inspectNode,
+  restartNode,
   runRuntimeCheck,
   syncFromNode,
   syncToNode,
+  upgradeNode,
   updateService,
   acquireActionLock,
   releaseActionLock,
@@ -158,6 +162,13 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
     () => (service?.node_sync ?? []).find((entry) => entry.doc_index)?.doc_index,
     [service?.node_sync],
   )
+  const nodeViewerByLocation = useMemo(() => {
+    const map = new Map<string, NonNullable<Service['node_viewer']>[number]>()
+    for (const entry of service?.node_viewer ?? []) {
+      map.set(entry.location_id, entry)
+    }
+    return map
+  }, [service?.node_viewer])
 
   const hasNodeScope = useMemo(
     () =>
@@ -217,6 +228,43 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
     handleServiceUpdated(result)
     setEditingRuntime(false)
     setRuntimeMessage('Runtime config updated.')
+  }
+
+  function setNodeViewerEntry(entry: NonNullable<Service['node_viewer']>[number]) {
+    setService((current) =>
+      current
+        ? {
+            ...current,
+            node_viewer: [entry, ...(current.node_viewer ?? []).filter((candidate) => candidate.location_id !== entry.location_id)],
+          }
+        : current,
+    )
+  }
+
+  async function handleNodeAction(action: 'inspect' | 'deploy' | 'upgrade' | 'restart', locationId: string) {
+    if (!service) return
+    const result =
+      action === 'inspect'
+        ? await inspectNode(service.service_id, locationId)
+        : action === 'deploy'
+          ? await deployNode(service.service_id, locationId)
+          : action === 'upgrade'
+            ? await upgradeNode(service.service_id, locationId)
+            : await restartNode(service.service_id, locationId)
+    if (isApiError(result)) {
+      setRuntimeMessage(result.message)
+      return
+    }
+    setNodeViewerEntry(result.node)
+    setRuntimeMessage(
+      action === 'inspect'
+        ? 'Node viewer refreshed.'
+        : action === 'deploy'
+          ? 'Node deployed.'
+          : action === 'upgrade'
+            ? 'Node updated.'
+            : 'Node restarted.',
+    )
   }
 
   function handleCancelRuntimeEdit() {
@@ -650,6 +698,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
             {(editingRuntime ? runtimeDraft : service.locations).map((location) => {
               const latestRuntime = runtimeChecksByLocation.get(location.location_id)
               const latestSync = nodeSyncByLocation.get(location.location_id)
+              const nodeViewer = nodeViewerByLocation.get(location.location_id)
               const portsValue = location.runtime.expected_ports.join(', ')
               return (
                 <div key={location.location_id} className="rounded-xl border border-gray-800 bg-gray-950 p-4">
@@ -662,6 +711,35 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
+                        onClick={() => handleNodeAction('inspect', location.location_id)}
+                        disabled={offline}
+                        className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
+                      >
+                        Inspect Node
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleNodeAction(nodeViewer?.node_present ? 'upgrade' : 'deploy', location.location_id)}
+                        disabled={offline}
+                        data-attention={nodeViewer?.needs_install || nodeViewer?.needs_upgrade ? 'true' : 'false'}
+                        className={`inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs transition-colors disabled:opacity-50 ${
+                          nodeViewer?.needs_install || nodeViewer?.needs_upgrade
+                            ? 'border-amber-700 text-amber-200 shadow-[0_0_0_1px_rgba(250,204,21,0.2),0_0_18px_rgba(250,204,21,0.12)]'
+                            : 'border-gray-700 text-gray-200 hover:border-cyan-500 hover:text-white'
+                        }`}
+                      >
+                        {nodeViewer?.node_present ? 'Update Node' : 'Deploy Node'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleNodeAction('restart', location.location_id)}
+                        disabled={offline || !nodeViewer?.node_present}
+                        className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
+                      >
+                        Restart Node
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => initiateAction('runtime_check', location.location_id)}
                         disabled={offline || checkingRuntimeLocation === location.location_id || pendingActions[`pending:runtime_check:${location.location_id}`]}
                         className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
@@ -672,7 +750,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                       <button
                         type="button"
                         onClick={() => handleSyncFromNode(location.location_id)}
-                        disabled={offline || syncingFromLocation === location.location_id}
+                        disabled={offline || syncingFromLocation === location.location_id || (nodeViewer?.node_present === true && !nodeViewer.bootstrap_ready)}
                         className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
                       >
                         {syncingFromLocation === location.location_id ? 'Syncing…' : 'Sync From Node'}
@@ -680,12 +758,32 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                       <button
                         type="button"
                         onClick={() => handleSyncToNode(location.location_id)}
-                        disabled={offline || syncingToLocation === location.location_id}
+                        disabled={offline || syncingToLocation === location.location_id || (nodeViewer?.node_present === true && !nodeViewer.bootstrap_ready)}
                         className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
                       >
                         {syncingToLocation === location.location_id ? 'Syncing…' : 'Sync To Node'}
                       </button>
                     </div>
+                  </div>
+
+                  <div className="mt-4 rounded-xl border border-gray-800 bg-gray-900 p-3">
+                    <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Node Viewer</div>
+                    {nodeViewer ? (
+                      <div className="mt-2 grid gap-2 text-sm text-gray-300 md:grid-cols-2">
+                        <div><span className="text-gray-500">Installed:</span> {nodeViewer.installed_version || 'not installed'}</div>
+                        <div><span className="text-gray-500">Bootstrap:</span> {nodeViewer.bootstrap_version || 'not ready'}</div>
+                        <div><span className="text-gray-500">Runtime:</span> {nodeViewer.runtime_status}</div>
+                        <div><span className="text-gray-500">Manifest:</span> <span className="font-mono text-xs">{nodeViewer.manifest_path}</span></div>
+                        {nodeViewer.last_error && <div className="md:col-span-2 text-amber-200">{nodeViewer.last_error}</div>}
+                        {nodeViewer.node_present && !nodeViewer.bootstrap_ready && (
+                          <div className="md:col-span-2 text-xs text-amber-200">
+                            Node scaffold is present, but sync stays blocked until bootstrap writes the first task entry.
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="mt-2 text-sm text-gray-500">No node viewer data cached yet. Use Inspect Node.</div>
+                    )}
                   </div>
 
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
