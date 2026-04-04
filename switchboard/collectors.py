@@ -931,19 +931,31 @@ class CollectionCoordinator:
                 location.server_id,
                 {location.server_id: request.runtime_password} if request.runtime_password else {},
             )
-            inspected = self._node_inspect_record(service, location, server)
-            if inspected["node_present"]:
-                return {"status": "partial", "message": "Node already present at selected location.", "node": inspected}
-
+            before = self._node_inspect_record(service, location, server)
             if server.connection_type == "local":
-                install_node(location.root, service_id=service.service_id, display_name=service.display_name)
+                if before["node_present"]:
+                    upgrade_node(location.root)
+                else:
+                    install_node(location.root, service_id=service.service_id, display_name=service.display_name)
                 self._ensure_local_node_runtime(location.root)
             else:
-                self._deploy_remote_node(server, location.root, service.service_id, service.display_name)
+                self._deploy_remote_node(
+                    server,
+                    location.root,
+                    service.service_id,
+                    service.display_name,
+                    force=before["node_present"],
+                )
 
-            record = self._node_inspect_record(service, location, server)
-            self.snapshots.persist_node_viewer(service_id, location.location_id, record)
-            return {"status": "ok", "node": record}
+            after = self._node_inspect_record(service, location, server)
+            self.snapshots.persist_node_viewer(service_id, location.location_id, after)
+            status = "ok" if after["installed_version"] == __version__ or not after["node_present"] else "partial"
+            message = (
+                "Node deployed with latest control-center version."
+                if not before["node_present"]
+                else "Node refreshed to latest control-center version."
+            )
+            return {"status": status, "message": message, "before": before, "node": after, "after": after}
 
     def node_upgrade(self, service_id: str, request: NodeActionRequest) -> dict[str, Any]:
         with self._action_guard("node_upgrade", service_id) as lock_error:
@@ -957,8 +969,8 @@ class CollectionCoordinator:
                 location.server_id,
                 {location.server_id: request.runtime_password} if request.runtime_password else {},
             )
-            inspected = self._node_inspect_record(service, location, server)
-            if not inspected["node_present"]:
+            before = self._node_inspect_record(service, location, server)
+            if not before["node_present"]:
                 return {"status": "path_missing", "message": "Node manifest not found at selected location."}
 
             if server.connection_type == "local":
@@ -967,9 +979,9 @@ class CollectionCoordinator:
             else:
                 self._deploy_remote_node(server, location.root, service.service_id, service.display_name, force=True)
 
-            record = self._node_inspect_record(service, location, server)
-            self.snapshots.persist_node_viewer(service_id, location.location_id, record)
-            return {"status": "ok", "node": record}
+            after = self._node_inspect_record(service, location, server)
+            self.snapshots.persist_node_viewer(service_id, location.location_id, after)
+            return {"status": "ok", "message": "Node updated to latest control-center version.", "before": before, "node": after, "after": after}
 
     def node_restart(self, service_id: str, request: NodeActionRequest) -> dict[str, Any]:
         with self._action_guard("node_restart", service_id) as lock_error:
@@ -983,6 +995,7 @@ class CollectionCoordinator:
                 location.server_id,
                 {location.server_id: request.runtime_password} if request.runtime_password else {},
             )
+            before = self._node_inspect_record(service, location, server)
             if server.connection_type == "local":
                 stop_node_runtime(location.root, port=8010)
                 start_node_runtime(location.root, host="127.0.0.1", port=8010)
@@ -991,9 +1004,9 @@ class CollectionCoordinator:
                 if result["status"] != "ok":
                     return result
 
-            record = self._node_inspect_record(service, location, server)
-            self.snapshots.persist_node_viewer(service_id, location.location_id, record)
-            return {"status": "ok", "node": record}
+            after = self._node_inspect_record(service, location, server)
+            self.snapshots.persist_node_viewer(service_id, location.location_id, after)
+            return {"status": "ok", "message": "Node runtime restarted.", "before": before, "node": after, "after": after}
 
     def _collect_server_summary(self, server_id: str, server: ResolvedServer) -> dict[str, Any]:
         if server.connection_type == "local":

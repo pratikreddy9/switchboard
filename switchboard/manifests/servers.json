@@ -25,7 +25,7 @@
     "username": "pesu",
     "port": 22,
     "deployment_mode": "native_agent",
-    "vpn_required": false,
+    "vpn_required": true,
     "tags": [
       "pesu",
       "dev",

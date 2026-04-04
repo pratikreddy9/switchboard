@@ -469,6 +469,9 @@ class ManifestStore:
     def patch_project(self, project_id: str, payload: ProjectPatchRequest) -> ProjectManifest:
         projects = load_json(self._projects_path)
         updated: ProjectManifest | None = None
+        next_project_id = payload.project_id or project_id
+        if next_project_id != project_id and any(item["project_id"] == next_project_id for item in projects):
+            raise ValueError(f"Project already exists: {next_project_id}")
         for index, item in enumerate(projects):
             if item["project_id"] != project_id:
                 continue
@@ -478,6 +481,10 @@ class ManifestStore:
             break
         if updated is None:
             raise KeyError(f"Unknown project: {project_id}")
+        if next_project_id != project_id:
+            for item in projects:
+                if item.get("parent_project_id") == project_id:
+                    item["parent_project_id"] = next_project_id
         save_json(self._projects_path, projects)
         return updated
 

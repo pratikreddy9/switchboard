@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { FolderGit2, Plus, Pencil, Trash2, ChevronDown, ChevronRight, X, Save } from 'lucide-react'
+import { FolderGit2, Plus, Pencil, Trash2, ChevronDown, ChevronRight, Save } from 'lucide-react'
 import { listProjects, createProject, updateProject, deleteProject } from '../api/client'
 import { isApiError } from '../types/switchboard'
 import type { ProjectManifest } from '../types/switchboard'
@@ -23,6 +23,7 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
   const [draftName, setDraftName] = useState('')
   const [draftParent, setDraftParent] = useState('')
   const [draftNotes, setDraftNotes] = useState('')
+  const [openProjects, setOpenProjects] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     if (offline || !expanded) return
@@ -86,6 +87,7 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
       }
     } else if (editingId) {
       const res = await updateProject(editingId, {
+        project_id: draftId,
         display_name: draftName,
         parent_project_id: draftParent || undefined,
         notes: draftNotes,
@@ -111,6 +113,10 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
 
   const rootProjects = projects.filter(p => !p.parent_project_id)
   const childProjects = projects.filter(p => p.parent_project_id)
+
+  function toggleProject(projectId: string) {
+    setOpenProjects((current) => ({ ...current, [projectId]: !current[projectId] }))
+  }
 
   return (
     <div className="rounded-xl border border-gray-800 bg-gray-900 mb-6">
@@ -206,43 +212,78 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
                 </div>
                 {workspaceNotes && <div className="px-3 pb-3 text-xs text-amber-100/80">{workspaceNotes}</div>}
               </div>
-              {rootProjects.map(p => (
-                <div key={p.project_id} className="border border-gray-800 bg-gray-950 rounded-xl overflow-hidden">
-                  <div className="p-3 flex items-center justify-between bg-gray-900/50">
-                    <div>
-                      <div className="text-sm font-medium text-gray-200">{p.display_name}</div>
-                      <div className="text-[10px] text-gray-500 font-mono mt-0.5">{p.project_id}</div>
+              {rootProjects.map(p => {
+                const children = childProjects.filter(c => c.parent_project_id === p.project_id)
+                const open = openProjects[p.project_id] ?? false
+                return (
+                  <div key={p.project_id} className="border border-gray-800 bg-gray-950 rounded-xl overflow-hidden">
+                    <div className="p-3 flex items-center justify-between bg-gray-900/50">
+                      <button onClick={() => toggleProject(p.project_id)} className="flex min-w-0 items-center gap-3 text-left">
+                        {open ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+                        <div>
+                          <div className="text-sm font-medium text-gray-200">{p.display_name}</div>
+                          <div className="mt-0.5 text-[10px] text-gray-500 font-mono">{p.project_id}</div>
+                        </div>
+                      </button>
+                      <div className="flex items-center gap-3">
+                        <div className="text-[10px] uppercase tracking-[0.14em] text-gray-500">
+                          {children.length} subprojects
+                        </div>
+                        {!offline && (
+                          <div className="flex gap-2">
+                            <button onClick={() => startEdit(p)} className="p-1 text-gray-500 hover:text-cyan-400 transition-colors"><Pencil className="h-3.5 w-3.5" /></button>
+                            <button onClick={() => handleDelete(p.project_id)} className="p-1 text-gray-500 hover:text-red-400 transition-colors"><Trash2 className="h-3.5 w-3.5" /></button>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    {!offline && (
-                      <div className="flex gap-2">
-                        <button onClick={() => startEdit(p)} className="p-1 text-gray-500 hover:text-cyan-400 transition-colors"><Pencil className="h-3.5 w-3.5" /></button>
-                        <button onClick={() => handleDelete(p.project_id)} className="p-1 text-gray-500 hover:text-red-400 transition-colors"><Trash2 className="h-3.5 w-3.5" /></button>
+                    {open && (
+                      <div className="border-t border-gray-800">
+                        {p.notes && <div className="px-3 pt-3 text-xs text-gray-400">{p.notes}</div>}
+                        <div className="px-3 py-3">
+                          <div className="mb-3 grid gap-2 sm:grid-cols-3">
+                            <div className="rounded border border-gray-800 bg-black/20 px-3 py-2 text-xs text-gray-400">
+                              <div className="uppercase tracking-[0.14em] text-gray-600">Project ID</div>
+                              <div className="mt-1 font-mono text-gray-300">{p.project_id}</div>
+                            </div>
+                            <div className="rounded border border-gray-800 bg-black/20 px-3 py-2 text-xs text-gray-400">
+                              <div className="uppercase tracking-[0.14em] text-gray-600">Parent</div>
+                              <div className="mt-1 text-gray-300">{p.parent_project_id || 'Company root'}</div>
+                            </div>
+                            <div className="rounded border border-gray-800 bg-black/20 px-3 py-2 text-xs text-gray-400">
+                              <div className="uppercase tracking-[0.14em] text-gray-600">Services</div>
+                              <div className="mt-1 text-gray-300">{p.service_ids?.length ?? 0}</div>
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            {children.length === 0 ? (
+                              <div className="rounded border border-dashed border-gray-800 px-3 py-2 text-xs italic text-gray-600">
+                                No subprojects under this project.
+                              </div>
+                            ) : (
+                              children.map(c => (
+                                <div key={c.project_id} className="flex items-center justify-between rounded border border-gray-800 bg-gray-900/30 p-2">
+                                  <div>
+                                    <div className="text-xs font-medium text-gray-300">{c.display_name}</div>
+                                    <div className="text-[9px] text-gray-600 font-mono mt-0.5">{c.project_id}</div>
+                                    {c.notes && <div className="mt-1 text-[11px] text-gray-500">{c.notes}</div>}
+                                  </div>
+                                  {!offline && (
+                                    <div className="flex gap-2">
+                                      <button onClick={() => startEdit(c)} className="p-1 text-gray-500 hover:text-cyan-400 transition-colors"><Pencil className="h-3 w-3" /></button>
+                                      <button onClick={() => handleDelete(c.project_id)} className="p-1 text-gray-500 hover:text-red-400 transition-colors"><Trash2 className="h-3 w-3" /></button>
+                                    </div>
+                                  )}
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
-                  {p.notes && <div className="px-3 pb-3 text-xs text-gray-400">{p.notes}</div>}
-                  
-                  {/* Sub-projects */}
-                  {childProjects.filter(c => c.parent_project_id === p.project_id).length > 0 && (
-                    <div className="border-t border-gray-800 bg-black/20 p-3 space-y-2">
-                      {childProjects.filter(c => c.parent_project_id === p.project_id).map(c => (
-                        <div key={c.project_id} className="flex items-center justify-between p-2 rounded border border-gray-800 bg-gray-900/30">
-                          <div>
-                            <div className="text-xs font-medium text-gray-300">{c.display_name}</div>
-                            <div className="text-[9px] text-gray-600 font-mono mt-0.5">{c.project_id}</div>
-                          </div>
-                          {!offline && (
-                            <div className="flex gap-2">
-                              <button onClick={() => startEdit(c)} className="p-1 text-gray-500 hover:text-cyan-400 transition-colors"><Pencil className="h-3 w-3" /></button>
-                              <button onClick={() => handleDelete(c.project_id)} className="p-1 text-gray-500 hover:text-red-400 transition-colors"><Trash2 className="h-3 w-3" /></button>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

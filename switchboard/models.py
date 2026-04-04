@@ -470,6 +470,7 @@ class ProjectCreateRequest(BaseModel):
 
 
 class ProjectPatchRequest(BaseModel):
+    project_id: str | None = None
     display_name: str | None = None
     parent_project_id: str | None = None
     service_ids: list[str] | None = None

@@ -231,6 +231,7 @@ export interface ProjectCreateRequest {
 }
 
 export interface ProjectPatchRequest {
+  project_id?: string
   display_name?: string
   parent_project_id?: string
   service_ids?: string[]

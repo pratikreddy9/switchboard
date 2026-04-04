@@ -491,6 +491,8 @@ def patch_project(project_id: str, request: ProjectPatchRequest) -> dict[str, ob
         return {"status": "ok", "project": project.model_dump(mode="json")}
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.delete("/api/projects/{project_id}")
