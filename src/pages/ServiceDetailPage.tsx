@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, FileStack, FolderTree, Pencil, RefreshCw, Save, Server, Trash2, X } from 'lucide-react'
+import { ArrowLeft, FileStack, FolderTree, LoaderCircle, Pencil, RefreshCw, Save, Server, Trash2, X } from 'lucide-react'
 import type {
   ManagedDocConfig,
   NodeActionResult,
+  ProjectEnvironmentView,
   RuntimeCheckResult,
   Service,
   ServiceLocationDraft,
@@ -19,6 +20,7 @@ import {
   listServers,
   getWorkspaceRuns,
   inspectNode,
+  listProjects,
   listPullBundles,
   restartNode,
   runRuntimeCheck,
@@ -46,6 +48,7 @@ interface Props {
   offline: boolean
   onBack: () => void
   onDeleted: (serviceId: string, workspaceId: string) => void
+  onOpenEnvironmentLab: (environmentId: string) => void
 }
 
 function parsePorts(value: string): number[] {
@@ -57,12 +60,20 @@ function parsePorts(value: string): number[] {
 
 const SERVICE_PANEL_KEYS = ['network', 'runtime', 'managed_docs', 'task_ledger', 'repositories', 'scope', 'pull_bundles', 'secret_paths', 'run_history'] as const
 type ServicePanelKey = (typeof SERVICE_PANEL_KEYS)[number]
+type NodeActionKey = 'inspect' | 'deploy' | 'upgrade' | 'restart'
+
+interface LocationActionEvent {
+  action: NodeActionKey | 'runtime_check' | 'sync_from_node' | 'sync_to_node'
+  status: 'running' | 'ok' | 'error'
+  message: string
+  timestamp: string
+}
 
 function panelStorageKey(serviceId: string, key: string) {
   return `service-panel:${serviceId}:${key}`
 }
 
-export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDeleted }: Props) {
+export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDeleted, onOpenEnvironmentLab }: Props) {
   const [service, setService] = useState<Service | null>(null)
   const [runs, setRuns] = useState<RunRecord[]>([])
   const [scopeEntries, setScopeEntries] = useState<ScopeEntry[]>([])
@@ -96,7 +107,10 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
   const [panelOpen, setPanelOpen] = useState<Record<string, boolean>>({})
   const [locationPanels, setLocationPanels] = useState<Record<string, boolean>>({})
   const [nodeActionResults, setNodeActionResults] = useState<Record<string, NodeActionResult>>({})
+  const [nodeActionLoading, setNodeActionLoading] = useState<Record<string, NodeActionKey | null>>({})
+  const [locationActionEvents, setLocationActionEvents] = useState<Record<string, LocationActionEvent[]>>({})
   const [bundleHistoryMeta, setBundleHistoryMeta] = useState<{ count: number; latestCreatedAt: string }>({ count: 0, latestCreatedAt: '' })
+  const [projectEnvironments, setProjectEnvironments] = useState<ProjectEnvironmentView[]>([])
 
   useEffect(() => {
     const keys = Object.keys(sessionStorage)
@@ -137,6 +151,13 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
     if (offline || !service?.workspace_id) return
     getWorkspaceRuns(service.workspace_id).then((result) => {
       if (!isApiError(result)) setRuns(result)
+    })
+  }, [offline, service?.workspace_id])
+
+  useEffect(() => {
+    if (offline || !service?.workspace_id) return
+    listProjects(service.workspace_id).then((result) => {
+      if (!isApiError(result)) setProjectEnvironments(result.environments ?? [])
     })
   }, [offline, service?.workspace_id])
 
@@ -216,6 +237,20 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
     }
     return map
   }, [service?.node_viewer])
+
+  const environmentMatchesByLocation = useMemo(() => {
+    const map = new Map<string, ProjectEnvironmentView[]>()
+    for (const environment of projectEnvironments) {
+      for (const deployment of environment.deployments ?? []) {
+        if (deployment.service_id !== service?.service_id) continue
+        const key = deployment.location_id || '__service__'
+        const current = map.get(key) ?? []
+        current.push(environment)
+        map.set(key, current)
+      }
+    }
+    return map
+  }, [projectEnvironments, service?.service_id])
 
   const hasNodeScope = useMemo(
     () =>
@@ -329,8 +364,32 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
     )
   }
 
+  function recordLocationAction(
+    locationId: string,
+    event: LocationActionEvent,
+  ) {
+    setLocationActionEvents((current) => ({
+      ...current,
+      [locationId]: [event, ...(current[locationId] ?? [])].slice(0, 6),
+    }))
+  }
+
   async function handleNodeAction(action: 'inspect' | 'deploy' | 'upgrade' | 'restart', locationId: string) {
     if (!service) return
+    setNodeActionLoading((current) => ({ ...current, [locationId]: action }))
+    recordLocationAction(locationId, {
+      action,
+      status: 'running',
+      message:
+        action === 'inspect'
+          ? 'Inspecting node state and runtime.'
+          : action === 'deploy'
+            ? 'Deploying latest node files and runtime.'
+            : action === 'upgrade'
+              ? 'Updating node files to the latest local version.'
+              : 'Starting or restarting the node runtime.',
+      timestamp: new Date().toISOString(),
+    })
     const result =
       action === 'inspect'
         ? await inspectNode(service.service_id, locationId)
@@ -339,22 +398,37 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
           : action === 'upgrade'
             ? await upgradeNode(service.service_id, locationId)
             : await restartNode(service.service_id, locationId)
+    setNodeActionLoading((current) => ({ ...current, [locationId]: null }))
     if (isApiError(result)) {
       setRuntimeMessage(result.message)
+      recordLocationAction(locationId, {
+        action,
+        status: 'error',
+        message: result.message,
+        timestamp: new Date().toISOString(),
+      })
       return
     }
     setNodeViewerEntry(result.node)
     setNodeActionResults((current) => ({ ...current, [locationId]: result }))
-    setRuntimeMessage(
+    const successMessage =
       result.message ||
-        (action === 'inspect'
-          ? 'Node viewer refreshed.'
-          : action === 'deploy'
-            ? 'Node deployed.'
-            : action === 'upgrade'
-              ? 'Node updated.'
-              : 'Node restarted.'),
-    )
+      (action === 'inspect'
+        ? 'Node viewer refreshed.'
+        : action === 'deploy'
+          ? 'Latest node deployed.'
+          : action === 'upgrade'
+            ? 'Node updated to the latest local version.'
+            : result.node.runtime_status === 'running'
+              ? 'Node runtime started.'
+              : 'Node restart command completed.')
+    setRuntimeMessage(successMessage)
+    recordLocationAction(locationId, {
+      action,
+      status: 'ok',
+      message: successMessage,
+      timestamp: new Date().toISOString(),
+    })
   }
 
   function handleCancelRuntimeEdit() {
@@ -835,8 +909,20 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
               const nodeViewer = nodeViewerByLocation.get(location.location_id)
               const serverMeta = servers.find((server) => server.server_id === location.server_id)
               const nodeTransition = nodeActionResults[location.location_id]
+              const nodeAction = nodeActionLoading[location.location_id]
+              const recentLocationEvents = locationActionEvents[location.location_id] ?? []
               const locationOpen = Boolean(locationPanels[location.location_id])
               const portsValue = location.runtime.expected_ports.join(', ')
+              const matchedEnvironments = environmentMatchesByLocation.get(location.location_id) ?? environmentMatchesByLocation.get('__service__') ?? []
+              const nodeControlLabel = !nodeViewer?.node_present
+                ? 'Deploy Latest Node'
+                : nodeViewer?.needs_upgrade
+                  ? 'Update Node'
+                  : 'Refresh Latest Node'
+              const runtimeControlLabel = nodeViewer?.runtime_status === 'running' || nodeViewer?.runtime_status === 'running_unmanaged'
+                ? 'Restart Node'
+                : 'Start Node'
+              const nodeStartCommand = `switchboard node serve --project-root ${location.root} --host 127.0.0.1 --port ${nodeViewer?.runtime_port ?? 8010}`
               return (
                 <div key={location.location_id} className="rounded-xl border border-gray-800 bg-gray-950 p-4">
                   <div className="flex flex-col gap-3">
@@ -875,15 +961,16 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                       <button
                         type="button"
                         onClick={() => handleNodeAction('inspect', location.location_id)}
-                        disabled={offline}
+                        disabled={offline || nodeAction !== null}
                         className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
                       >
-                        Inspect Node
+                        {nodeAction === 'inspect' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
+                        {nodeAction === 'inspect' ? 'Inspecting…' : 'Inspect Node'}
                       </button>
                       <button
                         type="button"
                         onClick={() => handleNodeAction(nodeViewer?.node_present ? 'upgrade' : 'deploy', location.location_id)}
-                        disabled={offline}
+                        disabled={offline || nodeAction !== null}
                         data-attention={nodeViewer?.needs_install || nodeViewer?.needs_upgrade ? 'true' : 'false'}
                         className={`inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs transition-colors disabled:opacity-50 ${
                           nodeViewer?.needs_install || nodeViewer?.needs_upgrade
@@ -891,15 +978,21 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                             : 'border-gray-700 text-gray-200 hover:border-cyan-500 hover:text-white'
                         }`}
                       >
-                        {!nodeViewer?.node_present ? 'Deploy Latest Node' : nodeViewer?.needs_upgrade ? 'Update Node' : 'Refresh Latest Node'}
+                        {nodeAction === 'deploy' || nodeAction === 'upgrade' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
+                        {nodeAction === 'deploy'
+                          ? 'Deploying…'
+                          : nodeAction === 'upgrade'
+                            ? 'Updating…'
+                            : nodeControlLabel}
                       </button>
                       <button
                         type="button"
                         onClick={() => handleNodeAction('restart', location.location_id)}
-                        disabled={offline || !nodeViewer?.node_present}
+                        disabled={offline || !nodeViewer?.node_present || nodeAction !== null}
                         className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
                       >
-                        Restart Node
+                        {nodeAction === 'restart' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
+                        {nodeAction === 'restart' ? `${runtimeControlLabel === 'Start Node' ? 'Starting' : 'Restarting'}…` : runtimeControlLabel}
                       </button>
                       <button
                         type="button"
@@ -908,7 +1001,15 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                         className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
                       >
                         <RefreshCw className={`h-3.5 w-3.5 ${checkingRuntimeLocation === location.location_id || pendingActions[`pending:runtime_check:${location.location_id}`] ? 'animate-spin' : ''}`} />
-                        {checkingRuntimeLocation === location.location_id || pendingActions[`pending:runtime_check:${location.location_id}`] ? 'Checking…' : 'Run Runtime Check'}
+                        {checkingRuntimeLocation === location.location_id || pendingActions[`pending:runtime_check:${location.location_id}`] ? 'Refreshing…' : 'Refresh Snapshot'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => matchedEnvironments[0] && onOpenEnvironmentLab(matchedEnvironments[0].environment_id)}
+                        disabled={matchedEnvironments.length === 0}
+                        className="inline-flex items-center gap-1 rounded-lg border border-cyan-900/40 bg-cyan-950/20 px-3 py-2 text-xs text-cyan-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
+                      >
+                        Open API Lab
                       </button>
                       <button
                         type="button"
@@ -929,6 +1030,45 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                     </div>
                     </div>
 
+                    {(nodeAction !== null || recentLocationEvents.length > 0) && (
+                      <div className="rounded-xl border border-gray-800 bg-gray-900/70 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Button Activity</div>
+                          {nodeAction !== null && (
+                            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-900/40 bg-cyan-950/20 px-2 py-1 text-[11px] uppercase tracking-[0.14em] text-cyan-200">
+                              <LoaderCircle className="h-3 w-3 animate-spin" />
+                              {nodeAction === 'inspect'
+                                ? 'Inspect in progress'
+                                : nodeAction === 'deploy'
+                                  ? 'Deploy in progress'
+                                  : nodeAction === 'upgrade'
+                                    ? 'Update in progress'
+                                    : 'Start / restart in progress'}
+                            </div>
+                          )}
+                        </div>
+                        <div className="mt-3 space-y-2">
+                          {recentLocationEvents.map((event, index) => (
+                            <div key={`${event.timestamp}:${event.action}:${index}`} className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-gray-800 bg-black/20 px-3 py-2 text-xs">
+                              <div className="min-w-0">
+                                <div className={`uppercase tracking-[0.14em] ${
+                                  event.status === 'error'
+                                    ? 'text-red-300'
+                                    : event.status === 'running'
+                                      ? 'text-cyan-300'
+                                      : 'text-emerald-300'
+                                }`}>
+                                  {event.action.split('_').join(' ')}
+                                </div>
+                                <div className="mt-1 text-gray-300">{event.message}</div>
+                              </div>
+                              <div className="text-gray-500">{new Date(event.timestamp).toLocaleTimeString()}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {locationOpen && (
                       <>
 
@@ -940,12 +1080,21 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                         <div><span className="text-gray-500">Bootstrap:</span> {nodeViewer.bootstrap_version || 'not ready'}</div>
                         <div><span className="text-gray-500">Runtime:</span> {nodeViewer.runtime_status}</div>
                         <div><span className="text-gray-500">Manifest:</span> <span className="font-mono text-xs">{nodeViewer.manifest_path}</span></div>
+                        <div><span className="text-gray-500">Port:</span> {nodeViewer.runtime_port}</div>
+                        <div><span className="text-gray-500">Runtime ready:</span> {nodeViewer.runtime_ready ? 'yes' : 'no'}</div>
                         {nodeViewer.last_error && <div className="md:col-span-2 text-amber-200">{nodeViewer.last_error}</div>}
                         {nodeViewer.node_present && !nodeViewer.bootstrap_ready && (
                           <div className="md:col-span-2 text-xs text-amber-200">
                             Node scaffold is present, but sync stays blocked until bootstrap writes the first task entry.
                           </div>
                         )}
+                        <div className="md:col-span-2 rounded-lg border border-gray-800 bg-black/20 px-3 py-2">
+                          <div className="text-[11px] uppercase tracking-[0.14em] text-gray-500">Start Command</div>
+                          <pre className="mt-2 overflow-x-auto text-xs text-cyan-200">{nodeStartCommand}</pre>
+                          <div className="mt-2 text-xs text-gray-500">
+                            Port assignment defaults to the framework-managed node port shown here. Bootstrap usually records app/runtime services, while the Switchboard node itself stays on this control port unless you change the runtime command.
+                          </div>
+                        </div>
                         {nodeTransition?.before && nodeTransition?.after && (
                           <div className="md:col-span-2 mt-2 rounded-lg border border-amber-900/40 bg-amber-950/20 px-3 py-2 text-xs text-amber-100">
                             <div className="uppercase tracking-[0.14em] text-amber-300">Latest action delta</div>
@@ -1094,6 +1243,12 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                           <div>
                             <span className="text-gray-500">Node present:</span> {latestRuntime.node_present ? 'yes' : 'no'}
                           </div>
+                          {latestRuntime.exposed_ports && latestRuntime.exposed_ports.length > 0 && (
+                            <div>
+                              <span className="text-gray-500">Exposed ports:</span>{' '}
+                              {latestRuntime.exposed_ports.map((port) => `${port.port}:${port.exposure}`).join(', ')}
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="mt-2 text-sm text-gray-500">No runtime check captured yet.</div>

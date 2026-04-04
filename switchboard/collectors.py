@@ -13,6 +13,11 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -26,9 +31,13 @@ from .config import Settings
 from .defaults import DEFAULT_EXCLUDE_GLOBS, DEFAULT_SECRET_PATTERNS, GIT_STATUS_COMMANDS, SAFE_REMOTE_COMMANDS
 from .manifests import ManifestStore
 from .models import (
+    ApiFlowCreateRequest,
+    ApiFlowPatchRequest,
+    ApiFlowRunRequest,
     CollectRequest,
     DiscoveryTreeRequest,
     DownloadRequest,
+    EnvironmentRuntimeSnapshotRequest,
     GitPushRequest,
     GitPullRequest,
     NodeActionRequest,
@@ -507,56 +516,106 @@ class CollectionCoordinator:
         if location is None:
             return {"status": "path_missing", "message": "No service location available."}
 
-        server_id = location.server_id
         server = self.manifests.resolve_server(
-            server_id,
-            {server_id: request.runtime_password} if request.runtime_password else {},
+            location.server_id,
+            {location.server_id: request.runtime_password} if request.runtime_password else {},
         )
+        details = self._runtime_snapshot_for_location(service, location, server)
+        detected_ports = [self._port_info_from_listener(listener) for listener in details["listeners"]]
+        detected_process_command = self._lookup_process_command(
+            server,
+            details["listeners"][0].get("pid") if details["listeners"] else None,
+        )
+        result = {
+            "service_id": service_id,
+            "location_id": location.location_id,
+            "server_id": location.server_id,
+            "root": location.root,
+            "status": details["status"],
+            "checked_at": details["checked_at"],
+            "configured_ports": details["configured_ports"],
+            "detected_ports": detected_ports,
+            "missing_ports": details["missing_ports"],
+            "healthcheck_command": details["healthcheck_command"],
+            "healthcheck_status": details["healthcheck_status"],
+            "healthcheck_output": details["healthcheck_output"],
+            "detected_process_command": detected_process_command,
+            "run_command_hint": details["run_command_hint"],
+            "monitoring_mode": details["monitoring_mode"],
+            "notes": details["notes"],
+            "node_present": details["node_present"],
+            "execution_mode": details["execution_mode"],
+            "source": "runtime_snapshot",
+            "firewall_status": details["firewall_status"],
+            "unexpected_ports": details["unexpected_ports"],
+            "exposed_ports": details["exposed_ports"],
+            "operator_commands": details["operator_commands"],
+        }
+        self.snapshots.persist_runtime_check(service_id, location.location_id, result)
+        return result
+
+    def _runtime_snapshot_for_location(
+        self,
+        service: ServiceManifest,
+        location: Any,
+        server: ResolvedServer,
+    ) -> dict[str, Any]:
         runtime = location.runtime
         configured_ports = runtime.expected_ports
         execution_mode = getattr(service, "execution_mode", "networked")
         inspect_ports = execution_mode == "networked" or bool(configured_ports)
         run_healthcheck = execution_mode != "docs_only" and bool(runtime.healthcheck_command.strip())
+        checked_at = utc_now_iso()
 
         if server.connection_type == "local":
             listeners = self._collect_local_listener_details() if inspect_ports else []
+            firewall_status = self._local_firewall_status()
             node_present = self._local_node_manifest_path(location.root).exists()
             health_result = self._run_healthcheck_local(runtime.healthcheck_command) if run_healthcheck else {"status": "skipped", "output": ""}
         else:
             with self._open_ssh(server) as connection:
                 if connection is None:
-                    result = {
-                        "service_id": service_id,
+                    return {
+                        "service_id": service.service_id,
                         "location_id": location.location_id,
-                        "server_id": server_id,
+                        "server_id": location.server_id,
                         "root": location.root,
                         "status": "unreachable",
-                        "checked_at": utc_now_iso(),
+                        "checked_at": checked_at,
                         "configured_ports": configured_ports,
-                        "detected_ports": [],
+                        "listeners": [],
                         "missing_ports": configured_ports,
+                        "unexpected_ports": [],
+                        "firewall_status": "unverified",
                         "healthcheck_command": runtime.healthcheck_command,
                         "healthcheck_status": "skipped",
                         "healthcheck_output": "",
-                        "detected_process_command": "",
                         "run_command_hint": runtime.run_command_hint,
                         "monitoring_mode": runtime.monitoring_mode,
                         "notes": runtime.notes,
                         "node_present": False,
                         "execution_mode": execution_mode,
+                        "exposed_ports": [],
+                        "operator_commands": self._operator_commands_for_findings(server, location, [], "unverified", runtime.healthcheck_command),
                     }
-                    self.snapshots.persist_runtime_check(service_id, location.location_id, result)
-                    return result
                 ssh, sftp = connection
                 listeners = self._collect_remote_listener_details(ssh) if inspect_ports else []
+                firewall_status = self._remote_firewall_status(ssh)
                 node_present = self._remote_exists(sftp, self._remote_node_manifest_path(location.root))
                 health_result = self._run_healthcheck_remote(ssh, runtime.healthcheck_command) if run_healthcheck else {"status": "skipped", "output": ""}
 
         matched_ports = [entry for entry in listeners if entry["port"] in configured_ports] if configured_ports else listeners
         missing_ports = [port for port in configured_ports if port not in {entry["port"] for entry in listeners}] if inspect_ports else []
-        detected_process_command = self._lookup_process_command(
+        unexpected_ports = sorted(
+            [entry["port"] for entry in listeners if configured_ports and entry["port"] not in configured_ports]
+        )
+        exposed_ports = self._classify_port_exposure(server, listeners, configured_ports)
+        operator_commands = self._operator_commands_for_findings(
             server,
-            matched_ports[0].get("pid") if matched_ports else None,
+            location,
+            exposed_ports,
+            firewall_status,
+            runtime.healthcheck_command,
         )
 
         status = "ok"
@@ -564,32 +623,35 @@ class CollectionCoordinator:
             status = "partial"
         if health_result["status"] == "failed":
             status = "partial"
+        if exposed_ports and any(item.get("exposure") == "public" and not item.get("expected") for item in exposed_ports):
+            status = "partial"
         if execution_mode == "networked" and not configured_ports and not runtime.healthcheck_command and not listeners:
             status = "unverified"
 
-        result = {
-            "service_id": service_id,
+        return {
+            "service_id": service.service_id,
             "location_id": location.location_id,
-            "server_id": server_id,
+            "server_id": location.server_id,
             "root": location.root,
             "status": status,
-            "checked_at": utc_now_iso(),
+            "checked_at": checked_at,
             "configured_ports": configured_ports,
-            "detected_ports": listeners,
+            "listeners": listeners,
             "missing_ports": missing_ports,
+            "unexpected_ports": unexpected_ports,
+            "firewall_status": firewall_status,
             "healthcheck_command": runtime.healthcheck_command,
             "healthcheck_status": health_result["status"],
             "healthcheck_output": health_result["output"],
-            "detected_process_command": detected_process_command,
             "run_command_hint": runtime.run_command_hint,
             "monitoring_mode": runtime.monitoring_mode,
             "notes": runtime.notes,
             "node_present": node_present,
             "execution_mode": execution_mode,
-            "source": "runtime_check",
+            "exposed_ports": exposed_ports,
+            "operator_commands": operator_commands,
+            "matched_ports": matched_ports,
         }
-        self.snapshots.persist_runtime_check(service_id, location.location_id, result)
-        return result
 
     def workspace_health_check(self, workspace_id: str, runtime_passwords: dict[str, str] | None = None) -> dict[str, Any]:
         results = []
@@ -607,6 +669,73 @@ class CollectionCoordinator:
                 except Exception as e:
                     results.append({"service_id": service.service_id, "location_id": location.location_id, "status": "error", "error": str(e)})
         return {"workspace_id": workspace_id, "results": results, "timestamp": utc_now_iso()}
+
+    def environment_runtime_snapshot(
+        self,
+        environment_id: str,
+        request: EnvironmentRuntimeSnapshotRequest | None = None,
+    ) -> dict[str, Any]:
+        environment = self.manifests.get_project_environment(environment_id)
+        services = {service.service_id: service for service in self.manifests.load_services()}
+        passwords = request.runtime_passwords if request else {}
+        snapshot = self._build_environment_runtime_snapshot(environment, services, passwords)
+        self.snapshots.persist_environment_runtime_snapshot(environment_id, snapshot)
+        return snapshot
+
+    def get_environment_lab(self, environment_id: str) -> dict[str, Any]:
+        environment = self.manifests.get_project_environment(environment_id)
+        project = self.manifests.get_project(environment.project_id)
+        services = {service.service_id: service for service in self.manifests.load_services()}
+        bundles = self.snapshots.list_all_pull_bundles()
+        environment_view = self._project_environment_view(environment, services, bundles)
+        snapshot = self.snapshots.get_environment_runtime_snapshot(environment_id)
+        flows = [flow.model_dump(mode="json") for flow in self.manifests.get_environment_api_flows(environment_id)]
+        runs = {
+            flow["flow_id"]: self.snapshots.get_api_flow_runs(environment_id, flow["flow_id"])
+            for flow in flows
+        }
+        return {
+            "project": project.model_dump(mode="json"),
+            "environment": environment_view,
+            "runtime_snapshot": snapshot,
+            "api_flows": flows,
+            "api_runs": runs,
+        }
+
+    def list_api_flows(self, environment_id: str) -> dict[str, Any]:
+        self.manifests.get_project_environment(environment_id)
+        flows = [flow.model_dump(mode="json") for flow in self.manifests.get_environment_api_flows(environment_id)]
+        return {"environment_id": environment_id, "flows": flows}
+
+    def create_api_flow(self, environment_id: str, request: ApiFlowCreateRequest) -> dict[str, Any]:
+        flow = self.manifests.create_api_flow(environment_id, request)
+        return {"status": "ok", "flow": flow.model_dump(mode="json")}
+
+    def patch_api_flow(self, environment_id: str, flow_id: str, request: ApiFlowPatchRequest) -> dict[str, Any]:
+        flow = self.manifests.patch_api_flow(environment_id, flow_id, request)
+        return {"status": "ok", "flow": flow.model_dump(mode="json")}
+
+    def delete_api_flow(self, environment_id: str, flow_id: str) -> dict[str, Any]:
+        flow = self.manifests.delete_api_flow(environment_id, flow_id)
+        return {"status": "ok", "flow": flow.model_dump(mode="json")}
+
+    def run_api_flow(self, environment_id: str, flow_id: str, _request: ApiFlowRunRequest | None = None) -> dict[str, Any]:
+        environment = self.manifests.get_project_environment(environment_id)
+        flow = self.manifests.get_api_flow(environment_id, flow_id)
+        run_record = self._execute_api_flow(environment, flow)
+        self.snapshots.append_api_flow_run(environment_id, flow_id, run_record)
+        return {"status": run_record["status"], "run": run_record}
+
+    def get_api_flow_runs(self, environment_id: str, flow_id: str) -> dict[str, Any]:
+        self.manifests.get_api_flow(environment_id, flow_id)
+        return {"environment_id": environment_id, "flow_id": flow_id, "runs": self.snapshots.get_api_flow_runs(environment_id, flow_id)}
+
+    def get_environment_pull_rollup(self, environment_id: str) -> dict[str, Any]:
+        environment = self.manifests.get_project_environment(environment_id)
+        services = {service.service_id: service for service in self.manifests.load_services()}
+        bundles = self.snapshots.list_all_pull_bundles()
+        view = self._project_environment_view(environment, services, bundles)
+        return {"environment_id": environment_id, "pull_rollup": view["pull_summary"]}
 
     def list_workspace_project_context(self, workspace_id: str) -> dict[str, Any]:
         self.manifests.get_workspace(workspace_id)
@@ -630,6 +759,228 @@ class CollectionCoordinator:
             "environments": enriched_environments,
             "rollups": rollups,
         }
+
+    def _build_environment_runtime_snapshot(
+        self,
+        environment: ProjectEnvironmentManifest,
+        services: dict[str, ServiceManifest],
+        runtime_passwords: dict[str, str],
+    ) -> dict[str, Any]:
+        captured_at = utc_now_iso()
+        location_rows: list[dict[str, Any]] = []
+        open_ports: set[int] = set()
+        expected_ports: set[int] = set()
+        unexpected_ports: set[int] = set()
+        exposed_ports: list[dict[str, Any]] = []
+        process_findings: list[dict[str, Any]] = []
+        operator_commands: list[dict[str, Any]] = []
+        node_findings: list[dict[str, Any]] = []
+        firewall_states: list[str] = []
+
+        for deployment in environment.deployments:
+            service = services.get(deployment.service_id)
+            if service is None:
+                continue
+            location = self._select_location(service, location_id=deployment.location_id)
+            if location is None and service.locations:
+                location = service.locations[0]
+            if location is None:
+                continue
+            server = self.manifests.resolve_server(location.server_id, runtime_passwords)
+            details = self._runtime_snapshot_for_location(service, location, server)
+            for listener in details["listeners"]:
+                open_ports.add(int(listener["port"]))
+                process_findings.append(self._process_finding_from_listener(listener))
+            for port in details["configured_ports"]:
+                expected_ports.add(int(port))
+            for port in details["unexpected_ports"]:
+                unexpected_ports.add(int(port))
+            exposed_ports = self._merge_port_exposure(exposed_ports, details["exposed_ports"])
+            operator_commands = self._merge_operator_commands(operator_commands, details["operator_commands"])
+            firewall_states.append(details["firewall_status"])
+            node_findings.append(
+                {
+                    "service_id": service.service_id,
+                    "location_id": location.location_id,
+                    "server_id": location.server_id,
+                    "node_present": details["node_present"],
+                }
+            )
+            location_rows.append(
+                {
+                    "service_id": service.service_id,
+                    "service_name": service.display_name,
+                    "execution_mode": getattr(service, "execution_mode", "networked"),
+                    "location_id": location.location_id,
+                    "server_id": location.server_id,
+                    "root": location.root,
+                    "host": server.host,
+                    "firewall_status": details["firewall_status"],
+                    "node_status": "present" if details["node_present"] else "missing",
+                    "expected_ports": details["configured_ports"],
+                    "open_ports": [listener["port"] for listener in details["listeners"]],
+                    "unexpected_ports": details["unexpected_ports"],
+                    "exposed_ports": details["exposed_ports"],
+                    "process_findings": [self._process_finding_from_listener(listener) for listener in details["listeners"]],
+                    "operator_commands": details["operator_commands"],
+                    "runtime_hint": details["run_command_hint"],
+                    "healthcheck_command": details["healthcheck_command"],
+                    "healthcheck_status": details["healthcheck_status"],
+                    "healthcheck_output": details["healthcheck_output"],
+                }
+            )
+
+        firewall_status = firewall_states[0] if firewall_states and all(state == firewall_states[0] for state in firewall_states) else "mixed"
+        return {
+            "environment_id": environment.environment_id,
+            "captured_at": captured_at,
+            "locations": location_rows,
+            "open_ports": sorted(open_ports),
+            "expected_ports": sorted(expected_ports),
+            "unexpected_ports": sorted(unexpected_ports),
+            "exposed_ports": exposed_ports,
+            "firewall_status": firewall_status if firewall_states else "unverified",
+            "process_findings": process_findings,
+            "node_findings": node_findings,
+            "operator_commands": operator_commands,
+        }
+
+    def _merge_port_exposure(self, current: list[dict[str, Any]], additions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        seen = {
+            f"{entry.get('host','')}|{entry.get('port','')}|{entry.get('bind_address','')}"
+            for entry in current
+        }
+        merged = list(current)
+        for entry in additions:
+            key = f"{entry.get('host','')}|{entry.get('port','')}|{entry.get('bind_address','')}"
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(entry)
+        return merged
+
+    def _merge_operator_commands(self, current: list[dict[str, Any]], additions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        seen = {f"{entry.get('category','')}|{entry.get('command','')}" for entry in current}
+        merged = list(current)
+        for entry in additions:
+            key = f"{entry.get('category','')}|{entry.get('command','')}"
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(entry)
+        return merged
+
+    def _process_finding_from_listener(self, listener: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "port": listener.get("port"),
+            "bind_address": listener.get("bind_address", ""),
+            "process_name": listener.get("process", ""),
+            "pid": listener.get("pid"),
+            "state": listener.get("state", ""),
+            "raw": listener.get("raw", ""),
+        }
+
+    def _port_info_from_listener(self, listener: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "port": listener.get("port"),
+            "protocol": listener.get("protocol", "tcp"),
+            "process": listener.get("process", ""),
+            "pid": listener.get("pid"),
+            "state": listener.get("state", ""),
+            "bind_address": listener.get("bind_address", ""),
+        }
+
+    def _local_firewall_status(self) -> str:
+        result = self._run_local(["sh", "-lc", SAFE_REMOTE_COMMANDS["firewall"]])
+        return (result["stdout"] or result["stderr"]).strip() or "unverified"
+
+    def _remote_firewall_status(self, ssh: Any) -> str:
+        result = self._run_remote(ssh, SAFE_REMOTE_COMMANDS["firewall"])
+        return (result["stdout"] or result["stderr"]).strip() or "unverified"
+
+    def _classify_port_exposure(
+        self,
+        server: ResolvedServer,
+        listeners: list[dict[str, Any]],
+        configured_ports: list[int],
+    ) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        for listener in listeners:
+            bind = str(listener.get("bind_address", "") or "")
+            exposure = "unknown"
+            notes = ""
+            if bind.startswith("127.") or bind in {"::1", "localhost"}:
+                exposure = "local_only"
+                notes = "Bound to loopback only."
+            elif bind in {"0.0.0.0", "*", "::", "[::]"} or bind.startswith("0.0.0.0"):
+                exposure = "public"
+                notes = "Bound on all interfaces."
+            rows.append(
+                {
+                    "host": server.host,
+                    "port": listener.get("port"),
+                    "bind_address": bind,
+                    "process_name": listener.get("process", ""),
+                    "expected": listener.get("port") in configured_ports,
+                    "exposure": exposure,
+                    "notes": notes,
+                }
+            )
+        return rows
+
+    def _operator_commands_for_findings(
+        self,
+        server: ResolvedServer,
+        location: Any,
+        exposed_ports: list[dict[str, Any]],
+        firewall_status: str,
+        healthcheck_command: str,
+    ) -> list[dict[str, Any]]:
+        host_prefix = "" if server.connection_type == "local" else f"ssh {server.username}@{server.host} "
+        commands: list[dict[str, Any]] = [
+            {
+                "category": "inspect_only",
+                "label": "List listening ports",
+                "command": f"{host_prefix}ss -ltnp",
+                "notes": f"Verify listeners for {location.root}.",
+            },
+            {
+                "category": "verify_node",
+                "label": "Check Switchboard node",
+                "command": f"{host_prefix}switchboard node status --project-root {location.root}",
+                "notes": "Confirms node runtime without changing it.",
+            },
+        ]
+        if firewall_status and firewall_status != "unverified":
+            commands.append(
+                {
+                    "category": "verify_firewall",
+                    "label": "Inspect firewall",
+                    "command": f"{host_prefix}{SAFE_REMOTE_COMMANDS['firewall']}",
+                    "notes": "Read-only firewall inspection.",
+                }
+            )
+        if healthcheck_command.strip():
+            commands.append(
+                {
+                    "category": "verify_health",
+                    "label": "Replay health check",
+                    "command": healthcheck_command,
+                    "notes": "Operator-run verification only.",
+                }
+            )
+        for port in exposed_ports:
+            if port.get("exposure") != "public":
+                continue
+            commands.append(
+                {
+                    "category": "verify_listener",
+                    "label": f"Inspect port {port.get('port')}",
+                    "command": f"{host_prefix}lsof -nP -iTCP:{port.get('port')} -sTCP:LISTEN",
+                    "notes": "Verify whether this public listener is intentional.",
+                }
+            )
+        return commands
 
     def sync_from_node(self, service_id: str, request: NodeSyncRequest) -> dict[str, Any]:
         with self._action_guard("sync_from_node", service_id) as lock_error:
@@ -1017,6 +1368,12 @@ class CollectionCoordinator:
             "service_count": len(environment.deployments),
             "summary": f"{added_count} added, {removed_count} removed, {changed_count} changed",
         }
+        snapshot = self.snapshots.get_environment_runtime_snapshot(environment.environment_id)
+        latest_flow_run_at = ""
+        for flow in self.manifests.get_environment_api_flows(environment.environment_id):
+            runs = self.snapshots.get_api_flow_runs(environment.environment_id, flow.flow_id)
+            if runs and str(runs[0].get("finished_at", "")) > latest_flow_run_at:
+                latest_flow_run_at = str(runs[0].get("finished_at", ""))
         return {
             **environment.model_dump(mode="json"),
             "pull_summary": pull_summary,
@@ -1025,6 +1382,14 @@ class CollectionCoordinator:
                 "cross_dependencies": cross_dependencies,
             },
             "service_summaries": service_summaries,
+            "runtime_snapshot_summary": {
+                "captured_at": snapshot.get("captured_at", "") if snapshot else "",
+                "open_port_count": len(snapshot.get("open_ports", [])) if snapshot else 0,
+                "exposed_port_count": len(snapshot.get("exposed_ports", [])) if snapshot else 0,
+                "firewall_status": snapshot.get("firewall_status", "unverified") if snapshot else "unverified",
+            },
+            "api_flow_count": len(self.manifests.get_environment_api_flows(environment.environment_id)),
+            "latest_flow_run_at": latest_flow_run_at,
         }
 
     def _latest_service_task_context(self, service_id: str) -> dict[str, Any]:
@@ -1967,6 +2332,193 @@ class CollectionCoordinator:
         with sftp.open(path, "w") as handle:
             handle.write(json.dumps(value, indent=2) + "\n")
 
+    def _execute_api_flow(self, environment: ProjectEnvironmentManifest, flow: Any) -> dict[str, Any]:
+        started_at = utc_now_iso()
+        variables: dict[str, str] = {}
+        step_results: list[dict[str, Any]] = []
+        failures = 0
+
+        ordered_steps = sorted(flow.steps, key=lambda step: (step.order, step.step_id))
+        for step in ordered_steps:
+            started = time.perf_counter()
+            headers = {key: self._template_string(value, variables) for key, value in (step.headers or {}).items()}
+            path = self._template_string(step.path or "", variables)
+            base_url = self._template_string(flow.base_url or "", variables).rstrip("/")
+            query = {
+                key: self._template_string(value, variables)
+                for key, value in (step.query or {}).items()
+                if value is not None
+            }
+            body = self._template_string(step.body or "", variables)
+            query_string = urllib.parse.urlencode(query)
+            resolved_url = f"{base_url}{path}"
+            if query_string:
+                resolved_url = f"{resolved_url}?{query_string}"
+            generated_curl = self._curl_for_step(step.method, resolved_url, headers, body)
+
+            request_body: bytes | None = body.encode("utf-8") if body and step.method in {"POST", "PUT", "PATCH", "DELETE"} else None
+            request = urllib.request.Request(resolved_url, data=request_body, method=step.method)
+            for key, value in headers.items():
+                request.add_header(key, value)
+
+            try:
+                with urllib.request.urlopen(request, timeout=step.timeout_seconds) as response:
+                    duration_ms = int((time.perf_counter() - started) * 1000)
+                    response_headers = {key: value for key, value in response.headers.items()}
+                    response_body = response.read().decode("utf-8", errors="replace")
+                    response_status = int(getattr(response, "status", 200) or 200)
+                    extracted = self._extract_step_captures(step.captures, response_headers, response_body)
+                    variables.update(extracted)
+                    status = "ok" if response_status == step.expected_status else "failed"
+                    if status == "failed":
+                        failures += 1
+                    step_results.append(
+                        {
+                            "step_id": step.step_id,
+                            "status": status,
+                            "resolved_url": resolved_url,
+                            "duration_ms": duration_ms,
+                            "request_preview": self._sanitize_request_preview(step.method, resolved_url, headers, body),
+                            "response_status": response_status,
+                            "response_headers": self._sanitize_response_headers(response_headers),
+                            "response_body_preview": self._sanitize_body_preview(response_body),
+                            "extracted_variables": extracted,
+                            "generated_curl": generated_curl,
+                            "error": "" if status == "ok" else f"Expected {step.expected_status}, got {response_status}",
+                        }
+                    )
+                    if status != "ok" and not step.continue_on_failure:
+                        break
+            except urllib.error.HTTPError as exc:
+                duration_ms = int((time.perf_counter() - started) * 1000)
+                body_preview = exc.read().decode("utf-8", errors="replace")
+                failures += 1
+                step_results.append(
+                    {
+                        "step_id": step.step_id,
+                        "status": "failed",
+                        "resolved_url": resolved_url,
+                        "duration_ms": duration_ms,
+                        "request_preview": self._sanitize_request_preview(step.method, resolved_url, headers, body),
+                        "response_status": exc.code,
+                        "response_headers": self._sanitize_response_headers(dict(exc.headers.items())),
+                        "response_body_preview": self._sanitize_body_preview(body_preview),
+                        "extracted_variables": {},
+                        "generated_curl": generated_curl,
+                        "error": str(exc),
+                    }
+                )
+                if not step.continue_on_failure:
+                    break
+            except Exception as exc:
+                duration_ms = int((time.perf_counter() - started) * 1000)
+                failures += 1
+                step_results.append(
+                    {
+                        "step_id": step.step_id,
+                        "status": "failed",
+                        "resolved_url": resolved_url,
+                        "duration_ms": duration_ms,
+                        "request_preview": self._sanitize_request_preview(step.method, resolved_url, headers, body),
+                        "response_status": 0,
+                        "response_headers": {},
+                        "response_body_preview": "",
+                        "extracted_variables": {},
+                        "generated_curl": generated_curl,
+                        "error": str(exc),
+                    }
+                )
+                if not step.continue_on_failure:
+                    break
+
+        finished_at = utc_now_iso()
+        status = "ok" if failures == 0 else ("partial" if failures < len(step_results) else "failed")
+        return {
+            "run_id": f"{flow.flow_id}-{uuid.uuid4().hex[:10]}",
+            "flow_id": flow.flow_id,
+            "environment_id": environment.environment_id,
+            "started_at": started_at,
+            "finished_at": finished_at,
+            "status": status,
+            "step_results": step_results,
+            "summary": f"{len(step_results) - failures} of {len(step_results)} steps matched expectations",
+        }
+
+    def _template_string(self, value: str, variables: dict[str, str]) -> str:
+        result = value
+        for key, token in variables.items():
+            result = result.replace(f"{{{{{key}}}}}", token)
+        return result
+
+    def _extract_step_captures(self, captures: list[Any], response_headers: dict[str, str], response_body: str) -> dict[str, str]:
+        if not captures:
+            return {}
+        extracted: dict[str, str] = {}
+        parsed_json: Any = None
+        for capture in captures:
+            value = ""
+            if capture.source == "header":
+                target = capture.selector.lower()
+                for key, header_value in response_headers.items():
+                    if key.lower() == target:
+                        value = str(header_value)
+                        break
+            else:
+                if parsed_json is None:
+                    try:
+                        parsed_json = json.loads(response_body)
+                    except Exception:
+                        parsed_json = {}
+                value = str(self._json_selector(parsed_json, capture.selector) or "")
+            if value:
+                extracted[capture.variable_name] = value
+        return extracted
+
+    def _json_selector(self, payload: Any, selector: str) -> Any:
+        current = payload
+        for part in [token for token in selector.split(".") if token]:
+            if isinstance(current, dict):
+                current = current.get(part)
+            elif isinstance(current, list) and part.isdigit():
+                index = int(part)
+                current = current[index] if 0 <= index < len(current) else None
+            else:
+                return None
+        return current
+
+    def _sanitize_request_preview(self, method: str, url: str, headers: dict[str, str], body: str) -> dict[str, Any]:
+        return {
+            "method": method,
+            "url": url,
+            "headers": self._sanitize_response_headers(headers),
+            "body_preview": self._sanitize_body_preview(body),
+        }
+
+    def _sanitize_response_headers(self, headers: dict[str, str]) -> dict[str, str]:
+        sanitized: dict[str, str] = {}
+        for key, value in headers.items():
+            if key.lower() in {"authorization", "cookie", "set-cookie", "x-api-key"}:
+                sanitized[key] = "[redacted]"
+            else:
+                sanitized[key] = value[:300]
+        return sanitized
+
+    def _sanitize_body_preview(self, body: str) -> str:
+        preview = body[:2000]
+        preview = re.sub(r'("?(?:token|secret|password|api[_-]?key|client[_-]?secret)"?\s*:\s*")[^"]+(")', r'\1[redacted]\2', preview, flags=re.IGNORECASE)
+        preview = re.sub(r"(Bearer\s+)[A-Za-z0-9\-\._~\+/=]+", r"\1[redacted]", preview, flags=re.IGNORECASE)
+        return preview
+
+    def _curl_for_step(self, method: str, url: str, headers: dict[str, str], body: str) -> str:
+        parts = [f"curl -X {method}", f"'{url}'"]
+        for key, value in headers.items():
+            safe_value = value.replace("'", "'\"'\"'")
+            parts.append(f"-H '{key}: {safe_value}'")
+        if body:
+            safe_body = body.replace("'", "'\"'\"'")
+            parts.append(f"--data '{safe_body}'")
+        return " ".join(parts)
+
     def _collect_local_listener_details(self) -> list[dict[str, Any]]:
         result = self._run_local(["sh", "-lc", "ss -ltnp 2>/dev/null || lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null"])
         return self._parse_listener_output(result["stdout"])
@@ -1987,8 +2539,17 @@ class CollectionCoordinator:
                 continue
             port = int(port_match.group(1))
             state = "LISTEN" if "LISTEN" in line.upper() else ""
+            bind_address = ""
             process = ""
             pid: int | None = None
+
+            ss_bind_match = re.search(r"\b(?:LISTEN|UNCONN)\s+\d+\s+\d+\s+(\S+):\d+", line)
+            if ss_bind_match:
+                bind_address = ss_bind_match.group(1)
+            else:
+                lsof_bind_match = re.search(r"(TCP|UDP)\s+(\S+):\d+", line)
+                if lsof_bind_match:
+                    bind_address = lsof_bind_match.group(2)
 
             ss_match = re.search(r'users:\(\("([^"]+)",pid=(\d+)', line)
             if ss_match:
@@ -2011,6 +2572,7 @@ class CollectionCoordinator:
                     "process": process,
                     "pid": pid,
                     "state": state,
+                    "bind_address": bind_address.strip("[]"),
                     "raw": line,
                 }
             )
@@ -2346,6 +2908,17 @@ class CollectionCoordinator:
                     self._run_remote(ssh, pip_cmd)
 
     def _upload_tree(self, sftp: Any, local_root: Path, remote_root: str, force: bool = False) -> None:
+        protected_force_paths = {
+            ("local", "tasks-completed.md"),
+            ("local", "control-center-handoff.md"),
+            ("local", "runbook.md"),
+            ("local", "approach-history.md"),
+            ("evidence", "completed-tasks.json"),
+            ("evidence", "doc-index.json"),
+            ("evidence", "repo-safety-history.json"),
+            ("evidence", "pull-bundle-history.json"),
+            ("evidence", "scope.snapshot.json"),
+        }
         for path in sorted(local_root.rglob("*")):
             relative = path.relative_to(local_root)
             remote_path = posixpath.join(remote_root, str(relative).replace(os.sep, "/"))
@@ -2363,7 +2936,7 @@ class CollectionCoordinator:
                     sftp.mkdir(current)
                 except OSError:
                     pass
-            if not force and relative.parts[:2] == ("local", "tasks-completed.md") and self._remote_exists(sftp, remote_path):
+            if relative.parts[:2] in protected_force_paths and self._remote_exists(sftp, remote_path):
                 continue
             sftp.put(str(path), remote_path)
 
@@ -2403,7 +2976,27 @@ class CollectionCoordinator:
             result = self._run_remote(ssh, command)
             if result["returncode"] != 0:
                 return {"status": "partial", "message": (result["stderr"] or result["stdout"]).strip()}
-            return {"status": "ok"}
+            verify_command = (
+                f"sleep 2; "
+                f"PID=''; test -f {self._quote(pid_file)} && PID=$(cat {self._quote(pid_file)}); "
+                f"STATUS=stopped; "
+                f"if [ -n \"$PID\" ] && kill -0 \"$PID\" 2>/dev/null; then STATUS=running; fi; "
+                f"PORT_PID=$(lsof -tiTCP:8010 -sTCP:LISTEN 2>/dev/null | head -n1); "
+                f"if [ \"$STATUS\" = stopped ] && [ -n \"$PORT_PID\" ]; then STATUS=running_unmanaged; fi; "
+                f"if [ \"$STATUS\" = stopped ]; then tail -n 40 {self._quote(log_file)} 2>/dev/null || true; fi; "
+                f"printf '\\n__STATUS__=%s\\n__PID__=%s\\n__PORT_PID__=%s\\n' \"$STATUS\" \"$PID\" \"$PORT_PID\""
+            )
+            verification = self._run_remote(ssh, verify_command)
+            output = verification["stdout"]
+            status_line = next((line for line in output.splitlines() if line.startswith("__STATUS__=")), "__STATUS__=stopped")
+            runtime_status = status_line.split("=", 1)[1].strip() or "stopped"
+            if runtime_status == "stopped":
+                log_excerpt = output.split("__STATUS__=", 1)[0].strip()
+                message = "Node runtime failed to start."
+                if log_excerpt:
+                    message = f"{message} {log_excerpt}"
+                return {"status": "partial", "message": message}
+            return {"status": "ok", "message": f"Node runtime {runtime_status}."}
 
     @contextmanager
     def _open_ssh(self, server: ResolvedServer) -> Iterator[tuple[Any, Any] | None]:

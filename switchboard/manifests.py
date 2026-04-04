@@ -12,6 +12,9 @@ from typing import Any
 
 from .config import Settings
 from .models import (
+    ApiFlowCreateRequest,
+    ApiFlowManifest,
+    ApiFlowPatchRequest,
     ManagedDocConfig,
     ProjectCreateRequest,
     ProjectEnvironmentCreateRequest,
@@ -263,6 +266,7 @@ class ManifestStore:
         self._services_path = settings.manifest_dir / "services.json"
         self._projects_path = settings.manifest_dir / "projects.json"
         self._project_environments_path = settings.manifest_dir / "project-environments.json"
+        self._api_flows_path = settings.manifest_dir / "api-flows.json"
 
     def load_servers(self) -> list[ServerManifest]:
         server_rows = load_json(self._servers_path)
@@ -295,6 +299,11 @@ class ManifestStore:
             ProjectEnvironmentManifest.model_validate(item)
             for item in load_json(self._project_environments_path)
         ]
+
+    def load_api_flows(self) -> list[ApiFlowManifest]:
+        if not self._api_flows_path.exists():
+            return []
+        return [ApiFlowManifest.model_validate(item) for item in load_json(self._api_flows_path)]
 
     def get_server(self, server_id: str) -> ServerManifest:
         for server in self.load_servers():
@@ -477,6 +486,15 @@ class ManifestStore:
             if environment.project_id == project_id
         ]
 
+    def get_environment_api_flows(self, environment_id: str) -> list[ApiFlowManifest]:
+        return [flow for flow in self.load_api_flows() if flow.environment_id == environment_id]
+
+    def get_api_flow(self, environment_id: str, flow_id: str) -> ApiFlowManifest:
+        for flow in self.get_environment_api_flows(environment_id):
+            if flow.flow_id == flow_id:
+                return flow
+        raise KeyError(f"Unknown API flow: {flow_id}")
+
     def get_workspace_project_environments(self, workspace_id: str) -> list[ProjectEnvironmentManifest]:
         project_ids = {project.project_id for project in self.get_workspace_projects(workspace_id)}
         return [
@@ -606,6 +624,58 @@ class ManifestStore:
         if removed is None:
             raise KeyError(f"Unknown project environment: {environment_id}")
         save_json(self._project_environments_path, retained)
+        if self._api_flows_path.exists():
+            save_json(
+                self._api_flows_path,
+                [item for item in load_json(self._api_flows_path) if item.get("environment_id") != environment_id],
+            )
+        return removed
+
+    def create_api_flow(self, environment_id: str, payload: ApiFlowCreateRequest) -> ApiFlowManifest:
+        self.get_project_environment(environment_id)
+        existing = self.load_api_flows()
+        if any(flow.flow_id == payload.flow_id for flow in existing):
+            raise ValueError(f"API flow already exists: {payload.flow_id}")
+        flow = ApiFlowManifest.model_validate(
+            {
+                "environment_id": environment_id,
+                **payload.model_dump(mode="json"),
+            }
+        )
+        base = load_json(self._api_flows_path) if self._api_flows_path.exists() else []
+        save_json(self._api_flows_path, [*base, flow.model_dump(mode="json")])
+        return flow
+
+    def patch_api_flow(self, environment_id: str, flow_id: str, payload: ApiFlowPatchRequest) -> ApiFlowManifest:
+        flows = load_json(self._api_flows_path) if self._api_flows_path.exists() else []
+        updated: ApiFlowManifest | None = None
+        next_flow_id = payload.flow_id or flow_id
+        if next_flow_id != flow_id and any(item["flow_id"] == next_flow_id for item in flows):
+            raise ValueError(f"API flow already exists: {next_flow_id}")
+        for index, item in enumerate(flows):
+            if item.get("environment_id") != environment_id or item["flow_id"] != flow_id:
+                continue
+            merged = {**item, **payload.model_dump(exclude_none=True, mode="json")}
+            updated = ApiFlowManifest.model_validate(merged)
+            flows[index] = updated.model_dump(mode="json")
+            break
+        if updated is None:
+            raise KeyError(f"Unknown API flow: {flow_id}")
+        save_json(self._api_flows_path, flows)
+        return updated
+
+    def delete_api_flow(self, environment_id: str, flow_id: str) -> ApiFlowManifest:
+        flows = load_json(self._api_flows_path) if self._api_flows_path.exists() else []
+        removed: ApiFlowManifest | None = None
+        retained: list[dict[str, Any]] = []
+        for item in flows:
+            if item.get("environment_id") == environment_id and item.get("flow_id") == flow_id:
+                removed = ApiFlowManifest.model_validate(item)
+                continue
+            retained.append(item)
+        if removed is None:
+            raise KeyError(f"Unknown API flow: {flow_id}")
+        save_json(self._api_flows_path, retained)
         return removed
 
     def create_server(self, payload: ServerCreateRequest) -> ServerManifest:

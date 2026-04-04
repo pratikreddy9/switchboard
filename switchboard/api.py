@@ -10,9 +10,13 @@ from .config import get_settings
 from .manifests import ManifestStore
 from .models import (
     ActionLockRequest,
+    ApiFlowCreateRequest,
+    ApiFlowPatchRequest,
+    ApiFlowRunRequest,
     CollectRequest,
     DiscoveryTreeRequest,
     DownloadRequest,
+    EnvironmentRuntimeSnapshotRequest,
     GitPullRequest,
     GitPushRequest,
     NodeActionRequest,
@@ -316,6 +320,87 @@ def runtime_check(service_id: str, request: RuntimeActionRequest) -> dict[str, o
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     _raise_for_action_result(result)
     return result
+
+
+@app.get("/api/project-environments/{environment_id}/lab")
+def get_environment_lab(environment_id: str) -> dict[str, object]:
+    try:
+        return coordinator.get_environment_lab(environment_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/project-environments/{environment_id}/runtime-snapshot")
+def refresh_environment_runtime_snapshot(
+    environment_id: str,
+    request: EnvironmentRuntimeSnapshotRequest,
+) -> dict[str, object]:
+    try:
+        return coordinator.environment_runtime_snapshot(environment_id, request)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/project-environments/{environment_id}/api-flows")
+def list_api_flows(environment_id: str) -> dict[str, object]:
+    try:
+        return coordinator.list_api_flows(environment_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/project-environments/{environment_id}/api-flows")
+def create_api_flow(environment_id: str, request: ApiFlowCreateRequest) -> dict[str, object]:
+    try:
+        return coordinator.create_api_flow(environment_id, request)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.patch("/api/project-environments/{environment_id}/api-flows/{flow_id}")
+def patch_api_flow(environment_id: str, flow_id: str, request: ApiFlowPatchRequest) -> dict[str, object]:
+    try:
+        return coordinator.patch_api_flow(environment_id, flow_id, request)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.delete("/api/project-environments/{environment_id}/api-flows/{flow_id}")
+def delete_api_flow(environment_id: str, flow_id: str) -> dict[str, object]:
+    try:
+        return coordinator.delete_api_flow(environment_id, flow_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/project-environments/{environment_id}/api-flows/{flow_id}/run")
+def run_api_flow(environment_id: str, flow_id: str, request: ApiFlowRunRequest) -> dict[str, object]:
+    try:
+        result = coordinator.run_api_flow(environment_id, flow_id, request)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _raise_for_action_result(result)
+    return result
+
+
+@app.get("/api/project-environments/{environment_id}/api-flows/{flow_id}/runs")
+def get_api_flow_runs(environment_id: str, flow_id: str) -> dict[str, object]:
+    try:
+        return coordinator.get_api_flow_runs(environment_id, flow_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/project-environments/{environment_id}/pull-rollup")
+def get_environment_pull_rollup(environment_id: str) -> dict[str, object]:
+    try:
+        return coordinator.get_environment_pull_rollup(environment_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.post("/api/services/{service_id}/actions/sync-from-node")

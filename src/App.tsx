@@ -6,6 +6,7 @@ import { WorkspaceSwitcher } from './components/WorkspaceSwitcher'
 import { WorkspacePage } from './pages/WorkspacePage'
 import { ServiceDetailPage } from './pages/ServiceDetailPage'
 import { ControlCenterPage } from './pages/ControlCenterPage'
+import { EnvironmentApiLabPage } from './pages/EnvironmentApiLabPage'
 import { loadFallbackWorkspaceList } from './data/fallback'
 
 export const TECH_STACK_LINES = [
@@ -13,7 +14,7 @@ export const TECH_STACK_LINES = [
   'Frontend: React 19, Vite, TypeScript, Tailwind, Lucide icons.',
   'Versioning: Git for repo status/pull/push actions and commit metadata.',
   'Operations: local path walking plus remote SSH/SFTP collection from declared servers.',
-  'Runtime: per-location ports, health-check commands, run-command hints, and manual runtime checks.',
+  'Runtime: per-location snapshots, exposure hints, generated operator commands, and environment API Labs.',
   'Node sync: manual, control-center initiated only. Nodes do not call back into the control center.',
   'Testing: Vitest for frontend contract checks and Python unittest for backend regressions.',
 ]
@@ -25,7 +26,7 @@ export const HOW_TO_USE_LINES = [
   'Create service saves the chosen scope and per-location runtime config into the manifest.',
   'Servers belong to a company and can be marked VPN-required plus either native-agent or local-bundle-only.',
   'Pull Bundles create a new timestamped local copy while preserving the source tree.',
-  'Service detail pages now handle runtime checks plus Sync From Node and Sync To Node.',
+  'Service detail pages now handle runtime snapshots plus Sync From Node, Sync To Node, and environment API Lab entry points.',
   'Node-side agents should read switchboard/core/playbook.md and update only switchboard/local/tasks-completed.md.',
   'Managed root docs like README.md, API.md, and CHANGELOG.md are opt-in and controlled from the service page.',
   'Repo actions stay per service: git status, safety check, git pull, git push.',
@@ -37,6 +38,7 @@ export default function App() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null)
   const [selectedService, setSelectedService] = useState<string | null>(null)
+  const [selectedEnvironmentLab, setSelectedEnvironmentLab] = useState<string | null>(null)
   const [latestResults, setLatestResults] = useState<Record<string, WorkspaceLatest>>({})
 
   function loadCompanies() {
@@ -138,14 +140,15 @@ export default function App() {
           </button>
 
           {workspaces.length > 0 && (
-            <WorkspaceSwitcher
-              workspaces={workspaces}
-              active={activeWorkspace ?? ''}
-              onChange={(id) => {
-                setSelectedService(null)
-                setActiveWorkspace(id)
-              }}
-            />
+              <WorkspaceSwitcher
+                workspaces={workspaces}
+                active={activeWorkspace ?? ''}
+                onChange={(id) => {
+                  setSelectedService(null)
+                  setSelectedEnvironmentLab(null)
+                  setActiveWorkspace(id)
+                }}
+              />
           )}
 
           <div className="ml-auto flex items-center gap-3">
@@ -175,12 +178,24 @@ export default function App() {
             offline={offline}
             onBack={() => setSelectedService(null)}
             onDeleted={handleServiceDeleted}
+            onOpenEnvironmentLab={(environmentId) => {
+              setSelectedService(null)
+              setSelectedEnvironmentLab(environmentId)
+            }}
+          />
+        ) : selectedEnvironmentLab ? (
+          <EnvironmentApiLabPage
+            environmentId={selectedEnvironmentLab}
+            offline={offline}
+            onBack={() => setSelectedEnvironmentLab(null)}
+            onSelectEnvironment={(environmentId) => setSelectedEnvironmentLab(environmentId)}
           />
         ) : activeWorkspace ? (
           <WorkspacePage
             workspaceId={activeWorkspace}
             offline={offline}
             onSelectService={setSelectedService}
+            onOpenEnvironmentLab={(environmentId) => setSelectedEnvironmentLab(environmentId)}
           />
         ) : (
           <ControlCenterPage
@@ -190,6 +205,7 @@ export default function App() {
             onReloadCompanies={loadCompanies}
             onOpenWorkspace={(workspaceId) => {
               setSelectedService(null)
+              setSelectedEnvironmentLab(null)
               setActiveWorkspace(workspaceId)
             }}
           />

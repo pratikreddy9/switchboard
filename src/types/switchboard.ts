@@ -17,6 +17,7 @@ export interface PortInfo {
   process: string
   pid?: number | null
   state?: string
+  bind_address?: string
 }
 
 export interface RuntimeConfig {
@@ -242,6 +243,154 @@ export interface ProjectEnvironmentView extends ProjectEnvironmentManifest {
   pull_summary?: ProjectPullSummary
   dependency_summary?: EnvironmentDependencySummary
   service_summaries?: ProjectEnvironmentServiceSummary[]
+  runtime_snapshot_summary?: {
+    captured_at: string
+    open_port_count: number
+    exposed_port_count: number
+    firewall_status: string
+  }
+  api_flow_count?: number
+  latest_flow_run_at?: string
+}
+
+export type ApiFlowTargetKind = 'service' | 'dependency' | 'cross_dependency'
+export type CaptureSource = 'json' | 'header'
+
+export interface ApiStepCapture {
+  variable_name: string
+  source: CaptureSource
+  selector: string
+}
+
+export interface ApiFlowStep {
+  step_id: string
+  order: number
+  display_name: string
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
+  path: string
+  query: Record<string, string>
+  headers: Record<string, string>
+  body: string
+  expected_status: number
+  continue_on_failure: boolean
+  timeout_seconds: number
+  notes: string
+  captures: ApiStepCapture[]
+}
+
+export interface ApiFlowManifest {
+  flow_id: string
+  environment_id: string
+  service_id?: string
+  display_name: string
+  target_kind: ApiFlowTargetKind
+  target_name: string
+  base_url: string
+  execution_mode: 'http'
+  enabled: boolean
+  tags: string[]
+  notes: string
+  steps: ApiFlowStep[]
+}
+
+export interface ApiStepRunResult {
+  step_id: string
+  status: 'ok' | 'failed' | 'skipped'
+  resolved_url: string
+  duration_ms: number
+  request_preview: {
+    method: string
+    url: string
+    headers: Record<string, string>
+    body_preview: string
+  }
+  response_status: number
+  response_headers: Record<string, string>
+  response_body_preview: string
+  extracted_variables: Record<string, string>
+  generated_curl: string
+  error: string
+}
+
+export interface ApiFlowRunRecord {
+  run_id: string
+  flow_id: string
+  environment_id: string
+  started_at: string
+  finished_at: string
+  status: 'ok' | 'partial' | 'failed'
+  step_results: ApiStepRunResult[]
+  summary: string
+}
+
+export interface OperatorCommand {
+  category: 'inspect_only' | 'verify_listener' | 'verify_firewall' | 'verify_health' | 'verify_node'
+  label: string
+  command: string
+  notes: string
+}
+
+export interface ProcessFinding {
+  port?: number
+  bind_address: string
+  process_name: string
+  pid?: number
+  state: string
+  raw: string
+}
+
+export interface PortExposureFinding {
+  host: string
+  port: number
+  bind_address: string
+  process_name: string
+  expected: boolean
+  exposure: 'local_only' | 'public' | 'unknown'
+  notes: string
+}
+
+export interface EnvironmentLocationSnapshot {
+  service_id: string
+  service_name: string
+  execution_mode: ExecutionMode
+  location_id: string
+  server_id: string
+  root: string
+  host: string
+  firewall_status: string
+  node_status: string
+  expected_ports: number[]
+  open_ports: number[]
+  unexpected_ports: number[]
+  exposed_ports: PortExposureFinding[]
+  process_findings: ProcessFinding[]
+  operator_commands: OperatorCommand[]
+  runtime_hint: string
+  healthcheck_command: string
+  healthcheck_status: string
+  healthcheck_output: string
+}
+
+export interface EnvironmentRuntimeSnapshot {
+  environment_id: string
+  captured_at: string
+  locations: EnvironmentLocationSnapshot[]
+  open_ports: number[]
+  expected_ports: number[]
+  unexpected_ports: number[]
+  exposed_ports: PortExposureFinding[]
+  firewall_status: string
+  process_findings: ProcessFinding[]
+  node_findings: Array<Record<string, unknown>>
+  operator_commands: OperatorCommand[]
+}
+
+export interface EnvironmentLabView {
+  project: ProjectManifest
+  environment: ProjectEnvironmentView
+  runtime_snapshot?: EnvironmentRuntimeSnapshot
+  api_flows: ApiFlowManifest[]
+  api_runs: Record<string, ApiFlowRunRecord[]>
 }
 
 export interface CompanyCreateRequest {
@@ -319,6 +468,38 @@ export interface ProjectEnvironmentPatchRequest {
   deployments?: ProjectDeploymentRef[]
   tags?: string[]
   notes?: string
+}
+
+export interface EnvironmentRuntimeSnapshotRequest {
+  runtime_passwords?: Record<string, string>
+}
+
+export interface ApiFlowCreateRequest {
+  flow_id: string
+  service_id?: string
+  display_name: string
+  target_kind?: ApiFlowTargetKind
+  target_name?: string
+  base_url?: string
+  execution_mode?: 'http'
+  enabled?: boolean
+  tags?: string[]
+  notes?: string
+  steps?: ApiFlowStep[]
+}
+
+export interface ApiFlowPatchRequest {
+  flow_id?: string
+  service_id?: string
+  display_name?: string
+  target_kind?: ApiFlowTargetKind
+  target_name?: string
+  base_url?: string
+  execution_mode?: 'http'
+  enabled?: boolean
+  tags?: string[]
+  notes?: string
+  steps?: ApiFlowStep[]
 }
 
 export type PendingActionKey = `${string}:${string}:${'pull_bundle'|'sync_to_node'|'sync_from_node'|'runtime_check'}`
@@ -610,6 +791,10 @@ export interface RuntimeCheckResult {
   notes: string
   node_present: boolean
   source?: string
+  firewall_status?: string
+  unexpected_ports?: number[]
+  exposed_ports?: PortExposureFinding[]
+  operator_commands?: OperatorCommand[]
 }
 
 export interface NodeSyncResult {

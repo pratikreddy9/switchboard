@@ -32,6 +32,7 @@ interface Props {
   workspaceName?: string
   workspaceNotes?: string
   services: Service[]
+  onOpenEnvironmentLab: (environmentId: string) => void
 }
 
 type ProjectFormState = {
@@ -81,7 +82,7 @@ function blankDeployment(): ProjectDeploymentRef {
   }
 }
 
-export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNotes, services }: Props) {
+export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNotes, services, onOpenEnvironmentLab }: Props) {
   const [projects, setProjects] = useState<ProjectManifest[]>([])
   const [environments, setEnvironments] = useState<ProjectEnvironmentView[]>([])
   const [expanded, setExpanded] = useState(false)
@@ -474,6 +475,7 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
             <div className="mt-2 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.14em]">
               <span className="rounded-full border border-cyan-900/30 bg-cyan-950/20 px-2 py-1 text-cyan-200">{environment.kind}</span>
               <span className="rounded-full border border-gray-800 px-2 py-1 text-gray-400">{environment.deployments.length} deployments</span>
+              <span className="rounded-full border border-gray-800 px-2 py-1 text-gray-400">{environment.api_flow_count ?? 0} flows</span>
               <span className="rounded-full border border-amber-900/30 bg-amber-950/20 px-2 py-1 text-amber-200">
                 {pull?.added_count ?? 0}+ / {pull?.removed_count ?? 0}- / {pull?.changed_count ?? 0}~
               </span>
@@ -516,6 +518,14 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
                   {pull?.latest_created_at ? `Latest ${new Date(pull.latest_created_at).toLocaleString()}` : 'No bundles yet'}
                 </div>
               </div>
+              <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-3 md:col-span-2">
+                <div className="text-[11px] uppercase tracking-[0.16em] text-gray-500">Runtime Snapshot</div>
+                <div className="mt-2 text-sm text-gray-300">
+                  {environment.runtime_snapshot_summary?.captured_at
+                    ? `${environment.runtime_snapshot_summary.open_port_count} open ports · ${environment.runtime_snapshot_summary.exposed_port_count} exposed · firewall ${environment.runtime_snapshot_summary.firewall_status}`
+                    : 'No runtime snapshot yet.'}
+                </div>
+              </div>
             </div>
             <div className="mt-3 space-y-2">
               {(environment.service_summaries ?? []).map((summary) => (
@@ -539,6 +549,9 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
               ))}
             </div>
             <div className="mt-3 flex justify-end gap-2">
+              <button onClick={() => onOpenEnvironmentLab(environment.environment_id)} className="rounded-lg border border-cyan-900/40 bg-cyan-950/20 px-3 py-1.5 text-xs text-cyan-200 hover:border-cyan-500 hover:text-white">
+                Open API Lab
+              </button>
               {!offline && (
                 <>
                   <button onClick={() => beginEditEnvironment(environment)} className="p-1 text-gray-500 hover:text-cyan-300">

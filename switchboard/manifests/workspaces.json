@@ -9,13 +9,12 @@
     "favorite_tier": "primary",
     "servers": [
       "local_mac",
-      "zapp_test_114",
-      "zapp_prod_253"
+      "zapp_prod_253",
+      "zapp_test_114"
     ],
     "services": [
-      "docgenerator",
-      "lambdalogger",
-      "zapplambda"
+      "lambdascripts",
+      "lambdalogger"
     ],
     "notes": "Seed workspace for document generation, lambda logging, and lambda source lanes."
   },
@@ -33,8 +32,23 @@
     ],
     "services": [
       "e",
-      "aichat"
+      "aichat",
+      "sys_docs",
+      "comparing"
     ],
     "notes": "Seed workspace for the first named PESU lanes only."
+  },
+  {
+    "workspace_id": "1",
+    "name": "P",
+    "tags": [
+      "company"
+    ],
+    "favorite_tier": "primary",
+    "servers": [],
+    "services": [
+      "switch"
+    ],
+    "notes": "moi"
   }
 ]

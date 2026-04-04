@@ -100,7 +100,16 @@ class SnapshotStore:
         write_json(self.settings.private_state_dir / "repo-safety-findings.json", {"generated": generated, "checks": []})
         write_json(
             self.settings.private_state_dir / "runtime-cache.json",
-            {"generated": generated, "runtime_checks": {}, "node_sync": {}, "action_locks": {}, "task_ledger": {}, "node_viewer": {}},
+            {
+                "generated": generated,
+                "runtime_checks": {},
+                "node_sync": {},
+                "action_locks": {},
+                "task_ledger": {},
+                "node_viewer": {},
+                "environment_runtime_snapshots": {},
+                "api_flow_runs": {},
+            },
         )
         return {
             "workspace_registry": workspace_registry,
@@ -114,7 +123,16 @@ class SnapshotStore:
     def _read_runtime_cache(self) -> dict[str, Any]:
         return read_json(
             self._runtime_cache_path(),
-            {"generated": utc_now_iso(), "runtime_checks": {}, "node_sync": {}, "action_locks": {}, "task_ledger": {}, "node_viewer": {}},
+            {
+                "generated": utc_now_iso(),
+                "runtime_checks": {},
+                "node_sync": {},
+                "action_locks": {},
+                "task_ledger": {},
+                "node_viewer": {},
+                "environment_runtime_snapshots": {},
+                "api_flow_runs": {},
+            },
         )
 
     def _write_runtime_cache(self, cache: dict[str, Any]) -> None:
@@ -123,6 +141,8 @@ class SnapshotStore:
         cache.setdefault("action_locks", {})
         cache.setdefault("task_ledger", {})
         cache.setdefault("node_viewer", {})
+        cache.setdefault("environment_runtime_snapshots", {})
+        cache.setdefault("api_flow_runs", {})
         cache["generated"] = cache.get("generated") or utc_now_iso()
         write_json(self._runtime_cache_path(), cache)
 
@@ -264,6 +284,33 @@ class SnapshotStore:
         rows = list(service_viewer.values())
         rows.sort(key=lambda entry: entry.get("location_id", ""))
         return rows
+
+    def persist_environment_runtime_snapshot(self, environment_id: str, record: dict[str, Any]) -> dict[str, Any]:
+        cache = self._read_runtime_cache()
+        snapshots = cache.setdefault("environment_runtime_snapshots", {})
+        snapshots[environment_id] = record
+        cache["generated"] = record.get("captured_at") or utc_now_iso()
+        self._write_runtime_cache(cache)
+        return record
+
+    def get_environment_runtime_snapshot(self, environment_id: str) -> dict[str, Any] | None:
+        cache = self._read_runtime_cache()
+        return cache.get("environment_runtime_snapshots", {}).get(environment_id)
+
+    def append_api_flow_run(self, environment_id: str, flow_id: str, record: dict[str, Any]) -> dict[str, Any]:
+        cache = self._read_runtime_cache()
+        runs = cache.setdefault("api_flow_runs", {})
+        environment_runs = runs.setdefault(environment_id, {})
+        flow_runs = environment_runs.setdefault(flow_id, [])
+        flow_runs.insert(0, record)
+        environment_runs[flow_id] = flow_runs[:25]
+        cache["generated"] = record.get("finished_at") or record.get("started_at") or utc_now_iso()
+        self._write_runtime_cache(cache)
+        return record
+
+    def get_api_flow_runs(self, environment_id: str, flow_id: str) -> list[dict[str, Any]]:
+        cache = self._read_runtime_cache()
+        return list(cache.get("api_flow_runs", {}).get(environment_id, {}).get(flow_id, []))
 
     def persist_collect_snapshot(self, snapshot: dict[str, Any]) -> dict[str, Any]:
         generated = snapshot["generated"]

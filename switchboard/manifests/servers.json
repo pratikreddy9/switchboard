@@ -43,7 +43,7 @@
     "username": "zappadmin",
     "port": 22,
     "deployment_mode": "local_bundle_only",
-    "vpn_required": true,
+    "vpn_required": false,
     "tags": [
       "zapp",
       "test",
@@ -61,7 +61,7 @@
     "username": "zappadmin",
     "port": 22,
     "deployment_mode": "local_bundle_only",
-    "vpn_required": true,
+    "vpn_required": false,
     "tags": [
       "zapp",
       "prod",

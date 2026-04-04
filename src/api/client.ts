@@ -1,7 +1,17 @@
 import type {
   ActionLock,
+  ApiFlowCreateRequest,
+  ApiFlowManifest,
+  ApiFlowPatchRequest,
+  ApiFlowRunRecord,
   CompanyCreateRequest,
   CompanyPatchRequest,
+  EnvironmentLabView,
+  EnvironmentRuntimeSnapshot,
+  EnvironmentRuntimeSnapshotRequest,
+  OperatorCommand,
+  PortExposureFinding,
+  ProcessFinding,
   ProjectEnvironmentCreateRequest,
   ProjectEnvironmentPatchRequest,
   ProjectEnvironmentView,
@@ -241,6 +251,142 @@ function normalizeRuntimeCheck(result: any): RuntimeCheckResult {
     notes: result.notes ?? '',
     node_present: Boolean(result.node_present),
     source: result.source,
+    firewall_status: result.firewall_status ?? 'unverified',
+    unexpected_ports: Array.isArray(result.unexpected_ports) ? result.unexpected_ports.map((port: unknown) => Number(port)).filter((port: number) => Number.isFinite(port)) : [],
+    exposed_ports: (result.exposed_ports ?? []).map(normalizePortExposureFinding),
+    operator_commands: (result.operator_commands ?? []).map(normalizeOperatorCommand),
+  }
+}
+
+function normalizeProcessFinding(result: any): ProcessFinding {
+  return {
+    port: typeof result?.port === 'number' ? result.port : result?.port ? Number(result.port) : undefined,
+    bind_address: result?.bind_address ?? '',
+    process_name: result?.process_name ?? '',
+    pid: typeof result?.pid === 'number' ? result.pid : result?.pid ? Number(result.pid) : undefined,
+    state: result?.state ?? '',
+    raw: result?.raw ?? '',
+  }
+}
+
+function normalizePortExposureFinding(result: any): PortExposureFinding {
+  return {
+    host: result?.host ?? '',
+    port: Number(result?.port ?? 0),
+    bind_address: result?.bind_address ?? '',
+    process_name: result?.process_name ?? '',
+    expected: Boolean(result?.expected),
+    exposure: result?.exposure ?? 'unknown',
+    notes: result?.notes ?? '',
+  }
+}
+
+function normalizeOperatorCommand(result: any): OperatorCommand {
+  return {
+    category: result?.category ?? 'inspect_only',
+    label: result?.label ?? '',
+    command: result?.command ?? '',
+    notes: result?.notes ?? '',
+  }
+}
+
+function normalizeEnvironmentRuntimeSnapshot(result: any): EnvironmentRuntimeSnapshot {
+  return {
+    environment_id: result?.environment_id ?? '',
+    captured_at: result?.captured_at ?? '',
+    locations: (result?.locations ?? []).map((location: any) => ({
+      service_id: location?.service_id ?? '',
+      service_name: location?.service_name ?? '',
+      execution_mode: location?.execution_mode ?? 'networked',
+      location_id: location?.location_id ?? '',
+      server_id: location?.server_id ?? '',
+      root: location?.root ?? '',
+      host: location?.host ?? '',
+      firewall_status: location?.firewall_status ?? 'unverified',
+      node_status: location?.node_status ?? 'missing',
+      expected_ports: location?.expected_ports ?? [],
+      open_ports: location?.open_ports ?? [],
+      unexpected_ports: location?.unexpected_ports ?? [],
+      exposed_ports: (location?.exposed_ports ?? []).map(normalizePortExposureFinding),
+      process_findings: (location?.process_findings ?? []).map(normalizeProcessFinding),
+      operator_commands: (location?.operator_commands ?? []).map(normalizeOperatorCommand),
+      runtime_hint: location?.runtime_hint ?? '',
+      healthcheck_command: location?.healthcheck_command ?? '',
+      healthcheck_status: location?.healthcheck_status ?? 'skipped',
+      healthcheck_output: location?.healthcheck_output ?? '',
+    })),
+    open_ports: result?.open_ports ?? [],
+    expected_ports: result?.expected_ports ?? [],
+    unexpected_ports: result?.unexpected_ports ?? [],
+    exposed_ports: (result?.exposed_ports ?? []).map(normalizePortExposureFinding),
+    firewall_status: result?.firewall_status ?? 'unverified',
+    process_findings: (result?.process_findings ?? []).map(normalizeProcessFinding),
+    node_findings: result?.node_findings ?? [],
+    operator_commands: (result?.operator_commands ?? []).map(normalizeOperatorCommand),
+  }
+}
+
+function normalizeApiFlowStep(step: any) {
+  return {
+    step_id: step?.step_id ?? '',
+    order: step?.order ?? 0,
+    display_name: step?.display_name ?? '',
+    method: step?.method ?? 'GET',
+    path: step?.path ?? '',
+    query: step?.query ?? {},
+    headers: step?.headers ?? {},
+    body: step?.body ?? '',
+    expected_status: step?.expected_status ?? 200,
+    continue_on_failure: step?.continue_on_failure ?? false,
+    timeout_seconds: step?.timeout_seconds ?? 15,
+    notes: step?.notes ?? '',
+    captures: (step?.captures ?? []).map((capture: any) => ({
+      variable_name: capture?.variable_name ?? '',
+      source: capture?.source ?? 'json',
+      selector: capture?.selector ?? '',
+    })),
+  }
+}
+
+function normalizeApiFlow(result: any): ApiFlowManifest {
+  return {
+    flow_id: result?.flow_id ?? '',
+    environment_id: result?.environment_id ?? '',
+    service_id: result?.service_id ?? '',
+    display_name: result?.display_name ?? '',
+    target_kind: result?.target_kind ?? 'service',
+    target_name: result?.target_name ?? '',
+    base_url: result?.base_url ?? '',
+    execution_mode: result?.execution_mode ?? 'http',
+    enabled: result?.enabled ?? true,
+    tags: result?.tags ?? [],
+    notes: result?.notes ?? '',
+    steps: (result?.steps ?? []).map(normalizeApiFlowStep),
+  }
+}
+
+function normalizeApiFlowRun(result: any): ApiFlowRunRecord {
+  return {
+    run_id: result?.run_id ?? '',
+    flow_id: result?.flow_id ?? '',
+    environment_id: result?.environment_id ?? '',
+    started_at: result?.started_at ?? '',
+    finished_at: result?.finished_at ?? '',
+    status: result?.status ?? 'failed',
+    summary: result?.summary ?? '',
+    step_results: (result?.step_results ?? []).map((step: any) => ({
+      step_id: step?.step_id ?? '',
+      status: step?.status ?? 'failed',
+      resolved_url: step?.resolved_url ?? '',
+      duration_ms: step?.duration_ms ?? 0,
+      request_preview: step?.request_preview ?? { method: '', url: '', headers: {}, body_preview: '' },
+      response_status: step?.response_status ?? 0,
+      response_headers: step?.response_headers ?? {},
+      response_body_preview: step?.response_body_preview ?? '',
+      extracted_variables: step?.extracted_variables ?? {},
+      generated_curl: step?.generated_curl ?? '',
+      error: step?.error ?? '',
+    })),
   }
 }
 
@@ -822,6 +968,92 @@ export const listProjects = (
       environments: (res.environments ?? []) as ProjectEnvironmentView[],
       rollups: (res.rollups ?? []) as ProjectPullSummary[],
     }
+  })
+
+export const getEnvironmentLab = (
+  environmentId: string,
+): Promise<ApiResult<EnvironmentLabView>> =>
+  apiFetch<any>(`/project-environments/${environmentId}/lab`).then((res) => {
+    if (isApiError(res)) return res
+    return {
+      project: res.project,
+      environment: res.environment as ProjectEnvironmentView,
+      runtime_snapshot: res.runtime_snapshot ? normalizeEnvironmentRuntimeSnapshot(res.runtime_snapshot) : undefined,
+      api_flows: (res.api_flows ?? []).map(normalizeApiFlow),
+      api_runs: Object.fromEntries(
+        Object.entries(res.api_runs ?? {}).map(([flowId, runs]) => [flowId, (runs as any[]).map(normalizeApiFlowRun)]),
+      ),
+    }
+  })
+
+export const refreshEnvironmentRuntimeSnapshot = (
+  environmentId: string,
+  req: EnvironmentRuntimeSnapshotRequest = {},
+): Promise<ApiResult<EnvironmentRuntimeSnapshot>> =>
+  apiFetch<any>(`/project-environments/${environmentId}/runtime-snapshot`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  }).then((res) => (isApiError(res) ? res : normalizeEnvironmentRuntimeSnapshot(res)))
+
+export const listApiFlows = (
+  environmentId: string,
+): Promise<ApiResult<ApiFlowManifest[]>> =>
+  apiFetch<any>(`/project-environments/${environmentId}/api-flows`).then((res) => {
+    if (isApiError(res)) return res
+    return (res.flows ?? []).map(normalizeApiFlow)
+  })
+
+export const createApiFlow = (
+  environmentId: string,
+  req: ApiFlowCreateRequest,
+): Promise<ApiResult<ApiFlowManifest>> =>
+  apiFetch<any>(`/project-environments/${environmentId}/api-flows`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  }).then((res) => (isApiError(res) ? res : normalizeApiFlow(res.flow)))
+
+export const updateApiFlow = (
+  environmentId: string,
+  flowId: string,
+  req: ApiFlowPatchRequest,
+): Promise<ApiResult<ApiFlowManifest>> =>
+  apiFetch<any>(`/project-environments/${environmentId}/api-flows/${flowId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(req),
+  }).then((res) => (isApiError(res) ? res : normalizeApiFlow(res.flow)))
+
+export const deleteApiFlow = (
+  environmentId: string,
+  flowId: string,
+): Promise<ApiResult<ApiFlowManifest>> =>
+  apiFetch<any>(`/project-environments/${environmentId}/api-flows/${flowId}`, {
+    method: 'DELETE',
+  }).then((res) => (isApiError(res) ? res : normalizeApiFlow(res.flow)))
+
+export const runApiFlow = (
+  environmentId: string,
+  flowId: string,
+): Promise<ApiResult<ApiFlowRunRecord>> =>
+  apiFetch<any>(`/project-environments/${environmentId}/api-flows/${flowId}/run`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  }).then((res) => (isApiError(res) ? res : normalizeApiFlowRun(res.run)))
+
+export const getApiFlowRuns = (
+  environmentId: string,
+  flowId: string,
+): Promise<ApiResult<ApiFlowRunRecord[]>> =>
+  apiFetch<any>(`/project-environments/${environmentId}/api-flows/${flowId}/runs`).then((res) => {
+    if (isApiError(res)) return res
+    return (res.runs ?? []).map(normalizeApiFlowRun)
+  })
+
+export const getEnvironmentPullRollup = (
+  environmentId: string,
+): Promise<ApiResult<ProjectPullSummary>> =>
+  apiFetch<any>(`/project-environments/${environmentId}/pull-rollup`).then((res) => {
+    if (isApiError(res)) return res
+    return res.pull_rollup as ProjectPullSummary
   })
 
 export const createProject = (workspaceId: string, req: ProjectCreateRequest): Promise<ApiResult<{ project: ProjectManifest }>> =>

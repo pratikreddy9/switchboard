@@ -58,6 +58,10 @@ DependencyKind = Literal[
 ]
 ExecutionMode = Literal["networked", "batch", "lambda", "docs_only"]
 ProjectEnvironmentKind = Literal["dev", "test", "staging", "qa", "prod", "custom"]
+ApiFlowTargetKind = Literal["service", "dependency", "cross_dependency"]
+CaptureSource = Literal["json", "header"]
+PortExposure = Literal["local_only", "public", "unknown"]
+FlowExecutionMode = Literal["http"]
 
 
 class ServerManifest(BaseModel):
@@ -239,6 +243,130 @@ class ProjectPullSummary(BaseModel):
     unchanged_count: int = 0
     latest_created_at: str = ""
     service_count: int = 0
+
+
+class ApiStepCapture(BaseModel):
+    variable_name: str
+    source: CaptureSource = "json"
+    selector: str
+
+
+class ApiFlowStep(BaseModel):
+    step_id: str
+    order: int = 0
+    display_name: str
+    method: Literal["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] = "GET"
+    path: str = ""
+    query: dict[str, str] = Field(default_factory=dict)
+    headers: dict[str, str] = Field(default_factory=dict)
+    body: str = ""
+    expected_status: int = 200
+    continue_on_failure: bool = False
+    timeout_seconds: int = 15
+    notes: str = ""
+    captures: list[ApiStepCapture] = Field(default_factory=list)
+
+
+class ApiFlowManifest(BaseModel):
+    flow_id: str
+    environment_id: str
+    service_id: str | None = None
+    display_name: str
+    target_kind: ApiFlowTargetKind = "service"
+    target_name: str = ""
+    base_url: str = ""
+    execution_mode: FlowExecutionMode = "http"
+    enabled: bool = True
+    tags: list[str] = Field(default_factory=list)
+    notes: str = ""
+    steps: list[ApiFlowStep] = Field(default_factory=list)
+
+
+class ApiStepRunResult(BaseModel):
+    step_id: str
+    status: Literal["ok", "failed", "skipped"] = "ok"
+    resolved_url: str = ""
+    duration_ms: int = 0
+    request_preview: dict[str, object] = Field(default_factory=dict)
+    response_status: int = 0
+    response_headers: dict[str, str] = Field(default_factory=dict)
+    response_body_preview: str = ""
+    extracted_variables: dict[str, str] = Field(default_factory=dict)
+    generated_curl: str = ""
+    error: str = ""
+
+
+class ApiFlowRunRecord(BaseModel):
+    run_id: str
+    flow_id: str
+    environment_id: str
+    started_at: str
+    finished_at: str = ""
+    status: Literal["ok", "partial", "failed"] = "ok"
+    step_results: list[ApiStepRunResult] = Field(default_factory=list)
+    summary: str = ""
+
+
+class OperatorCommand(BaseModel):
+    category: Literal["inspect_only", "verify_listener", "verify_firewall", "verify_health", "verify_node"] = "inspect_only"
+    label: str
+    command: str
+    notes: str = ""
+
+
+class ProcessFinding(BaseModel):
+    port: int | None = None
+    bind_address: str = ""
+    process_name: str = ""
+    pid: int | None = None
+    state: str = ""
+    raw: str = ""
+
+
+class PortExposureFinding(BaseModel):
+    host: str = ""
+    port: int
+    bind_address: str = ""
+    process_name: str = ""
+    expected: bool = False
+    exposure: PortExposure = "unknown"
+    notes: str = ""
+
+
+class EnvironmentLocationSnapshot(BaseModel):
+    service_id: str
+    service_name: str = ""
+    execution_mode: ExecutionMode = "networked"
+    location_id: str = ""
+    server_id: str = ""
+    root: str = ""
+    host: str = ""
+    firewall_status: str = "unverified"
+    node_status: str = "missing"
+    expected_ports: list[int] = Field(default_factory=list)
+    open_ports: list[int] = Field(default_factory=list)
+    unexpected_ports: list[int] = Field(default_factory=list)
+    exposed_ports: list[PortExposureFinding] = Field(default_factory=list)
+    process_findings: list[ProcessFinding] = Field(default_factory=list)
+    operator_commands: list[OperatorCommand] = Field(default_factory=list)
+    runtime_hint: str = ""
+    healthcheck_command: str = ""
+    healthcheck_status: str = "skipped"
+    healthcheck_output: str = ""
+
+
+class EnvironmentRuntimeSnapshot(BaseModel):
+    environment_id: str
+    captured_at: str
+    locations: list[EnvironmentLocationSnapshot] = Field(default_factory=list)
+    open_ports: list[int] = Field(default_factory=list)
+    expected_ports: list[int] = Field(default_factory=list)
+    unexpected_ports: list[int] = Field(default_factory=list)
+    exposed_ports: list[PortExposureFinding] = Field(default_factory=list)
+    firewall_status: str = "unverified"
+    process_findings: list[ProcessFinding] = Field(default_factory=list)
+    node_findings: list[dict[str, object]] = Field(default_factory=list)
+    operator_commands: list[OperatorCommand] = Field(default_factory=list)
 
 
 class ServiceManifest(BaseModel):
@@ -532,6 +660,42 @@ class ProjectEnvironmentPatchRequest(BaseModel):
     deployments: list[ProjectDeploymentRef] | None = None
     tags: list[str] | None = None
     notes: str | None = None
+
+
+class EnvironmentRuntimeSnapshotRequest(BaseModel):
+    runtime_passwords: dict[str, str] = Field(default_factory=dict)
+
+
+class ApiFlowCreateRequest(BaseModel):
+    flow_id: str
+    service_id: str | None = None
+    display_name: str
+    target_kind: ApiFlowTargetKind = "service"
+    target_name: str = ""
+    base_url: str = ""
+    execution_mode: FlowExecutionMode = "http"
+    enabled: bool = True
+    tags: list[str] = Field(default_factory=list)
+    notes: str = ""
+    steps: list[ApiFlowStep] = Field(default_factory=list)
+
+
+class ApiFlowPatchRequest(BaseModel):
+    flow_id: str | None = None
+    service_id: str | None = None
+    display_name: str | None = None
+    target_kind: ApiFlowTargetKind | None = None
+    target_name: str | None = None
+    base_url: str | None = None
+    execution_mode: FlowExecutionMode | None = None
+    enabled: bool | None = None
+    tags: list[str] | None = None
+    notes: str | None = None
+    steps: list[ApiFlowStep] | None = None
+
+
+class ApiFlowRunRequest(BaseModel):
+    pass
 
 
 class ServerCreateRequest(BaseModel):

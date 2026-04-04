@@ -145,3 +145,22 @@ describe('GET /api/workspaces/:id/projects', () => {
     expect(Array.isArray(body.rollups)).toBe(true)
   })
 })
+
+describe('GET /api/project-environments/:id/lab', () => {
+  it('returns 404 or a full lab payload for unknown/known environments', async () => {
+    if (!backendUp) return
+    const projects = await get('/workspaces/pesu/projects')
+    if (projects.status !== 200 || !Array.isArray(projects.body.environments) || projects.body.environments.length === 0) {
+      const missing = await get('/project-environments/nonexistent-env/lab')
+      expect(missing.status).toBe(404)
+      return
+    }
+    const environmentId = projects.body.environments[0].environment_id
+    const { status, body } = await get(`/project-environments/${environmentId}/lab`)
+    expect(status).toBe(200)
+    expect(body).toHaveProperty('project')
+    expect(body).toHaveProperty('environment')
+    expect(body).toHaveProperty('api_flows')
+    expect(body).toHaveProperty('api_runs')
+  })
+})

@@ -868,6 +868,7 @@
     "workspace_id": "pesu",
     "display_name": "compareanswers",
     "kind": "service",
+    "execution_mode": "networked",
     "ownership_tier": "owned",
     "tags": [],
     "favorite_tier": "none",
@@ -1274,6 +1275,434 @@
       },
       {
         "repo_path": "/home/pesu/compareanswers/stats.py",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      }
+    ],
+    "notes": "",
+    "path_aliases": []
+  },
+  {
+    "service_id": "switch",
+    "workspace_id": "1",
+    "display_name": "switchboard",
+    "kind": "service",
+    "execution_mode": "networked",
+    "ownership_tier": "owned",
+    "tags": [],
+    "favorite_tier": "none",
+    "locations": [
+      {
+        "location_id": "switch-local_mac-primary",
+        "server_id": "local_mac",
+        "access_mode": "local",
+        "root": "/Users/p/Desktop/dashboard",
+        "role": "primary",
+        "is_primary": true,
+        "path_aliases": [],
+        "runtime": {
+          "expected_ports": [
+            8009,
+            5173
+          ],
+          "healthcheck_command": "",
+          "run_command_hint": "",
+          "monitoring_mode": "detect",
+          "notes": ""
+        }
+      }
+    ],
+    "repo_paths": [
+      "/Users/p/Desktop/dashboard"
+    ],
+    "docs_paths": [
+      "/Users/p/Desktop/dashboard/.claude",
+      "/Users/p/Desktop/dashboard/.npm-cache",
+      "/Users/p/Desktop/dashboard/.pytest_cache",
+      "/Users/p/Desktop/dashboard/docs",
+      "/Users/p/Desktop/dashboard/documentation",
+      "/Users/p/Desktop/dashboard/downloads",
+      "/Users/p/Desktop/dashboard/release",
+      "/Users/p/Desktop/dashboard/scripts",
+      "/Users/p/Desktop/dashboard/src",
+      "/Users/p/Desktop/dashboard/state",
+      "/Users/p/Desktop/dashboard/switchboard",
+      "/Users/p/Desktop/dashboard/switchboard.egg-info",
+      "/Users/p/Desktop/dashboard/tests",
+      "/Users/p/Desktop/dashboard/tests_backend",
+      "/Users/p/Desktop/dashboard/.DS_Store",
+      "/Users/p/Desktop/dashboard/.env",
+      "/Users/p/Desktop/dashboard/.env.example",
+      "/Users/p/Desktop/dashboard/.gitignore",
+      "/Users/p/Desktop/dashboard/.npmrc",
+      "/Users/p/Desktop/dashboard/CHANGELOG.md",
+      "/Users/p/Desktop/dashboard/index.html",
+      "/Users/p/Desktop/dashboard/MANIFEST.in",
+      "/Users/p/Desktop/dashboard/package-lock.json",
+      "/Users/p/Desktop/dashboard/package.json",
+      "/Users/p/Desktop/dashboard/pyproject.toml",
+      "/Users/p/Desktop/dashboard/README.md",
+      "/Users/p/Desktop/dashboard/tsconfig.json",
+      "/Users/p/Desktop/dashboard/tsconfig.test.json"
+    ],
+    "log_paths": [
+      "/Users/p/Desktop/dashboard/logs"
+    ],
+    "allowed_git_pull_paths": [
+      "/Users/p/Desktop/dashboard"
+    ],
+    "exclude_globs": [
+      "/Users/p/Desktop/dashboard/.git",
+      "/Users/p/Desktop/dashboard/.venv",
+      "/Users/p/Desktop/dashboard/build",
+      "/Users/p/Desktop/dashboard/dist",
+      "/Users/p/Desktop/dashboard/node_modules"
+    ],
+    "scope_entries": [
+      {
+        "entry_id": "repo-bc5042a30c03",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/dashboard",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-4bb28037cc10",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/.claude",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-33b54dc66223",
+        "kind": "exclude",
+        "path": "/Users/p/Desktop/dashboard/.git",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-3bc401a0fdb4",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/.npm-cache",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-d28a3543c930",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/.pytest_cache",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-2617f833f58c",
+        "kind": "exclude",
+        "path": "/Users/p/Desktop/dashboard/.venv",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-b38746dae479",
+        "kind": "exclude",
+        "path": "/Users/p/Desktop/dashboard/build",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-65beaf372016",
+        "kind": "exclude",
+        "path": "/Users/p/Desktop/dashboard/dist",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-92a0f67dd330",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/docs",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-b2e10a30df3c",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/documentation",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-9711065da48a",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/downloads",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "log-fa974861214f",
+        "kind": "log",
+        "path": "/Users/p/Desktop/dashboard/logs",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-84d67dabe3fc",
+        "kind": "exclude",
+        "path": "/Users/p/Desktop/dashboard/node_modules",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-6dfd131fadf2",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/release",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-e39bd7de3569",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/scripts",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-b674370726f9",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/src",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-8c5f1f46e8fc",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/state",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-1297146fcd47",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/switchboard",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-293b42e12f75",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/switchboard.egg-info",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-b05ca098109b",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/tests",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-573e605a8f0e",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/tests_backend",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-a683ad01ccc5",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/.DS_Store",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-78879a62db90",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/.env",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-0bb7f47ea021",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/.env.example",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-f8d7ee159f4a",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/.gitignore",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-503511533ef1",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/.npmrc",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-27c5a88e7988",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/CHANGELOG.md",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-bbeb8b6c36bd",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/index.html",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-1484c966632d",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/MANIFEST.in",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-8ecc09314615",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/package-lock.json",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-2f6d7f3667c3",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/package.json",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-c60dbd211cd5",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/pyproject.toml",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-1f4cfac10e33",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/README.md",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-3a0459f3fa4d",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/tsconfig.json",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-c0821c808493",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/tsconfig.test.json",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      }
+    ],
+    "managed_docs": [
+      {
+        "doc_id": "readme",
+        "path": "README.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "api",
+        "path": "API.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "changelog",
+        "path": "CHANGELOG.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "handoff",
+        "path": "switchboard/local/control-center-handoff.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "runbook",
+        "path": "switchboard/local/runbook.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "approach_history",
+        "path": "switchboard/local/approach-history.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "doc_index_md",
+        "path": "switchboard/local/doc-index.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "doc_index_json",
+        "path": "switchboard/evidence/doc-index.json",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      }
+    ],
+    "repo_policies": [
+      {
+        "repo_path": "/Users/p/Desktop/dashboard",
         "push_mode": "allowed",
         "safety_profile": "generic_python",
         "allowed_branches": [],

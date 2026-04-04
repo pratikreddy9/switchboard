@@ -17,9 +17,10 @@ interface Props {
   workspaceId: string
   offline: boolean
   onSelectService: (id: string) => void
+  onOpenEnvironmentLab: (environmentId: string) => void
 }
 
-export function WorkspacePage({ workspaceId, offline, onSelectService }: Props) {
+export function WorkspacePage({ workspaceId, offline, onSelectService, onOpenEnvironmentLab }: Props) {
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const [latest, setLatest] = useState<WorkspaceLatest | null>(null)
   const [collecting, setCollecting] = useState(false)
@@ -184,6 +185,7 @@ export function WorkspacePage({ workspaceId, offline, onSelectService }: Props) 
           workspaceName={workspace?.display_name}
           workspaceNotes={workspace?.notes}
           services={services}
+          onOpenEnvironmentLab={onOpenEnvironmentLab}
         />
       </div>
 
