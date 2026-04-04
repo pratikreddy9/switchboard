@@ -1,5 +1,7 @@
 import type {
   ActionLock,
+  CompanyCreateRequest,
+  CompanyPatchRequest,
   ProjectManifest,
   ProjectCreateRequest,
   ProjectPatchRequest,
@@ -154,9 +156,12 @@ function normalizeWorkspace(workspace: any, services: any[] = []): Workspace {
   const workspaceServerIds = workspace.server_ids ?? workspace.servers ?? []
   return {
     workspace_id: workspace.workspace_id,
+    company_id: workspace.company_id ?? workspace.workspace_id,
     display_name: workspace.display_name ?? workspace.name ?? workspace.workspace_id,
     services: services.map(normalizeService),
     server_ids: workspaceServerIds,
+    tags: workspace.tags ?? [],
+    notes: workspace.notes ?? '',
     service_count:
       typeof workspace.service_count === 'number'
         ? workspace.service_count
@@ -394,12 +399,16 @@ export const listServers = (): Promise<ApiResult<ServerRecord[]>> =>
     }
     return res.servers.map((server: any) => ({
       server_id: server.server_id,
+      company_id: server.company_id ?? '',
       name: server.name,
       connection_type: server.connection_type,
       host: server.host,
       username: server.username,
       port: server.port ?? 22,
+      deployment_mode: server.deployment_mode ?? 'native_agent',
+      vpn_required: Boolean(server.vpn_required),
       tags: server.tags ?? [],
+      notes: server.notes ?? '',
     }))
   })
 
@@ -411,6 +420,9 @@ export const listWorkspaces = (): Promise<ApiResult<Workspace[]>> =>
     }
     return res.workspaces.map((workspace) => normalizeWorkspace(workspace))
   })
+
+export const listCompanies = (): Promise<ApiResult<Workspace[]>> =>
+  listWorkspaces()
 
 export const getWorkspace = (id: string): Promise<ApiResult<Workspace>> =>
   apiFetch<WorkspaceResponse>(`/workspaces/${id}`).then((res) => {
@@ -803,6 +815,32 @@ export const deleteProject = (projectId: string): Promise<ApiResult<{ project: P
   }).then((res) => {
     if (isApiError(res)) return res
     return { project: res.project }
+  })
+
+export const createCompany = (req: CompanyCreateRequest): Promise<ApiResult<{ company: Workspace }>> =>
+  apiFetch<{ company: any }>('/companies', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return { company: normalizeWorkspace(res.company, []) }
+  })
+
+export const updateCompany = (companyId: string, req: CompanyPatchRequest): Promise<ApiResult<{ company: Workspace }>> =>
+  apiFetch<{ company: any }>(`/companies/${companyId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(req),
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return { company: normalizeWorkspace(res.company, []) }
+  })
+
+export const deleteCompany = (companyId: string): Promise<ApiResult<{ company: Workspace }>> =>
+  apiFetch<{ company: any }>(`/companies/${companyId}`, {
+    method: 'DELETE',
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return { company: normalizeWorkspace(res.company, []) }
   })
 
 export const createServer = (req: ServerCreateRequest): Promise<ApiResult<{ server: any }>> =>

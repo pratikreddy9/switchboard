@@ -180,24 +180,45 @@ export interface ProjectManifest {
   notes: string
 }
 
+export interface CompanyCreateRequest {
+  workspace_id: string
+  name: string
+  tags?: string[]
+  notes?: string
+}
+
+export interface CompanyPatchRequest {
+  name?: string
+  tags?: string[]
+  notes?: string
+}
+
 export interface ServerCreateRequest {
   server_id: string
+  company_id?: string
   name: string
   connection_type: 'local' | 'ssh'
   host?: string
   username?: string
   port?: number
+  deployment_mode?: 'native_agent' | 'local_bundle_only'
+  vpn_required?: boolean
   tags: string[]
   notes: string
+  local_password?: string
 }
 
 export interface ServerPatchRequest {
+  company_id?: string
   name?: string
   host?: string
   username?: string
   port?: number
+  deployment_mode?: 'native_agent' | 'local_bundle_only'
+  vpn_required?: boolean
   tags?: string[]
   notes?: string
+  local_password?: string
 }
 
 export interface ProjectCreateRequest {
@@ -282,11 +303,14 @@ export interface FileEntry {
 
 export interface Workspace {
   workspace_id: string
+  company_id?: string
   display_name: string
   services: Service[]
   server_ids: string[]
   service_count?: number
   server_count?: number
+  tags?: string[]
+  notes?: string
 }
 
 export interface WorkspaceLatest {
@@ -310,11 +334,14 @@ export interface ServerInfo {
 
 export interface ServerRecord {
   server_id: string
+  company_id?: string
   name?: string
   connection_type?: 'local' | 'ssh'
   host?: string
   username?: string
   port?: number
+  deployment_mode?: 'native_agent' | 'local_bundle_only'
+  vpn_required?: boolean
   tags?: string[]
   notes?: string
 }

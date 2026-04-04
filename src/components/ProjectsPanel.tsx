@@ -120,7 +120,7 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
       >
         <div className="flex items-center gap-2 text-sm font-medium text-gray-300">
           <FolderGit2 className="h-4 w-4 text-cyan-400" />
-          Projects hierarchy
+          Projects inventory
         </div>
         {expanded ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
       </button>
@@ -129,7 +129,7 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
         <div className="border-t border-gray-800 p-4">
           <div className="flex justify-between items-center mb-4">
             <p className="text-xs text-gray-500">
-              Group services logically under projects and sub-projects.
+              Group services for this company under projects and sub-projects.
             </p>
             {!offline && !adding && !editingId && (
               <button
@@ -199,10 +199,10 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
               <div className="border border-amber-900/40 bg-amber-950/10 rounded-xl overflow-hidden">
                 <div className="p-3 flex items-center justify-between bg-amber-950/20">
                   <div>
-                    <div className="text-sm font-medium text-amber-100">{workspaceName || workspaceId}</div>
-                    <div className="text-[10px] text-amber-300/70 font-mono mt-0.5">{workspaceId}</div>
-                  </div>
-                  <div className="text-[10px] uppercase tracking-[0.16em] text-amber-300">root project</div>
+                  <div className="text-sm font-medium text-amber-100">{workspaceName || workspaceId}</div>
+                  <div className="text-[10px] text-amber-300/70 font-mono mt-0.5">{workspaceId}</div>
+                </div>
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-amber-300">company root</div>
                 </div>
                 {workspaceNotes && <div className="px-3 pb-3 text-xs text-amber-100/80">{workspaceNotes}</div>}
               </div>

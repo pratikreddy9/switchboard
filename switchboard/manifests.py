@@ -13,14 +13,21 @@ from typing import Any
 from .config import Settings
 from .models import (
     ManagedDocConfig,
+    ProjectCreateRequest,
+    ProjectManifest,
+    ProjectPatchRequest,
     RepoPolicy,
     ResolvedServer,
     ScopeEntry,
+    ServerCreateRequest,
     ServerManifest,
+    ServerPatchRequest,
     ServiceCreateRequest,
     ServiceManifest,
     ServicePatchRequest,
+    WorkspaceCreateRequest,
     WorkspaceManifest,
+    WorkspacePatchRequest,
 )
 
 
@@ -55,6 +62,29 @@ def _load_local_env_files() -> dict[str, str]:
 def server_env_key(server_id: str, suffix: str) -> str:
     token = re.sub(r"[^A-Z0-9]+", "_", server_id.upper())
     return f"SWITCHBOARD_SERVER_{token}_{suffix}"
+
+
+def _upsert_local_env_value(key: str, value: str | None) -> None:
+    path = Path.cwd() / ".env.local"
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    updated = False
+    retained: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            retained.append(line)
+            continue
+        current_key, _current_value = line.split("=", 1)
+        if current_key.strip() != key:
+            retained.append(line)
+            continue
+        updated = True
+        if value:
+            retained.append(f"{key}={value}")
+    if value and not updated:
+        retained.append(f"{key}={value}")
+    path.write_text("\n".join(retained).rstrip() + ("\n" if retained else ""), encoding="utf-8")
+    _load_local_env_files.cache_clear()
 
 
 def _has_glob(path: str) -> bool:
@@ -231,7 +261,19 @@ class ManifestStore:
         self._projects_path = settings.manifest_dir / "projects.json"
 
     def load_servers(self) -> list[ServerManifest]:
-        return [ServerManifest.model_validate(item) for item in load_json(self._servers_path)]
+        server_rows = load_json(self._servers_path)
+        memberships = {
+            server_id: workspace.workspace_id
+            for workspace in self.load_workspaces()
+            for server_id in workspace.servers
+        }
+        normalized: list[ServerManifest] = []
+        for item in server_rows:
+            payload = dict(item)
+            payload.setdefault("company_id", memberships.get(payload.get("server_id", ""), ""))
+            payload.setdefault("deployment_mode", "native_agent")
+            normalized.append(ServerManifest.model_validate(payload))
+        return normalized
 
     def load_workspaces(self) -> list[WorkspaceManifest]:
         return [WorkspaceManifest.model_validate(item) for item in load_json(self._workspaces_path)]
@@ -253,6 +295,44 @@ class ManifestStore:
             if workspace.workspace_id == workspace_id:
                 return workspace
         raise KeyError(f"Unknown workspace: {workspace_id}")
+
+    def create_workspace(self, payload: WorkspaceCreateRequest) -> WorkspaceManifest:
+        existing = self.load_workspaces()
+        if any(workspace.workspace_id == payload.workspace_id for workspace in existing):
+            raise ValueError(f"Workspace already exists: {payload.workspace_id}")
+        workspace = WorkspaceManifest.model_validate(
+            {
+                **payload.model_dump(mode="json"),
+                "favorite_tier": "primary",
+                "servers": [],
+                "services": [],
+            }
+        )
+        save_json(self._workspaces_path, [*load_json(self._workspaces_path), workspace.model_dump(mode="json")])
+        return workspace
+
+    def patch_workspace(self, workspace_id: str, payload: WorkspacePatchRequest) -> WorkspaceManifest:
+        workspaces = load_json(self._workspaces_path)
+        updated: WorkspaceManifest | None = None
+        for index, item in enumerate(workspaces):
+            if item["workspace_id"] != workspace_id:
+                continue
+            merged = {**item, **payload.model_dump(exclude_none=True, mode="json")}
+            updated = WorkspaceManifest.model_validate(merged)
+            workspaces[index] = updated.model_dump(mode="json")
+            break
+        if updated is None:
+            raise KeyError(f"Unknown workspace: {workspace_id}")
+        save_json(self._workspaces_path, workspaces)
+        return updated
+
+    def delete_workspace(self, workspace_id: str) -> WorkspaceManifest:
+        workspace = self.get_workspace(workspace_id)
+        if workspace.services or workspace.servers:
+            raise ValueError("Company still has linked services or servers.")
+        retained = [item for item in load_json(self._workspaces_path) if item["workspace_id"] != workspace_id]
+        save_json(self._workspaces_path, retained)
+        return workspace
 
     def get_service(self, service_id: str) -> ServiceManifest:
         for service in self.load_services():
@@ -419,23 +499,35 @@ class ManifestStore:
         existing = self.load_servers()
         if any(server.server_id == payload.server_id for server in existing):
             raise ValueError(f"Server already exists: {payload.server_id}")
-        server = ServerManifest.model_validate(payload.model_dump(mode="json"))
+        if payload.company_id:
+            self.get_workspace(payload.company_id)
+        payload_json = payload.model_dump(mode="json", exclude={"local_password"})
+        server = ServerManifest.model_validate(payload_json)
         save_json(self._servers_path, [*load_json(self._servers_path), server.model_dump(mode="json")])
+        self._assign_server_to_workspace(server.server_id, payload.company_id)
+        if payload.local_password is not None:
+            _upsert_local_env_value(server_env_key(server.server_id, "PASSWORD"), payload.local_password)
         return server
 
     def patch_server(self, server_id: str, payload: ServerPatchRequest) -> ServerManifest:
         servers = load_json(self._servers_path)
         updated: ServerManifest | None = None
+        company_id = payload.company_id
+        if company_id:
+            self.get_workspace(company_id)
         for index, item in enumerate(servers):
             if item["server_id"] != server_id:
                 continue
-            merged = {**item, **payload.model_dump(exclude_none=True, mode="json")}
+            merged = {**item, **payload.model_dump(exclude_none=True, mode="json", exclude={"local_password"})}
             updated = ServerManifest.model_validate(merged)
             servers[index] = updated.model_dump(mode="json")
             break
         if updated is None:
             raise KeyError(f"Unknown server: {server_id}")
         save_json(self._servers_path, servers)
+        self._assign_server_to_workspace(server_id, company_id if company_id is not None else updated.company_id)
+        if payload.local_password is not None:
+            _upsert_local_env_value(server_env_key(server_id, "PASSWORD"), payload.local_password)
         return updated
 
     def delete_server(self, server_id: str) -> ServerManifest:
@@ -450,4 +542,15 @@ class ManifestStore:
         if removed is None:
             raise KeyError(f"Unknown server: {server_id}")
         save_json(self._servers_path, retained)
+        self._assign_server_to_workspace(server_id, "")
+        _upsert_local_env_value(server_env_key(server_id, "PASSWORD"), None)
         return removed
+
+    def _assign_server_to_workspace(self, server_id: str, workspace_id: str) -> None:
+        workspaces = load_json(self._workspaces_path)
+        for workspace in workspaces:
+            servers = workspace.setdefault("servers", [])
+            workspace["servers"] = [item for item in servers if item != server_id]
+            if workspace["workspace_id"] == workspace_id and server_id not in workspace["servers"]:
+                workspace["servers"].append(server_id)
+        save_json(self._workspaces_path, workspaces)

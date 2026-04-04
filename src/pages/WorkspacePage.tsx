@@ -111,7 +111,7 @@ export function WorkspacePage({ workspaceId, offline, onSelectService }: Props) 
             {workspace?.display_name ?? workspaceId}
           </h2>
           <div className="mt-1 text-xs text-gray-500">
-            {workspaceId}
+            Company · {workspaceId}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -182,7 +182,7 @@ export function WorkspacePage({ workspaceId, offline, onSelectService }: Props) 
           workspaceId={workspaceId}
           offline={offline}
           workspaceName={workspace?.display_name}
-          workspaceNotes={latest?.workspace?.display_name ? undefined : undefined}
+          workspaceNotes={workspace?.notes}
         />
       </div>
 

@@ -19,10 +19,11 @@ export const TECH_STACK_LINES = [
 ]
 
 export const HOW_TO_USE_LINES = [
-  'Pick a workspace, then run Collect to refresh ports, repo state, docs, and logs.',
+  'Pick a company, then run Collect to refresh ports, repo state, docs, and logs.',
   'Use Add Project to open one root path, expand the tree, and uncheck dump paths you do not want.',
   'Category rules are simple: repo, doc, log, or exclude. You can override the auto-suggestion.',
   'Create service saves the chosen scope and per-location runtime config into the manifest.',
+  'Servers belong to a company and can be marked VPN-required plus either native-agent or local-bundle-only.',
   'Pull Bundles create a new timestamped local copy while preserving the source tree.',
   'Service detail pages now handle runtime checks plus Sync From Node and Sync To Node.',
   'Node-side agents should read switchboard/core/playbook.md and update only switchboard/local/tasks-completed.md.',
@@ -38,6 +39,14 @@ export default function App() {
   const [selectedService, setSelectedService] = useState<string | null>(null)
   const [latestResults, setLatestResults] = useState<Record<string, WorkspaceLatest>>({})
 
+  function loadCompanies() {
+    listWorkspaces().then((res) => {
+      if (!isApiError(res) && res.length > 0) {
+        setWorkspaces(res)
+      }
+    })
+  }
+
   // Check backend health
   useEffect(() => {
     getHealth().then((res) => {
@@ -50,7 +59,7 @@ export default function App() {
     })
   }, [])
 
-  // Load workspaces
+  // Load companies/workspaces
   useEffect(() => {
     if (online === null) return
     if (!online) {
@@ -61,11 +70,7 @@ export default function App() {
       })
       return
     }
-    listWorkspaces().then((res) => {
-      if (!isApiError(res) && res.length > 0) {
-        setWorkspaces(res)
-      }
-    })
+    loadCompanies()
   }, [online])
 
   // Load latest for active workspace
@@ -182,6 +187,7 @@ export default function App() {
             workspaces={workspaces}
             latestResults={latestResults}
             online={online}
+            onReloadCompanies={loadCompanies}
             onOpenWorkspace={(workspaceId) => {
               setSelectedService(null)
               setActiveWorkspace(workspaceId)

@@ -27,6 +27,8 @@ from .models import (
     ServerPatchRequest,
     ServiceCreateRequest,
     ServicePatchRequest,
+    WorkspaceCreateRequest,
+    WorkspacePatchRequest,
 )
 from .storage import SnapshotStore
 
@@ -108,6 +110,8 @@ def list_workspaces() -> dict[str, object]:
         "workspaces": [
             {
                 **workspace.model_dump(mode="json"),
+                "company_id": workspace.workspace_id,
+                "company_name": workspace.name,
                 "server_count": len(workspace.servers),
                 "service_count": len([service for service in services if service.workspace_id == workspace.workspace_id]),
             }
@@ -129,7 +133,11 @@ def get_workspace(workspace_id: str) -> dict[str, object]:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     services = manifest_store.get_workspace_services(workspace_id)
     return {
-        "workspace": workspace.model_dump(mode="json"),
+        "workspace": {
+            **workspace.model_dump(mode="json"),
+            "company_id": workspace.workspace_id,
+            "company_name": workspace.name,
+        },
         "services": [_enrich_service_payload(service.model_dump(mode="json")) for service in services],
     }
 
@@ -150,6 +158,11 @@ def get_workspace_latest(workspace_id: str) -> dict[str, object]:
         return {
             "generated": None,
             "workspace": workspace.model_dump(mode="json"),
+            "company": {
+                **workspace.model_dump(mode="json"),
+                "company_id": workspace.workspace_id,
+                "company_name": workspace.name,
+            },
             "servers": [
                 {
                     **server,
@@ -433,6 +446,40 @@ def create_project(workspace_id: str, request: ProjectCreateRequest) -> dict[str
     try:
         project = manifest_store.create_project(workspace_id, request)
         return {"status": "ok", "project": project.model_dump(mode="json")}
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/api/companies")
+def list_companies() -> dict[str, object]:
+    return list_workspaces()
+
+
+@app.post("/api/companies")
+def create_company(request: WorkspaceCreateRequest) -> dict[str, object]:
+    try:
+        workspace = manifest_store.create_workspace(request)
+        return {"status": "ok", "company": workspace.model_dump(mode="json")}
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.patch("/api/companies/{company_id}")
+def patch_company(company_id: str, request: WorkspacePatchRequest) -> dict[str, object]:
+    try:
+        workspace = manifest_store.patch_workspace(company_id, request)
+        return {"status": "ok", "company": workspace.model_dump(mode="json")}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.delete("/api/companies/{company_id}")
+def delete_company(company_id: str) -> dict[str, object]:
+    try:
+        workspace = manifest_store.delete_workspace(company_id)
+        return {"status": "ok", "company": workspace.model_dump(mode="json")}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 

@@ -8,12 +8,14 @@ import type {
   ServiceRunResult,
   RunRecord,
   ScopeEntry,
+  ServerRecord,
 } from '../types/switchboard'
 import {
   deleteService,
   deployNode,
   getService,
   getServiceScope,
+  listServers,
   getWorkspaceRuns,
   inspectNode,
   restartNode,
@@ -78,6 +80,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
   const [confirmAction, setConfirmAction] = useState<string | null>(null)
   const [confirmLocationId, setConfirmLocationId] = useState<string | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [servers, setServers] = useState<ServerRecord[]>([])
   const [pendingActions, setPendingActions] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
@@ -112,6 +115,13 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
       if (!isApiError(result)) setRuns(result)
     })
   }, [offline, service?.workspace_id])
+
+  useEffect(() => {
+    if (offline) return
+    listServers().then((result) => {
+      if (!isApiError(result)) setServers(result)
+    })
+  }, [offline])
 
   const docs = runResult?.docs_files ?? []
   const logs = runResult?.logs_files ?? []
@@ -699,6 +709,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
               const latestRuntime = runtimeChecksByLocation.get(location.location_id)
               const latestSync = nodeSyncByLocation.get(location.location_id)
               const nodeViewer = nodeViewerByLocation.get(location.location_id)
+              const serverMeta = servers.find((server) => server.server_id === location.server_id)
               const portsValue = location.runtime.expected_ports.join(', ')
               return (
                 <div key={location.location_id} className="rounded-xl border border-gray-800 bg-gray-950 p-4">
@@ -707,6 +718,16 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                       <div className="text-xs uppercase tracking-[0.16em] text-gray-500">{location.location_id}</div>
                       <div className="mt-1 text-sm font-medium text-white">{location.server_id}</div>
                       <div className="mt-1 font-mono text-xs text-gray-400 break-all">{location.root}</div>
+                      {serverMeta && (
+                        <div className="mt-2 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.16em]">
+                          <span className={`rounded-full border px-2 py-1 ${serverMeta.vpn_required ? 'border-amber-400/30 bg-amber-400/10 text-amber-200' : 'border-gray-700 bg-gray-900 text-gray-400'}`}>
+                            {serverMeta.vpn_required ? 'VPN required' : 'No VPN needed'}
+                          </span>
+                          <span className={`rounded-full border px-2 py-1 ${serverMeta.deployment_mode === 'local_bundle_only' ? 'border-cyan-400/30 bg-cyan-400/10 text-cyan-200' : 'border-gray-700 bg-gray-900 text-gray-400'}`}>
+                            {serverMeta.deployment_mode === 'local_bundle_only' ? 'Local bundle only' : 'Native agent allowed'}
+                          </span>
+                        </div>
+                      )}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <button

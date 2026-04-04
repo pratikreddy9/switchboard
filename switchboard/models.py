@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, field_validator
 FavoriteTier = Literal["primary", "secondary", "none"]
 OwnershipTier = Literal["owned", "shared", "infra"]
 ConnectionType = Literal["local", "ssh"]
+DeploymentMode = Literal["native_agent", "local_bundle_only"]
 ScopeKind = Literal["repo", "doc", "log", "exclude"]
 ScopePathType = Literal["file", "dir", "glob"]
 ScopeSource = Literal["seeded", "user_added", "node_manifest", "tasks_completed"]
@@ -59,11 +60,14 @@ DependencyKind = Literal[
 
 class ServerManifest(BaseModel):
     server_id: str
+    company_id: str = ""
     name: str
     connection_type: ConnectionType
     host: str
     username: str
     port: int = 22
+    deployment_mode: DeploymentMode = "native_agent"
+    vpn_required: bool = False
     tags: list[str] = Field(default_factory=list)
     favorite_tier: FavoriteTier = "none"
     notes: str = ""
@@ -231,6 +235,19 @@ class WorkspaceManifest(BaseModel):
     servers: list[str] = Field(default_factory=list)
     services: list[str] = Field(default_factory=list)
     notes: str = ""
+
+
+class WorkspaceCreateRequest(BaseModel):
+    workspace_id: str
+    name: str
+    tags: list[str] = Field(default_factory=list)
+    notes: str = ""
+
+
+class WorkspacePatchRequest(BaseModel):
+    name: str | None = None
+    tags: list[str] | None = None
+    notes: str | None = None
 
 
 class CollectRequest(BaseModel):
@@ -462,22 +479,30 @@ class ProjectPatchRequest(BaseModel):
 
 class ServerCreateRequest(BaseModel):
     server_id: str
+    company_id: str = ""
     name: str
     connection_type: ConnectionType
     host: str
     username: str
     port: int = 22
+    deployment_mode: DeploymentMode = "native_agent"
+    vpn_required: bool = False
     tags: list[str] = Field(default_factory=list)
     notes: str = ""
+    local_password: str | None = None
 
 
 class ServerPatchRequest(BaseModel):
+    company_id: str | None = None
     name: str | None = None
     host: str | None = None
     username: str | None = None
     port: int | None = None
+    deployment_mode: DeploymentMode | None = None
+    vpn_required: bool | None = None
     tags: list[str] | None = None
     notes: str | None = None
+    local_password: str | None = None
 
 
 class SecretPathQuery(BaseModel):
