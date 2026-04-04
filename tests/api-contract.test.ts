@@ -108,7 +108,7 @@ describe('GET /api/services/:id', () => {
     const { status, body } = await get('/services/aichat')
     expect(status).toBe(200)
     expect(body).toHaveProperty('service')
-    for (const field of ['service_id', 'workspace_id', 'display_name', 'locations', 'tags']) {
+    for (const field of ['service_id', 'workspace_id', 'display_name', 'locations', 'tags', 'execution_mode']) {
       expect(body.service, `Missing field: ${field}`).toHaveProperty(field)
     }
   })
@@ -132,5 +132,16 @@ describe('GET /api/services/:id/secret-paths', () => {
     expect(status).toBe(200)
     expect(body).toHaveProperty('count')
     expect(typeof body.count).toBe('number')
+  })
+})
+
+describe('GET /api/workspaces/:id/projects', () => {
+  it('returns projects plus environment rollup arrays', async () => {
+    if (!backendUp) return
+    const { status, body } = await get('/workspaces/pesu/projects')
+    expect(status).toBe(200)
+    expect(Array.isArray(body.projects)).toBe(true)
+    expect(Array.isArray(body.environments)).toBe(true)
+    expect(Array.isArray(body.rollups)).toBe(true)
   })
 })

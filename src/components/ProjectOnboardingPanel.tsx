@@ -192,6 +192,7 @@ export function ProjectOnboardingPanel({ workspaceId, serverIds, disabled, onCre
   const [runCommandHint, setRunCommandHint] = useState('')
   const [monitoringMode, setMonitoringMode] = useState<RuntimeConfig['monitoring_mode']>('manual')
   const [runtimeNotes, setRuntimeNotes] = useState('')
+  const [executionMode, setExecutionMode] = useState<CreateServiceRequest['execution_mode']>('networked')
 
   useEffect(() => {
     if (disabled) return
@@ -443,6 +444,7 @@ export function ProjectOnboardingPanel({ workspaceId, serverIds, disabled, onCre
     const payload: CreateServiceRequest = {
       service_id: nextServiceId,
       display_name: nextDisplayName,
+      execution_mode: executionMode,
       locations: [
         {
           location_id: `${nextServiceId}-${serverId}-primary`,
@@ -489,6 +491,7 @@ export function ProjectOnboardingPanel({ workspaceId, serverIds, disabled, onCre
     setRunCommandHint('')
     setMonitoringMode('manual')
     setRuntimeNotes('')
+    setExecutionMode('networked')
     resetTreeState()
   }
 
@@ -588,6 +591,20 @@ export function ProjectOnboardingPanel({ workspaceId, serverIds, disabled, onCre
             </div>
 
             <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              <label className="text-sm text-gray-300">
+                <div className="mb-1">Execution mode</div>
+                <select
+                  value={executionMode}
+                  onChange={(event) => setExecutionMode(event.target.value as CreateServiceRequest['execution_mode'])}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500"
+                  disabled={disabled}
+                >
+                  <option value="networked">networked</option>
+                  <option value="batch">batch</option>
+                  <option value="lambda">lambda</option>
+                  <option value="docs_only">docs_only</option>
+                </select>
+              </label>
               <label className="text-sm text-gray-300">
                 <div className="mb-1">Expected ports</div>
                 <input

@@ -2,7 +2,11 @@ import type {
   ActionLock,
   CompanyCreateRequest,
   CompanyPatchRequest,
+  ProjectEnvironmentCreateRequest,
+  ProjectEnvironmentPatchRequest,
+  ProjectEnvironmentView,
   ProjectManifest,
+  ProjectPullSummary,
   ProjectCreateRequest,
   ProjectPatchRequest,
   ServerCreateRequest,
@@ -59,6 +63,7 @@ function normalizeService(service: any) {
     workspace_id: service.workspace_id,
     display_name: service.display_name,
     kind: service.kind ?? 'service',
+    execution_mode: service.execution_mode ?? 'networked',
     tags: service.tags ?? [],
     favorite_tier: favoriteRank(service.favorite_tier),
     locations: (service.locations ?? []).map((location: any) => ({
@@ -219,6 +224,7 @@ function normalizeRuntimeCheck(result: any): RuntimeCheckResult {
     root: result.root ?? '',
     status: result.status ?? 'unverified',
     checked_at: result.checked_at ?? '',
+    execution_mode: result.execution_mode ?? 'networked',
     configured_ports: Array.isArray(result.configured_ports)
       ? result.configured_ports.map((port: unknown) => Number(port)).filter((port: number) => Number.isFinite(port))
       : [],
@@ -806,10 +812,16 @@ export const workspaceHealthCheck = (workspaceId: string, runtimePasswords: Reco
     return { results: res.results.map(normalizeRuntimeCheck) }
   })
 
-export const listProjects = (workspaceId: string): Promise<ApiResult<{ projects: ProjectManifest[] }>> =>
-  apiFetch<{ projects: any[] }>(`/workspaces/${workspaceId}/projects`).then((res) => {
+export const listProjects = (
+  workspaceId: string,
+): Promise<ApiResult<{ projects: ProjectManifest[]; environments: ProjectEnvironmentView[]; rollups: ProjectPullSummary[] }>> =>
+  apiFetch<{ projects: any[]; environments?: any[]; rollups?: any[] }>(`/workspaces/${workspaceId}/projects`).then((res) => {
     if (isApiError(res)) return res
-    return { projects: res.projects }
+    return {
+      projects: res.projects,
+      environments: (res.environments ?? []) as ProjectEnvironmentView[],
+      rollups: (res.rollups ?? []) as ProjectPullSummary[],
+    }
   })
 
 export const createProject = (workspaceId: string, req: ProjectCreateRequest): Promise<ApiResult<{ project: ProjectManifest }>> =>
@@ -836,6 +848,40 @@ export const deleteProject = (projectId: string): Promise<ApiResult<{ project: P
   }).then((res) => {
     if (isApiError(res)) return res
     return { project: res.project }
+  })
+
+export const createProjectEnvironment = (
+  projectId: string,
+  req: ProjectEnvironmentCreateRequest,
+): Promise<ApiResult<{ environment: ProjectEnvironmentView }>> =>
+  apiFetch<{ environment: any }>(`/projects/${projectId}/environments`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return { environment: res.environment as ProjectEnvironmentView }
+  })
+
+export const updateProjectEnvironment = (
+  environmentId: string,
+  req: ProjectEnvironmentPatchRequest,
+): Promise<ApiResult<{ environment: ProjectEnvironmentView }>> =>
+  apiFetch<{ environment: any }>(`/project-environments/${environmentId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(req),
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return { environment: res.environment as ProjectEnvironmentView }
+  })
+
+export const deleteProjectEnvironment = (
+  environmentId: string,
+): Promise<ApiResult<{ environment: ProjectEnvironmentView }>> =>
+  apiFetch<{ environment: any }>(`/project-environments/${environmentId}`, {
+    method: 'DELETE',
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return { environment: res.environment as ProjectEnvironmentView }
   })
 
 export const createCompany = (req: CompanyCreateRequest): Promise<ApiResult<{ company: Workspace }>> =>

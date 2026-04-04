@@ -78,6 +78,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [editingRuntime, setEditingRuntime] = useState(false)
   const [runtimeDraft, setRuntimeDraft] = useState<ServiceLocationDraft[]>([])
+  const [runtimeExecutionMode, setRuntimeExecutionMode] = useState<Service['execution_mode']>('networked')
   const [savingRuntime, setSavingRuntime] = useState(false)
   const [runtimeMessage, setRuntimeMessage] = useState<string | null>(null)
   const [managedDocsDraft, setManagedDocsDraft] = useState<ManagedDocConfig[]>([])
@@ -120,6 +121,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
       if (!isApiError(res)) {
         setService(res)
         setRuntimeDraft(res.locations.map((location) => ({ ...location, runtime: { ...location.runtime } })))
+        setRuntimeExecutionMode(res.execution_mode)
         setManagedDocsDraft(res.managed_docs.map((entry) => ({ ...entry })))
       }
     })
@@ -180,6 +182,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
     setScopeEntries(updated.scope_entries)
     setScopeDraft(updated.scope_entries.map((entry) => ({ ...entry })))
     setRuntimeDraft(updated.locations.map((location) => ({ ...location, runtime: { ...location.runtime } })))
+    setRuntimeExecutionMode(updated.execution_mode)
     setManagedDocsDraft(updated.managed_docs.map((entry) => ({ ...entry })))
   }
 
@@ -302,6 +305,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
     setSavingRuntime(true)
     setRuntimeMessage(null)
     const result = await updateService(service.service_id, {
+      execution_mode: runtimeExecutionMode,
       locations: runtimeDraft,
     } as Partial<Service>)
     setSavingRuntime(false)
@@ -355,6 +359,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
 
   function handleCancelRuntimeEdit() {
     setRuntimeDraft(service?.locations.map((location) => ({ ...location, runtime: { ...location.runtime } })) ?? [])
+    setRuntimeExecutionMode(service?.execution_mode ?? 'networked')
     setEditingRuntime(false)
     setRuntimeMessage(null)
   }
@@ -706,12 +711,18 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         open={Boolean(panelOpen.network)}
         onToggle={() => togglePanel('network')}
         summary={
-          runResult
+          service?.execution_mode !== 'networked'
+            ? `Execution mode ${service?.execution_mode ?? 'networked'} · port monitoring optional`
+            : runResult
             ? `${runResult.ports.length} open ports · firewall ${runResult.firewall_status || (runResult.firewall_active ? 'active' : 'inactive')}`
             : 'No network snapshot captured yet'
         }
       >
-        {runResult ? (
+        {service?.execution_mode !== 'networked' ? (
+          <div className="text-sm text-gray-400">
+            This service is tracked as <span className="text-cyan-300">{service?.execution_mode ?? 'networked'}</span>, so port-heavy network status is secondary. Use the Runtime panel for deployment root, command hints, bundle flow, and node state.
+          </div>
+        ) : runResult ? (
           <>
           <div className="flex flex-wrap gap-2 mb-2">
             {runResult.ports.map((p) => (
@@ -745,7 +756,9 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <div className="mt-1 text-xs text-gray-500">
-                Per-location ports, health checks, run-command hints, and node sync.
+                {service.execution_mode === 'networked'
+                  ? 'Per-location ports, health checks, run-command hints, and node sync.'
+                  : `Per-location deployment state, command hints, and node sync for ${service.execution_mode} services.`}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -775,6 +788,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                   type="button"
                   onClick={() => {
                     setRuntimeDraft(service.locations.map((location) => ({ ...location, runtime: { ...location.runtime } })))
+                    setRuntimeExecutionMode(service.execution_mode)
                     setEditingRuntime(true)
                     setRuntimeMessage(null)
                   }}
@@ -793,6 +807,26 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
               {runtimeMessage}
             </div>
           )}
+
+          <div className="mb-4 rounded-xl border border-gray-800 bg-gray-950 p-3">
+            <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Execution Mode</div>
+            {editingRuntime ? (
+              <select
+                value={runtimeExecutionMode}
+                onChange={(event) => setRuntimeExecutionMode(event.target.value as Service['execution_mode'])}
+                className="mt-2 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500"
+              >
+                <option value="networked">networked</option>
+                <option value="batch">batch</option>
+                <option value="lambda">lambda</option>
+                <option value="docs_only">docs_only</option>
+              </select>
+            ) : (
+              <div className="mt-2 inline-flex rounded-full border border-cyan-900/40 bg-cyan-950/20 px-3 py-1 text-sm text-cyan-200">
+                {service.execution_mode}
+              </div>
+            )}
+          </div>
 
           <div className="space-y-4">
             {(editingRuntime ? runtimeDraft : service.locations).map((location) => {
@@ -929,6 +963,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                   </div>
 
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    {(runtimeExecutionMode === 'networked' || location.runtime.expected_ports.length > 0 || (service?.task_ledger?.[0]?.runtime_services?.length ?? 0) > 0) && (
                     <div className="text-sm text-gray-300">
                       <div className="mb-1">Expected ports</div>
                       {editingRuntime ? (
@@ -955,6 +990,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                         </div>
                       )}
                     </div>
+                    )}
 
                     <label className="text-sm text-gray-300">
                       <div className="mb-1">Monitoring mode</div>
@@ -976,6 +1012,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                     </label>
                   </div>
 
+                  {runtimeExecutionMode !== 'docs_only' && (
                   <label className="mt-3 block text-sm text-gray-300">
                     <div className="mb-1">Health check command</div>
                     {editingRuntime ? (
@@ -990,6 +1027,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                       </pre>
                     )}
                   </label>
+                  )}
 
                   <label className="mt-3 block text-sm text-gray-300">
                     <div className="mb-1">Run command hint</div>
@@ -1032,13 +1070,19 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                           </div>
                           <div>
                             <span className="text-gray-500">Detected ports:</span>{' '}
-                            {latestRuntime.detected_ports.length > 0
+                            {runtimeExecutionMode !== 'networked' && latestRuntime.detected_ports.length === 0
+                              ? 'not required'
+                              : latestRuntime.detected_ports.length > 0
                               ? latestRuntime.detected_ports.map((port) => `:${port.port}`).join(', ')
                               : 'none'}
                           </div>
                           <div>
                             <span className="text-gray-500">Missing ports:</span>{' '}
-                            {latestRuntime.missing_ports.length > 0 ? latestRuntime.missing_ports.join(', ') : 'none'}
+                            {runtimeExecutionMode !== 'networked' && latestRuntime.missing_ports.length === 0
+                              ? 'not required'
+                              : latestRuntime.missing_ports.length > 0
+                                ? latestRuntime.missing_ports.join(', ')
+                                : 'none'}
                           </div>
                           <div>
                             <span className="text-gray-500">Health:</span> {latestRuntime.healthcheck_status}

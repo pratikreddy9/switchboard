@@ -18,6 +18,8 @@ from .models import (
     NodeActionRequest,
     NodeSyncRequest,
     ProjectCreateRequest,
+    ProjectEnvironmentCreateRequest,
+    ProjectEnvironmentPatchRequest,
     ProjectPatchRequest,
     PullBundleRequest,
     RepoActionRequest,
@@ -437,8 +439,10 @@ def workspace_health_check(workspace_id: str, runtime_passwords: dict[str, str] 
 
 @app.get("/api/workspaces/{workspace_id}/projects")
 def list_workspace_projects(workspace_id: str) -> dict[str, object]:
-    projects = manifest_store.get_workspace_projects(workspace_id)
-    return {"projects": [p.model_dump(mode="json") for p in projects]}
+    try:
+        return coordinator.list_workspace_project_context(workspace_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.post("/api/workspaces/{workspace_id}/projects")
@@ -446,6 +450,17 @@ def create_project(workspace_id: str, request: ProjectCreateRequest) -> dict[str
     try:
         project = manifest_store.create_project(workspace_id, request)
         return {"status": "ok", "project": project.model_dump(mode="json")}
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/api/projects/{project_id}/environments")
+def create_project_environment(project_id: str, request: ProjectEnvironmentCreateRequest) -> dict[str, object]:
+    try:
+        environment = manifest_store.create_project_environment(project_id, request)
+        return {"status": "ok", "environment": environment.model_dump(mode="json")}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -500,6 +515,26 @@ def delete_project(project_id: str) -> dict[str, object]:
     try:
         project = manifest_store.delete_project(project_id)
         return {"status": "ok", "project": project.model_dump(mode="json")}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.patch("/api/project-environments/{environment_id}")
+def patch_project_environment(environment_id: str, request: ProjectEnvironmentPatchRequest) -> dict[str, object]:
+    try:
+        environment = manifest_store.patch_project_environment(environment_id, request)
+        return {"status": "ok", "environment": environment.model_dump(mode="json")}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.delete("/api/project-environments/{environment_id}")
+def delete_project_environment(environment_id: str) -> dict[str, object]:
+    try:
+        environment = manifest_store.delete_project_environment(environment_id)
+        return {"status": "ok", "environment": environment.model_dump(mode="json")}
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

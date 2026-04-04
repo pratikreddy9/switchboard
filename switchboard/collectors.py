@@ -33,6 +33,7 @@ from .models import (
     GitPullRequest,
     NodeActionRequest,
     NodeSyncRequest,
+    ProjectEnvironmentManifest,
     PullBundleRequest,
     RepoActionRequest,
     ResolvedServer,
@@ -513,11 +514,14 @@ class CollectionCoordinator:
         )
         runtime = location.runtime
         configured_ports = runtime.expected_ports
+        execution_mode = getattr(service, "execution_mode", "networked")
+        inspect_ports = execution_mode == "networked" or bool(configured_ports)
+        run_healthcheck = execution_mode != "docs_only" and bool(runtime.healthcheck_command.strip())
 
         if server.connection_type == "local":
-            listeners = self._collect_local_listener_details()
+            listeners = self._collect_local_listener_details() if inspect_ports else []
             node_present = self._local_node_manifest_path(location.root).exists()
-            health_result = self._run_healthcheck_local(runtime.healthcheck_command)
+            health_result = self._run_healthcheck_local(runtime.healthcheck_command) if run_healthcheck else {"status": "skipped", "output": ""}
         else:
             with self._open_ssh(server) as connection:
                 if connection is None:
@@ -539,27 +543,28 @@ class CollectionCoordinator:
                         "monitoring_mode": runtime.monitoring_mode,
                         "notes": runtime.notes,
                         "node_present": False,
+                        "execution_mode": execution_mode,
                     }
                     self.snapshots.persist_runtime_check(service_id, location.location_id, result)
                     return result
                 ssh, sftp = connection
-                listeners = self._collect_remote_listener_details(ssh)
+                listeners = self._collect_remote_listener_details(ssh) if inspect_ports else []
                 node_present = self._remote_exists(sftp, self._remote_node_manifest_path(location.root))
-                health_result = self._run_healthcheck_remote(ssh, runtime.healthcheck_command)
+                health_result = self._run_healthcheck_remote(ssh, runtime.healthcheck_command) if run_healthcheck else {"status": "skipped", "output": ""}
 
         matched_ports = [entry for entry in listeners if entry["port"] in configured_ports] if configured_ports else listeners
-        missing_ports = [port for port in configured_ports if port not in {entry["port"] for entry in listeners}]
+        missing_ports = [port for port in configured_ports if port not in {entry["port"] for entry in listeners}] if inspect_ports else []
         detected_process_command = self._lookup_process_command(
             server,
             matched_ports[0].get("pid") if matched_ports else None,
         )
 
         status = "ok"
-        if configured_ports and missing_ports:
+        if execution_mode == "networked" and configured_ports and missing_ports:
             status = "partial"
         if health_result["status"] == "failed":
             status = "partial"
-        if not configured_ports and not runtime.healthcheck_command and not listeners:
+        if execution_mode == "networked" and not configured_ports and not runtime.healthcheck_command and not listeners:
             status = "unverified"
 
         result = {
@@ -580,6 +585,7 @@ class CollectionCoordinator:
             "monitoring_mode": runtime.monitoring_mode,
             "notes": runtime.notes,
             "node_present": node_present,
+            "execution_mode": execution_mode,
             "source": "runtime_check",
         }
         self.snapshots.persist_runtime_check(service_id, location.location_id, result)
@@ -601,6 +607,29 @@ class CollectionCoordinator:
                 except Exception as e:
                     results.append({"service_id": service.service_id, "location_id": location.location_id, "status": "error", "error": str(e)})
         return {"workspace_id": workspace_id, "results": results, "timestamp": utc_now_iso()}
+
+    def list_workspace_project_context(self, workspace_id: str) -> dict[str, Any]:
+        self.manifests.get_workspace(workspace_id)
+        projects = self.manifests.get_workspace_projects(workspace_id)
+        environments = self.manifests.get_workspace_project_environments(workspace_id)
+        services = {
+            service.service_id: service
+            for service in self.manifests.get_workspace_services(workspace_id)
+        }
+        bundles = self.snapshots.list_all_pull_bundles()
+
+        enriched_environments: list[dict[str, Any]] = []
+        rollups: list[dict[str, Any]] = []
+        for environment in environments:
+            enriched = self._project_environment_view(environment, services, bundles)
+            enriched_environments.append(enriched)
+            rollups.append(enriched["pull_summary"])
+
+        return {
+            "projects": [project.model_dump(mode="json") for project in projects],
+            "environments": enriched_environments,
+            "rollups": rollups,
+        }
 
     def sync_from_node(self, service_id: str, request: NodeSyncRequest) -> dict[str, Any]:
         with self._action_guard("sync_from_node", service_id) as lock_error:
@@ -905,6 +934,145 @@ class CollectionCoordinator:
 
     def get_node_viewer(self, service_id: str) -> dict[str, Any]:
         return {"service_id": service_id, "locations": self.snapshots.get_service_node_viewer(service_id)}
+
+    def _project_environment_view(
+        self,
+        environment: ProjectEnvironmentManifest,
+        services: dict[str, ServiceManifest],
+        bundles: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        added_count = 0
+        removed_count = 0
+        changed_count = 0
+        unchanged_count = 0
+        latest_created_at = ""
+        service_summaries: list[dict[str, Any]] = []
+        dependencies: list[dict[str, Any]] = []
+        cross_dependencies: list[dict[str, Any]] = []
+
+        for deployment in environment.deployments:
+            service = services.get(deployment.service_id)
+            latest_task = self._latest_service_task_context(deployment.service_id)
+            runtime_services = (
+                [item.model_dump(mode="json") for item in deployment.runtime_services]
+                if deployment.runtime_services
+                else latest_task.get("runtime_services", [])
+            )
+            deployment_dependencies = (
+                [item.model_dump(mode="json") for item in deployment.dependencies]
+                if deployment.dependencies
+                else latest_task.get("dependencies", [])
+            )
+            deployment_cross_dependencies = (
+                [item.model_dump(mode="json") for item in deployment.cross_dependencies]
+                if deployment.cross_dependencies
+                else latest_task.get("cross_dependencies", [])
+            )
+            dependencies = self._merge_dependency_entries(dependencies, deployment_dependencies)
+            cross_dependencies = self._merge_dependency_entries(cross_dependencies, deployment_cross_dependencies)
+
+            matched_bundle = self._latest_bundle_for_deployment(bundles, deployment)
+            summary = matched_bundle.get("diff_summary", {}) if matched_bundle else {}
+            added_count += int(summary.get("added_count", 0) or 0)
+            removed_count += int(summary.get("removed_count", 0) or 0)
+            changed_count += int(summary.get("changed_count", 0) or 0)
+            unchanged_count += int(summary.get("unchanged_count", 0) or 0)
+            created_at = str(matched_bundle.get("created_at", "") if matched_bundle else "")
+            if created_at and created_at > latest_created_at:
+                latest_created_at = created_at
+
+            service_summaries.append(
+                {
+                    "service_id": deployment.service_id,
+                    "display_name": service.display_name if service else deployment.service_id,
+                    "execution_mode": getattr(service, "execution_mode", "networked") if service else "networked",
+                    "location_id": deployment.location_id,
+                    "server_id": deployment.server_id
+                    or self._deployment_server_id(service, deployment.location_id),
+                    "root": deployment.root or self._deployment_root(service, deployment.location_id),
+                    "version": deployment.version or latest_task.get("bootstrap_version", ""),
+                    "runtime_services": runtime_services,
+                    "dependencies": deployment_dependencies,
+                    "cross_dependencies": deployment_cross_dependencies,
+                    "pull_summary": {
+                        "added_count": int(summary.get("added_count", 0) or 0),
+                        "removed_count": int(summary.get("removed_count", 0) or 0),
+                        "changed_count": int(summary.get("changed_count", 0) or 0),
+                        "unchanged_count": int(summary.get("unchanged_count", 0) or 0),
+                        "summary": summary.get("summary", "No pull bundles yet."),
+                        "latest_created_at": created_at,
+                    },
+                    "notes": deployment.notes,
+                }
+            )
+
+        pull_summary = {
+            "project_id": environment.project_id,
+            "environment_id": environment.environment_id,
+            "added_count": added_count,
+            "removed_count": removed_count,
+            "changed_count": changed_count,
+            "unchanged_count": unchanged_count,
+            "latest_created_at": latest_created_at,
+            "service_count": len(environment.deployments),
+            "summary": f"{added_count} added, {removed_count} removed, {changed_count} changed",
+        }
+        return {
+            **environment.model_dump(mode="json"),
+            "pull_summary": pull_summary,
+            "dependency_summary": {
+                "dependencies": dependencies,
+                "cross_dependencies": cross_dependencies,
+            },
+            "service_summaries": service_summaries,
+        }
+
+    def _latest_service_task_context(self, service_id: str) -> dict[str, Any]:
+        ledger = self.snapshots.get_service_task_ledger(service_id)
+        tasks = ledger.get("tasks", [])
+        return tasks[0] if tasks else {}
+
+    def _merge_dependency_entries(
+        self,
+        current: list[dict[str, Any]],
+        additions: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        seen = {
+            f"{entry.get('kind','')}|{entry.get('name','')}|{entry.get('host','')}|{entry.get('port','')}"
+            for entry in current
+        }
+        merged = list(current)
+        for entry in additions:
+            key = f"{entry.get('kind','')}|{entry.get('name','')}|{entry.get('host','')}|{entry.get('port','')}"
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(entry)
+        return merged
+
+    def _latest_bundle_for_deployment(
+        self,
+        bundles: list[dict[str, Any]],
+        deployment: Any,
+    ) -> dict[str, Any] | None:
+        matched = [bundle for bundle in bundles if bundle.get("service_id") == deployment.service_id]
+        if deployment.server_id:
+            matched = [bundle for bundle in matched if bundle.get("server_id") == deployment.server_id] or matched
+        if deployment.root:
+            matched = [bundle for bundle in matched if bundle.get("location_root") == deployment.root] or matched
+        return matched[0] if matched else None
+
+    def _deployment_server_id(self, service: ServiceManifest | None, location_id: str | None) -> str:
+        if service is None or location_id is None:
+            return ""
+        location = self._select_location(service, location_id=location_id)
+        return location.server_id if location is not None else ""
+
+    def _deployment_root(self, service: ServiceManifest | None, location_id: str | None) -> str:
+        if service is None or location_id is None:
+            return ""
+        location = self._select_location(service, location_id=location_id)
+        return location.root if location is not None else ""
 
     def node_inspect(self, service_id: str, request: NodeActionRequest) -> dict[str, Any]:
         service = self.manifests.get_service(service_id)

@@ -1,131 +1,5 @@
 [
   {
-    "service_id": "docgenerator",
-    "workspace_id": "zapp",
-    "display_name": "Document Generator",
-    "kind": "service",
-    "ownership_tier": "owned",
-    "tags": [
-      "docs",
-      "generator",
-      "zapp"
-    ],
-    "favorite_tier": "primary",
-    "locations": [
-      {
-        "location_id": "docgenerator_local",
-        "server_id": "local_mac",
-        "access_mode": "local",
-        "root": "/Users/p/Desktop/work/zapp/docgenerator",
-        "role": "control_source",
-        "is_primary": true,
-        "path_aliases": []
-      },
-      {
-        "location_id": "docgenerator_test",
-        "server_id": "zapp_test_114",
-        "access_mode": "ssh",
-        "root": "/home/zappadmin/python_service/docgenerator",
-        "role": "test_runtime",
-        "is_primary": false,
-        "path_aliases": []
-      },
-      {
-        "location_id": "docgenerator_prod",
-        "server_id": "zapp_prod_253",
-        "access_mode": "ssh",
-        "root": "/home/zappadmin/python_service/docgenerator",
-        "role": "prod_runtime",
-        "is_primary": false,
-        "path_aliases": []
-      }
-    ],
-    "repo_paths": [
-      "/Users/p/Desktop/work/zapp/docgenerator",
-      "/home/zappadmin/python_service/docgenerator"
-    ],
-    "docs_paths": [
-      "/Users/p/Desktop/work/zapp/docgenerator/README.md",
-      "/home/zappadmin/python_service/docgenerator/README.md"
-    ],
-    "log_paths": [
-      "/Users/p/Desktop/work/zapp/docgenerator/docgen.log",
-      "/Users/p/Desktop/work/zapp/docgenerator/server.log",
-      "/Users/p/Desktop/work/zapp/docgenerator/uvicorn.log",
-      "/home/zappadmin/python_service/docgenerator/docgen.log",
-      "/home/zappadmin/python_service/docgenerator/server.log",
-      "/home/zappadmin/python_service/docgenerator/uvicorn.log"
-    ],
-    "allowed_git_pull_paths": [
-      "/Users/p/Desktop/work/zapp/docgenerator",
-      "/home/zappadmin/python_service/docgenerator"
-    ],
-    "exclude_globs": [
-      "generated_docs",
-      "temp_images",
-      "__pycache__"
-    ],
-    "notes": "Initial seed for doc generation runtime and source paths.",
-    "path_aliases": []
-  },
-  {
-    "service_id": "lambdalogger",
-    "workspace_id": "zapp",
-    "display_name": "Lambda Logger",
-    "kind": "service",
-    "ownership_tier": "owned",
-    "tags": [
-      "logger",
-      "fastapi",
-      "zapp"
-    ],
-    "favorite_tier": "primary",
-    "locations": [
-      {
-        "location_id": "lambdalogger_local",
-        "server_id": "local_mac",
-        "access_mode": "local",
-        "root": "/Users/p/Desktop/work/zapp/lambdalogger",
-        "role": "control_source",
-        "is_primary": true,
-        "path_aliases": []
-      },
-      {
-        "location_id": "lambdalogger_test",
-        "server_id": "zapp_test_114",
-        "access_mode": "ssh",
-        "root": "/home/zappadmin/python_service/zapplambdalogger",
-        "role": "test_runtime",
-        "is_primary": false,
-        "path_aliases": []
-      }
-    ],
-    "repo_paths": [
-      "/Users/p/Desktop/work/zapp/lambdalogger",
-      "/home/zappadmin/python_service/zapplambdalogger"
-    ],
-    "docs_paths": [
-      "/Users/p/Desktop/work/zapp/lambdalogger/README.md",
-      "/home/zappadmin/python_service/zapplambdalogger/README.md"
-    ],
-    "log_paths": [
-      "/Users/p/Desktop/work/zapp/lambdalogger/logging_service.out",
-      "/Users/p/Desktop/work/zapp/lambdalogger/runtime/events.log",
-      "/home/zappadmin/python_service/zapplambdalogger/logging_service.out",
-      "/home/zappadmin/python_service/zapplambdalogger/runtime/events.log"
-    ],
-    "allowed_git_pull_paths": [
-      "/Users/p/Desktop/work/zapp/lambdalogger",
-      "/home/zappadmin/python_service/zapplambdalogger"
-    ],
-    "exclude_globs": [
-      "runtime",
-      "__pycache__"
-    ],
-    "notes": "Logger lane for the ZAPP umbrella.",
-    "path_aliases": []
-  },
-  {
     "service_id": "e",
     "workspace_id": "pesu",
     "display_name": "emailagent",
@@ -529,61 +403,83 @@
     "path_aliases": []
   },
   {
-    "service_id": "zapplambda",
+    "service_id": "lambdascripts",
     "workspace_id": "zapp",
     "display_name": "lambdascripts",
     "kind": "service",
+    "execution_mode": "lambda",
     "ownership_tier": "owned",
     "tags": [],
     "favorite_tier": "none",
     "locations": [
       {
-        "location_id": "zapplambda-local_mac-primary",
+        "location_id": "lambdascripts-local_mac-primary",
         "server_id": "local_mac",
         "access_mode": "local",
         "root": "/Users/p/Desktop/work/zapp/lambdascripts",
         "role": "primary",
         "is_primary": true,
-        "path_aliases": []
+        "path_aliases": [],
+        "runtime": {
+          "expected_ports": [
+            8010
+          ],
+          "healthcheck_command": "curl http://127.0.0.1:8010/api/health",
+          "run_command_hint": "switchboard node start --project-root /Users/p/Desktop/work/zapp/lambdascripts --host 127.0.0.1 --port 8010",
+          "monitoring_mode": "manual",
+          "notes": "Runtime continues to refer to the local Switchboard node; the Lambda project itself does not expose a local application server from this repo."
+        }
       }
     ],
     "repo_paths": [
-      "/Users/p/Desktop/work/zapp/lambdascripts"
+      "/Users/p/Desktop/work/zapp/lambdascripts/addResumeToZap.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/aiMatchResumesJd.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/fetchjddata.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/fetchresumedata.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/getAIscore.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/getJobDescreptionVector.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/getResumeScoreForJD.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/test_db_verify.py"
     ],
     "docs_paths": [
+      "/Users/p/Desktop/work/zapp/lambdascripts/switchboard",
       "/Users/p/Desktop/work/zapp/lambdascripts/API.md",
       "/Users/p/Desktop/work/zapp/lambdascripts/CHANGELOG.md",
       "/Users/p/Desktop/work/zapp/lambdascripts/README.md"
     ],
     "log_paths": [],
     "allowed_git_pull_paths": [
-      "/Users/p/Desktop/work/zapp/lambdascripts"
+      "/Users/p/Desktop/work/zapp/lambdascripts/addResumeToZap.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/aiMatchResumesJd.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/fetchjddata.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/fetchresumedata.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/getAIscore.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/getJobDescreptionVector.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/getResumeScoreForJD.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/test_db_verify.py"
     ],
-    "exclude_globs": [
-      "/Users/p/Desktop/work/zapp/lambdascripts/__pycache__",
-      "/Users/p/Desktop/work/zapp/lambdascripts/.DS_Store"
-    ],
+    "exclude_globs": [],
     "scope_entries": [
       {
-        "entry_id": "repo-e7c3f752c827",
+        "entry_id": "doc-7c744d57c8ee",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/switchboard",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-c251a9dbca61",
         "kind": "repo",
-        "path": "/Users/p/Desktop/work/zapp/lambdascripts",
-        "path_type": "dir",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/addResumeToZap.py",
+        "path_type": "file",
         "source": "user_added",
         "enabled": true
       },
       {
-        "entry_id": "exclude-20f53d6c9559",
-        "kind": "exclude",
-        "path": "/Users/p/Desktop/work/zapp/lambdascripts/__pycache__",
-        "path_type": "dir",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "exclude-24b78c8a97d6",
-        "kind": "exclude",
-        "path": "/Users/p/Desktop/work/zapp/lambdascripts/.DS_Store",
+        "entry_id": "repo-3697942a0722",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/aiMatchResumesJd.py",
         "path_type": "file",
         "source": "user_added",
         "enabled": true
@@ -605,9 +501,57 @@
         "enabled": true
       },
       {
+        "entry_id": "repo-4802a8e2f39e",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/fetchjddata.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-555b7663a3e1",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/fetchresumedata.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-e06e20864cc1",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/getAIscore.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-16aecabbdce0",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/getJobDescreptionVector.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-806d936bd555",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/getResumeScoreForJD.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
         "entry_id": "doc-418774b42ae0",
         "kind": "doc",
         "path": "/Users/p/Desktop/work/zapp/lambdascripts/README.md",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-3e64f3124eca",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/test_db_verify.py",
         "path_type": "file",
         "source": "user_added",
         "enabled": true
@@ -615,9 +559,723 @@
     ],
     "repo_policies": [
       {
-        "repo_path": "/Users/p/Desktop/work/zapp/lambdascripts",
+        "repo_path": "/Users/p/Desktop/work/zapp/lambdascripts/addResumeToZap.py",
         "push_mode": "blocked",
         "safety_profile": "secret_heavy",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/Users/p/Desktop/work/zapp/lambdascripts/aiMatchResumesJd.py",
+        "push_mode": "blocked",
+        "safety_profile": "secret_heavy",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/Users/p/Desktop/work/zapp/lambdascripts/fetchjddata.py",
+        "push_mode": "blocked",
+        "safety_profile": "secret_heavy",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/Users/p/Desktop/work/zapp/lambdascripts/fetchresumedata.py",
+        "push_mode": "blocked",
+        "safety_profile": "secret_heavy",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/Users/p/Desktop/work/zapp/lambdascripts/getAIscore.py",
+        "push_mode": "blocked",
+        "safety_profile": "secret_heavy",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/Users/p/Desktop/work/zapp/lambdascripts/getJobDescreptionVector.py",
+        "push_mode": "blocked",
+        "safety_profile": "secret_heavy",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/Users/p/Desktop/work/zapp/lambdascripts/getResumeScoreForJD.py",
+        "push_mode": "blocked",
+        "safety_profile": "secret_heavy",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/Users/p/Desktop/work/zapp/lambdascripts/test_db_verify.py",
+        "push_mode": "blocked",
+        "safety_profile": "secret_heavy",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      }
+    ],
+    "notes": "",
+    "path_aliases": []
+  },
+  {
+    "service_id": "lambdalogger",
+    "workspace_id": "zapp",
+    "display_name": "lambdalogger",
+    "kind": "service",
+    "execution_mode": "lambda",
+    "ownership_tier": "owned",
+    "tags": [],
+    "favorite_tier": "none",
+    "locations": [
+      {
+        "location_id": "lambdalogger-local_mac-primary",
+        "server_id": "local_mac",
+        "access_mode": "local",
+        "root": "/Users/p/Desktop/work/zapp/lambdalogger",
+        "role": "primary",
+        "is_primary": true,
+        "path_aliases": [],
+        "runtime": {
+          "expected_ports": [],
+          "healthcheck_command": "curl -s http://148.66.152.114:8001/health",
+          "run_command_hint": "",
+          "monitoring_mode": "manual",
+          "notes": ""
+        }
+      }
+    ],
+    "repo_paths": [
+      "/Users/p/Desktop/work/zapp/lambdalogger/lambda_logging_client.py",
+      "/Users/p/Desktop/work/zapp/lambdalogger/logging_service.py"
+    ],
+    "docs_paths": [
+      "/Users/p/Desktop/work/zapp/lambdalogger/runtime",
+      "/Users/p/Desktop/work/zapp/lambdalogger/zapplambdalogger",
+      "/Users/p/Desktop/work/zapp/lambdalogger/.DS_Store",
+      "/Users/p/Desktop/work/zapp/lambdalogger/logging_service.out",
+      "/Users/p/Desktop/work/zapp/lambdalogger/README.md",
+      "/Users/p/Desktop/work/zapp/lambdalogger/requirements.txt"
+    ],
+    "log_paths": [
+      "/Users/p/Desktop/work/zapp/lambdalogger/zapplambdalogger/logs"
+    ],
+    "allowed_git_pull_paths": [
+      "/Users/p/Desktop/work/zapp/lambdalogger/lambda_logging_client.py",
+      "/Users/p/Desktop/work/zapp/lambdalogger/logging_service.py"
+    ],
+    "exclude_globs": [],
+    "scope_entries": [
+      {
+        "entry_id": "doc-4af5734fb2b0",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/zapp/lambdalogger/runtime",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-c141534c6f76",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/zapp/lambdalogger/zapplambdalogger",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "log-bb38d013cb67",
+        "kind": "log",
+        "path": "/Users/p/Desktop/work/zapp/lambdalogger/zapplambdalogger/logs",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-ed2947292dc4",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/zapp/lambdalogger/.DS_Store",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-6bc4011eb474",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/work/zapp/lambdalogger/lambda_logging_client.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-19dc04d3c97e",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/zapp/lambdalogger/logging_service.out",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-88842ae9137b",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/work/zapp/lambdalogger/logging_service.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-9afa2481460b",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/zapp/lambdalogger/README.md",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-2c21e28e9112",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/zapp/lambdalogger/requirements.txt",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      }
+    ],
+    "repo_policies": [
+      {
+        "repo_path": "/Users/p/Desktop/work/zapp/lambdalogger/lambda_logging_client.py",
+        "push_mode": "blocked",
+        "safety_profile": "secret_heavy",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/Users/p/Desktop/work/zapp/lambdalogger/logging_service.py",
+        "push_mode": "blocked",
+        "safety_profile": "secret_heavy",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      }
+    ],
+    "notes": "",
+    "path_aliases": []
+  },
+  {
+    "service_id": "sys_docs",
+    "workspace_id": "pesu",
+    "display_name": ".47",
+    "kind": "service",
+    "ownership_tier": "owned",
+    "tags": [],
+    "favorite_tier": "none",
+    "locations": [
+      {
+        "location_id": "sys_docs-pesu_dev_47-primary",
+        "server_id": "pesu_dev_47",
+        "access_mode": "ssh",
+        "root": "/home/pesu/sys_docs",
+        "role": "primary",
+        "is_primary": true,
+        "path_aliases": [],
+        "runtime": {
+          "expected_ports": [],
+          "healthcheck_command": "",
+          "run_command_hint": "",
+          "monitoring_mode": "manual",
+          "notes": ""
+        }
+      }
+    ],
+    "repo_paths": [],
+    "docs_paths": [
+      "/home/pesu/sys_docs"
+    ],
+    "log_paths": [],
+    "allowed_git_pull_paths": [],
+    "exclude_globs": [],
+    "scope_entries": [
+      {
+        "entry_id": "doc-13882b099708",
+        "kind": "doc",
+        "path": "/home/pesu/sys_docs",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      }
+    ],
+    "managed_docs": [
+      {
+        "doc_id": "readme",
+        "path": "README.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-02T16:27:33+00:00"
+      },
+      {
+        "doc_id": "api",
+        "path": "API.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "changelog",
+        "path": "CHANGELOG.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-02T16:27:33+00:00"
+      },
+      {
+        "doc_id": "handoff",
+        "path": "switchboard/local/control-center-handoff.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-02T16:27:33+00:00"
+      },
+      {
+        "doc_id": "runbook",
+        "path": "switchboard/local/runbook.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-02T16:27:33+00:00"
+      },
+      {
+        "doc_id": "approach_history",
+        "path": "switchboard/local/approach-history.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-02T16:27:33+00:00"
+      },
+      {
+        "doc_id": "doc_index_md",
+        "path": "switchboard/local/doc-index.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-02T16:27:33+00:00"
+      },
+      {
+        "doc_id": "doc_index_json",
+        "path": "switchboard/evidence/doc-index.json",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-02T16:27:33+00:00"
+      }
+    ],
+    "repo_policies": [],
+    "notes": "",
+    "path_aliases": []
+  },
+  {
+    "service_id": "comparing",
+    "workspace_id": "pesu",
+    "display_name": "compareanswers",
+    "kind": "service",
+    "ownership_tier": "owned",
+    "tags": [],
+    "favorite_tier": "none",
+    "locations": [
+      {
+        "location_id": "comparing-pesu_dev_47-primary",
+        "server_id": "pesu_dev_47",
+        "access_mode": "ssh",
+        "root": "/home/pesu/compareanswers",
+        "role": "primary",
+        "is_primary": true,
+        "path_aliases": [],
+        "runtime": {
+          "expected_ports": [],
+          "healthcheck_command": "",
+          "run_command_hint": "",
+          "monitoring_mode": "manual",
+          "notes": ""
+        }
+      }
+    ],
+    "repo_paths": [
+      "/home/pesu/compareanswers/streamlit/streamlit_app.py",
+      "/home/pesu/compareanswers/switchboard/run.sh",
+      "/home/pesu/compareanswers/switchboard/start.sh",
+      "/home/pesu/compareanswers/testing/anchor_propagation_eval.py",
+      "/home/pesu/compareanswers/testing/benchmark_full_vs_semantic.py",
+      "/home/pesu/compareanswers/testing/embedders.py",
+      "/home/pesu/compareanswers/testing/multi_question_trend_eval.py",
+      "/home/pesu/compareanswers/testing/ollama_smoke_test.py",
+      "/home/pesu/compareanswers/tests/test_api_unittest.py",
+      "/home/pesu/compareanswers/app.py",
+      "/home/pesu/compareanswers/cleaner.py",
+      "/home/pesu/compareanswers/CompareSimilarTexts.py",
+      "/home/pesu/compareanswers/scorer.py",
+      "/home/pesu/compareanswers/stats.py"
+    ],
+    "docs_paths": [
+      "/home/pesu/compareanswers"
+    ],
+    "log_paths": [
+      "/home/pesu/compareanswers/logs",
+      "/home/pesu/compareanswers/streamlit/logs",
+      "/home/pesu/compareanswers/server.log"
+    ],
+    "allowed_git_pull_paths": [
+      "/home/pesu/compareanswers/streamlit/streamlit_app.py",
+      "/home/pesu/compareanswers/switchboard/run.sh",
+      "/home/pesu/compareanswers/switchboard/start.sh",
+      "/home/pesu/compareanswers/testing/anchor_propagation_eval.py",
+      "/home/pesu/compareanswers/testing/benchmark_full_vs_semantic.py",
+      "/home/pesu/compareanswers/testing/embedders.py",
+      "/home/pesu/compareanswers/testing/multi_question_trend_eval.py",
+      "/home/pesu/compareanswers/testing/ollama_smoke_test.py",
+      "/home/pesu/compareanswers/tests/test_api_unittest.py",
+      "/home/pesu/compareanswers/app.py",
+      "/home/pesu/compareanswers/cleaner.py",
+      "/home/pesu/compareanswers/CompareSimilarTexts.py",
+      "/home/pesu/compareanswers/scorer.py",
+      "/home/pesu/compareanswers/stats.py"
+    ],
+    "exclude_globs": [
+      "/home/pesu/compareanswers/.venv",
+      "/home/pesu/compareanswers/__pycache__",
+      "/home/pesu/compareanswers/streamlit/__pycache__",
+      "/home/pesu/compareanswers/testing/__pycache__",
+      "/home/pesu/compareanswers/tests/__pycache__"
+    ],
+    "scope_entries": [
+      {
+        "entry_id": "doc-567fea0d8879",
+        "kind": "doc",
+        "path": "/home/pesu/compareanswers",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-5282811dbd90",
+        "kind": "exclude",
+        "path": "/home/pesu/compareanswers/.venv",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-80fb349c725e",
+        "kind": "exclude",
+        "path": "/home/pesu/compareanswers/__pycache__",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "log-3d14c9ecf842",
+        "kind": "log",
+        "path": "/home/pesu/compareanswers/logs",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-82045d7aa07c",
+        "kind": "exclude",
+        "path": "/home/pesu/compareanswers/streamlit/__pycache__",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "log-0383cd62e7d0",
+        "kind": "log",
+        "path": "/home/pesu/compareanswers/streamlit/logs",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-4a901df839fd",
+        "kind": "repo",
+        "path": "/home/pesu/compareanswers/streamlit/streamlit_app.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-012b954d3514",
+        "kind": "repo",
+        "path": "/home/pesu/compareanswers/switchboard/run.sh",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-d887d925566a",
+        "kind": "repo",
+        "path": "/home/pesu/compareanswers/switchboard/start.sh",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-e2bf3c88e05c",
+        "kind": "exclude",
+        "path": "/home/pesu/compareanswers/testing/__pycache__",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-0062dc150fba",
+        "kind": "repo",
+        "path": "/home/pesu/compareanswers/testing/anchor_propagation_eval.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-724e41c6d7ca",
+        "kind": "repo",
+        "path": "/home/pesu/compareanswers/testing/benchmark_full_vs_semantic.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-db2d8dfa3408",
+        "kind": "repo",
+        "path": "/home/pesu/compareanswers/testing/embedders.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-da1df1d1229b",
+        "kind": "repo",
+        "path": "/home/pesu/compareanswers/testing/multi_question_trend_eval.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-8ecef38b7bd0",
+        "kind": "repo",
+        "path": "/home/pesu/compareanswers/testing/ollama_smoke_test.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-415fa5043c24",
+        "kind": "exclude",
+        "path": "/home/pesu/compareanswers/tests/__pycache__",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-2e5e0569893f",
+        "kind": "repo",
+        "path": "/home/pesu/compareanswers/tests/test_api_unittest.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-c1346a09ab19",
+        "kind": "repo",
+        "path": "/home/pesu/compareanswers/app.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-0f1a00ee986b",
+        "kind": "repo",
+        "path": "/home/pesu/compareanswers/cleaner.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-0db1eedf6f9c",
+        "kind": "repo",
+        "path": "/home/pesu/compareanswers/CompareSimilarTexts.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-6b77ba3e9f2c",
+        "kind": "repo",
+        "path": "/home/pesu/compareanswers/scorer.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "log-ad0e374dce21",
+        "kind": "log",
+        "path": "/home/pesu/compareanswers/server.log",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-122f91f6c450",
+        "kind": "repo",
+        "path": "/home/pesu/compareanswers/stats.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      }
+    ],
+    "managed_docs": [
+      {
+        "doc_id": "readme",
+        "path": "README.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-02T16:26:45+00:00"
+      },
+      {
+        "doc_id": "api",
+        "path": "docs/API.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-02T16:26:45+00:00"
+      },
+      {
+        "doc_id": "changelog",
+        "path": "docs/CHANGELOG.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-02T16:26:45+00:00"
+      },
+      {
+        "doc_id": "handoff",
+        "path": "switchboard/local/control-center-handoff.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-02T16:26:45+00:00"
+      },
+      {
+        "doc_id": "runbook",
+        "path": "switchboard/local/runbook.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-02T16:26:45+00:00"
+      },
+      {
+        "doc_id": "approach_history",
+        "path": "switchboard/local/approach-history.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-02T16:26:45+00:00"
+      },
+      {
+        "doc_id": "doc_index_md",
+        "path": "switchboard/local/doc-index.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-02T16:26:45+00:00"
+      },
+      {
+        "doc_id": "doc_index_json",
+        "path": "switchboard/evidence/doc-index.json",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-02T16:26:45+00:00"
+      }
+    ],
+    "repo_policies": [
+      {
+        "repo_path": "/home/pesu/compareanswers/streamlit/streamlit_app.py",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/home/pesu/compareanswers/switchboard/run.sh",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/home/pesu/compareanswers/switchboard/start.sh",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/home/pesu/compareanswers/testing/anchor_propagation_eval.py",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/home/pesu/compareanswers/testing/benchmark_full_vs_semantic.py",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/home/pesu/compareanswers/testing/embedders.py",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/home/pesu/compareanswers/testing/multi_question_trend_eval.py",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/home/pesu/compareanswers/testing/ollama_smoke_test.py",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/home/pesu/compareanswers/tests/test_api_unittest.py",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/home/pesu/compareanswers/app.py",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/home/pesu/compareanswers/cleaner.py",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/home/pesu/compareanswers/CompareSimilarTexts.py",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/home/pesu/compareanswers/scorer.py",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/home/pesu/compareanswers/stats.py",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
         "allowed_branches": [],
         "allowed_remotes": []
       }

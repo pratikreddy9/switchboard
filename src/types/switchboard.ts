@@ -27,6 +27,8 @@ export interface RuntimeConfig {
   notes: string
 }
 
+export type ExecutionMode = 'networked' | 'batch' | 'lambda' | 'docs_only'
+
 export interface RepoSummary {
   path: string
   branch: string
@@ -180,6 +182,68 @@ export interface ProjectManifest {
   notes: string
 }
 
+export type ProjectEnvironmentKind = 'dev' | 'test' | 'staging' | 'qa' | 'prod' | 'custom'
+
+export interface ProjectDeploymentRef {
+  service_id: string
+  location_id?: string
+  server_id?: string
+  root?: string
+  version?: string
+  runtime_services?: RuntimeService[]
+  dependencies?: DependencyNode[]
+  cross_dependencies?: DependencyNode[]
+  notes?: string
+}
+
+export interface ProjectEnvironmentManifest {
+  environment_id: string
+  project_id: string
+  display_name: string
+  kind: ProjectEnvironmentKind
+  deployments: ProjectDeploymentRef[]
+  tags: string[]
+  notes: string
+}
+
+export interface ProjectPullSummary {
+  project_id: string
+  environment_id?: string
+  added_count: number
+  removed_count: number
+  changed_count: number
+  unchanged_count: number
+  latest_created_at: string
+  service_count: number
+  summary?: string
+}
+
+export interface EnvironmentDependencySummary {
+  dependencies: DependencyNode[]
+  cross_dependencies: DependencyNode[]
+}
+
+export interface ProjectEnvironmentServiceSummary {
+  service_id: string
+  display_name: string
+  execution_mode: ExecutionMode
+  location_id?: string
+  server_id?: string
+  root?: string
+  version?: string
+  runtime_services?: RuntimeService[]
+  dependencies?: DependencyNode[]
+  cross_dependencies?: DependencyNode[]
+  pull_summary?: ProjectPullSummary
+  notes?: string
+}
+
+export interface ProjectEnvironmentView extends ProjectEnvironmentManifest {
+  pull_summary?: ProjectPullSummary
+  dependency_summary?: EnvironmentDependencySummary
+  service_summaries?: ProjectEnvironmentServiceSummary[]
+}
+
 export interface CompanyCreateRequest {
   workspace_id: string
   name: string
@@ -239,6 +303,24 @@ export interface ProjectPatchRequest {
   notes?: string
 }
 
+export interface ProjectEnvironmentCreateRequest {
+  environment_id: string
+  display_name: string
+  kind?: ProjectEnvironmentKind
+  deployments?: ProjectDeploymentRef[]
+  tags?: string[]
+  notes?: string
+}
+
+export interface ProjectEnvironmentPatchRequest {
+  environment_id?: string
+  display_name?: string
+  kind?: ProjectEnvironmentKind
+  deployments?: ProjectDeploymentRef[]
+  tags?: string[]
+  notes?: string
+}
+
 export type PendingActionKey = `${string}:${string}:${'pull_bundle'|'sync_to_node'|'sync_from_node'|'runtime_check'}`
 
 export interface PendingActionState {
@@ -258,6 +340,7 @@ export interface Service {
   workspace_id: string
   display_name: string
   kind: ServiceKind
+  execution_mode: ExecutionMode
   tags: string[]
   favorite_tier: number
   locations: ServiceLocation[]
@@ -514,6 +597,7 @@ export interface RuntimeCheckResult {
   root: string
   status: CollectStatus
   checked_at: string
+  execution_mode?: ExecutionMode
   configured_ports: number[]
   detected_ports: PortInfo[]
   missing_ports: number[]
@@ -651,6 +735,7 @@ export interface CreateServiceRequest {
   service_id: string
   display_name: string
   kind?: string
+  execution_mode?: ExecutionMode
   ownership_tier?: 'owned' | 'shared' | 'infra'
   tags?: string[]
   favorite_tier?: 'primary' | 'secondary' | 'none'

@@ -14,6 +14,9 @@ from .config import Settings
 from .models import (
     ManagedDocConfig,
     ProjectCreateRequest,
+    ProjectEnvironmentCreateRequest,
+    ProjectEnvironmentManifest,
+    ProjectEnvironmentPatchRequest,
     ProjectManifest,
     ProjectPatchRequest,
     RepoPolicy,
@@ -259,6 +262,7 @@ class ManifestStore:
         self._workspaces_path = settings.manifest_dir / "workspaces.json"
         self._services_path = settings.manifest_dir / "services.json"
         self._projects_path = settings.manifest_dir / "projects.json"
+        self._project_environments_path = settings.manifest_dir / "project-environments.json"
 
     def load_servers(self) -> list[ServerManifest]:
         server_rows = load_json(self._servers_path)
@@ -283,6 +287,14 @@ class ManifestStore:
 
     def load_projects(self) -> list[ProjectManifest]:
         return [ProjectManifest.model_validate(item) for item in load_json(self._projects_path)]
+
+    def load_project_environments(self) -> list[ProjectEnvironmentManifest]:
+        if not self._project_environments_path.exists():
+            return []
+        return [
+            ProjectEnvironmentManifest.model_validate(item)
+            for item in load_json(self._project_environments_path)
+        ]
 
     def get_server(self, server_id: str) -> ServerManifest:
         for server in self.load_servers():
@@ -452,6 +464,27 @@ class ManifestStore:
     def get_workspace_projects(self, workspace_id: str) -> list[ProjectManifest]:
         return [project for project in self.load_projects() if project.workspace_id == workspace_id]
 
+    def get_project_environment(self, environment_id: str) -> ProjectEnvironmentManifest:
+        for environment in self.load_project_environments():
+            if environment.environment_id == environment_id:
+                return environment
+        raise KeyError(f"Unknown project environment: {environment_id}")
+
+    def get_project_environments(self, project_id: str) -> list[ProjectEnvironmentManifest]:
+        return [
+            environment
+            for environment in self.load_project_environments()
+            if environment.project_id == project_id
+        ]
+
+    def get_workspace_project_environments(self, workspace_id: str) -> list[ProjectEnvironmentManifest]:
+        project_ids = {project.project_id for project in self.get_workspace_projects(workspace_id)}
+        return [
+            environment
+            for environment in self.load_project_environments()
+            if environment.project_id in project_ids
+        ]
+
     def create_project(self, workspace_id: str, payload: ProjectCreateRequest) -> ProjectManifest:
         self.get_workspace(workspace_id)
         existing = self.load_projects()
@@ -486,6 +519,12 @@ class ManifestStore:
                 if item.get("parent_project_id") == project_id:
                     item["parent_project_id"] = next_project_id
         save_json(self._projects_path, projects)
+        if next_project_id != project_id and self._project_environments_path.exists():
+            environments = load_json(self._project_environments_path)
+            for item in environments:
+                if item.get("project_id") == project_id:
+                    item["project_id"] = next_project_id
+            save_json(self._project_environments_path, environments)
         return updated
 
     def delete_project(self, project_id: str) -> ProjectManifest:
@@ -500,6 +539,73 @@ class ManifestStore:
         if removed is None:
             raise KeyError(f"Unknown project: {project_id}")
         save_json(self._projects_path, retained)
+        if self._project_environments_path.exists():
+            environments = [
+                item
+                for item in load_json(self._project_environments_path)
+                if item.get("project_id") != project_id
+            ]
+            save_json(self._project_environments_path, environments)
+        return removed
+
+    def create_project_environment(
+        self,
+        project_id: str,
+        payload: ProjectEnvironmentCreateRequest,
+    ) -> ProjectEnvironmentManifest:
+        self.get_project(project_id)
+        existing = self.load_project_environments()
+        if any(environment.environment_id == payload.environment_id for environment in existing):
+            raise ValueError(f"Project environment already exists: {payload.environment_id}")
+        environment = ProjectEnvironmentManifest.model_validate(
+            {
+                "project_id": project_id,
+                **payload.model_dump(mode="json"),
+            }
+        )
+        base = load_json(self._project_environments_path) if self._project_environments_path.exists() else []
+        save_json(
+            self._project_environments_path,
+            [*base, environment.model_dump(mode="json")],
+        )
+        return environment
+
+    def patch_project_environment(
+        self,
+        environment_id: str,
+        payload: ProjectEnvironmentPatchRequest,
+    ) -> ProjectEnvironmentManifest:
+        environments = load_json(self._project_environments_path) if self._project_environments_path.exists() else []
+        updated: ProjectEnvironmentManifest | None = None
+        next_environment_id = payload.environment_id or environment_id
+        if next_environment_id != environment_id and any(
+            item["environment_id"] == next_environment_id for item in environments
+        ):
+            raise ValueError(f"Project environment already exists: {next_environment_id}")
+        for index, item in enumerate(environments):
+            if item["environment_id"] != environment_id:
+                continue
+            merged = {**item, **payload.model_dump(exclude_none=True, mode="json")}
+            updated = ProjectEnvironmentManifest.model_validate(merged)
+            environments[index] = updated.model_dump(mode="json")
+            break
+        if updated is None:
+            raise KeyError(f"Unknown project environment: {environment_id}")
+        save_json(self._project_environments_path, environments)
+        return updated
+
+    def delete_project_environment(self, environment_id: str) -> ProjectEnvironmentManifest:
+        environments = load_json(self._project_environments_path) if self._project_environments_path.exists() else []
+        removed: ProjectEnvironmentManifest | None = None
+        retained: list[dict[str, Any]] = []
+        for item in environments:
+            if item["environment_id"] == environment_id:
+                removed = ProjectEnvironmentManifest.model_validate(item)
+                continue
+            retained.append(item)
+        if removed is None:
+            raise KeyError(f"Unknown project environment: {environment_id}")
+        save_json(self._project_environments_path, retained)
         return removed
 
     def create_server(self, payload: ServerCreateRequest) -> ServerManifest:

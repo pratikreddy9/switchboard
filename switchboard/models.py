@@ -56,6 +56,8 @@ DependencyKind = Literal[
     "saas",
     "shared_data",
 ]
+ExecutionMode = Literal["networked", "batch", "lambda", "docs_only"]
+ProjectEnvironmentKind = Literal["dev", "test", "staging", "qa", "prod", "custom"]
 
 
 class ServerManifest(BaseModel):
@@ -206,11 +208,45 @@ class ProjectManifest(BaseModel):
     notes: str = ""
 
 
+class ProjectDeploymentRef(BaseModel):
+    service_id: str
+    location_id: str | None = None
+    server_id: str | None = None
+    root: str | None = None
+    version: str = ""
+    runtime_services: list[RuntimeService] = Field(default_factory=list)
+    dependencies: list[DependencyNode] = Field(default_factory=list)
+    cross_dependencies: list[DependencyNode] = Field(default_factory=list)
+    notes: str = ""
+
+
+class ProjectEnvironmentManifest(BaseModel):
+    environment_id: str
+    project_id: str
+    display_name: str
+    kind: ProjectEnvironmentKind = "custom"
+    deployments: list[ProjectDeploymentRef] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    notes: str = ""
+
+
+class ProjectPullSummary(BaseModel):
+    project_id: str
+    environment_id: str | None = None
+    added_count: int = 0
+    removed_count: int = 0
+    changed_count: int = 0
+    unchanged_count: int = 0
+    latest_created_at: str = ""
+    service_count: int = 0
+
+
 class ServiceManifest(BaseModel):
     service_id: str
     workspace_id: str
     display_name: str
     kind: ServiceKind = "service"
+    execution_mode: ExecutionMode = "networked"
     ownership_tier: OwnershipTier = "owned"
     tags: list[str] = Field(default_factory=list)
     favorite_tier: FavoriteTier = "none"
@@ -269,6 +305,7 @@ class ServiceCreateRequest(BaseModel):
     service_id: str
     display_name: str
     kind: ServiceKind = "service"
+    execution_mode: ExecutionMode = "networked"
     ownership_tier: OwnershipTier = "owned"
     tags: list[str] = Field(default_factory=list)
     favorite_tier: FavoriteTier = "none"
@@ -288,6 +325,7 @@ class ServiceCreateRequest(BaseModel):
 class ServicePatchRequest(BaseModel):
     display_name: str | None = None
     kind: ServiceKind | None = None
+    execution_mode: ExecutionMode | None = None
     ownership_tier: OwnershipTier | None = None
     tags: list[str] | None = None
     favorite_tier: FavoriteTier | None = None
@@ -474,6 +512,24 @@ class ProjectPatchRequest(BaseModel):
     display_name: str | None = None
     parent_project_id: str | None = None
     service_ids: list[str] | None = None
+    tags: list[str] | None = None
+    notes: str | None = None
+
+
+class ProjectEnvironmentCreateRequest(BaseModel):
+    environment_id: str
+    display_name: str
+    kind: ProjectEnvironmentKind = "custom"
+    deployments: list[ProjectDeploymentRef] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    notes: str = ""
+
+
+class ProjectEnvironmentPatchRequest(BaseModel):
+    environment_id: str | None = None
+    display_name: str | None = None
+    kind: ProjectEnvironmentKind | None = None
+    deployments: list[ProjectDeploymentRef] | None = None
     tags: list[str] | None = None
     notes: str | None = None
 

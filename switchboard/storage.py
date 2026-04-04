@@ -407,6 +407,10 @@ class SnapshotStore:
         data = read_json(self.settings.evidence_dir / "pull-bundle-history.json", {"bundles": []})
         return [entry for entry in data.get("bundles", []) if entry.get("service_id") == service_id]
 
+    def list_all_pull_bundles(self) -> list[dict[str, Any]]:
+        data = read_json(self.settings.evidence_dir / "pull-bundle-history.json", {"bundles": []})
+        return list(data.get("bundles", []))
+
     def append_repo_safety_check(self, summary: dict[str, Any], findings: list[dict[str, Any]]) -> dict[str, Any]:
         public_path = self.settings.evidence_dir / "repo-safety-history.json"
         private_path = self.settings.private_state_dir / "repo-safety-findings.json"
@@ -550,6 +554,7 @@ class SnapshotStore:
             "workspace_id": service.workspace_id,
             "display_name": service.display_name,
             "kind": service.kind,
+            "execution_mode": getattr(service, "execution_mode", "networked"),
             "ownership_tier": service.ownership_tier,
             "tags": service.tags,
             "favorite_tier": service.favorite_tier,

@@ -183,6 +183,7 @@ export function WorkspacePage({ workspaceId, offline, onSelectService }: Props) 
           offline={offline}
           workspaceName={workspace?.display_name}
           workspaceNotes={workspace?.notes}
+          services={services}
         />
       </div>
 

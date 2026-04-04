@@ -49,6 +49,9 @@ export function ServiceCard({ service, result, onClick }: Props) {
 
       {nodeViewer && (
         <div className="mb-3 flex flex-wrap gap-1">
+          <span className="text-xs px-2 py-0.5 rounded border border-cyan-900/40 bg-cyan-950/20 text-cyan-200">
+            {service.execution_mode}
+          </span>
           <span className={`text-xs px-2 py-0.5 rounded border ${
             nodeViewer.needs_install || nodeViewer.needs_upgrade
               ? 'border-amber-700 bg-amber-950/30 text-amber-200'
@@ -63,7 +66,7 @@ export function ServiceCard({ service, result, onClick }: Props) {
       )}
 
       {/* Ports */}
-      {ports.length > 0 && (
+      {service.execution_mode === 'networked' && ports.length > 0 && (
         <div className="flex flex-wrap gap-1 mb-2">
           {ports.map((p) => (
             <span key={p.port} className="text-xs font-mono bg-gray-800 text-cyan-400 px-2 py-0.5 rounded">
