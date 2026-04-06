@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.12.1
+
+- fixed self-conflicting control-center action locks that made `sync-from-node` and pull bundles report themselves as already running
+- changed action-lock API conflicts to return HTTP `409` instead of a misleading success response
+- made runtime-cache writes atomic so lock polling does not intermittently fail with JSON decode errors under concurrent reads and writes
+
 ## 0.1.7
 
 - made `switchboard/local/tasks-completed.md` the single canonical node update file for normal agent work

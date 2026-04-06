@@ -1,0 +1,56 @@
+{
+  "generated": "2026-04-06T15:53:33+00:00",
+  "service_id": "dashboard",
+  "project_root": "/Users/p/Desktop/dashboard",
+  "tasks": [
+    {
+      "timestamp": "2026-04-06T15:30:38+00:00",
+      "title": "Fix self-conflicting sync and bundle locks",
+      "tags": [
+        "task",
+        "handoff"
+      ],
+      "version": "1.12.1",
+      "summary": "Removed duplicate client-side action locks that were causing sync and pull-bundle requests to report themselves as already running.",
+      "changed_paths": [
+        "src/pages/ServiceDetailPage.tsx",
+        "src/components/PullBundlePanel.tsx",
+        "switchboard/api.py",
+        "switchboard/storage.py",
+        "tests_backend/test_backend_regressions.py",
+        "package.json",
+        "pyproject.toml",
+        "switchboard/__init__.py",
+        "README.md",
+        "CHANGELOG.md",
+        "switchboard/local/tasks-completed.md"
+      ],
+      "task_id": null,
+      "agent": "",
+      "tool": "",
+      "bootstrap_version": "",
+      "notes": [
+        "- `sync_from_node` and `sync_to_node` now rely on the backend action guard instead of pre-acquiring the same lock in the browser.",
+        "- Pull bundle creation now uses backend lock state for reconciliation instead of creating a second conflicting lock from the UI.",
+        "- `action_in_progress` now maps to HTTP 409 so real lock conflicts surface as API errors instead of HTTP 200 responses.",
+        "- Runtime cache writes now use atomic file replacement so `/action-locks` polling does not hit transient JSON decode failures during concurrent writes.",
+        "- Verified the frontend production build and confirmed the backend now returns 409 for a forced `sync_from_node` lock collision after restart."
+      ],
+      "scope_entries": [],
+      "runtime": {
+        "expected_ports": [],
+        "healthcheck_command": "",
+        "run_command_hint": "",
+        "monitoring_mode": "manual",
+        "notes": ""
+      },
+      "runtime_services": [],
+      "dependencies": [],
+      "cross_dependencies": [],
+      "diagram": "",
+      "readme": "",
+      "api": "",
+      "changelog": ""
+    }
+  ]
+}

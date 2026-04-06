@@ -5,7 +5,7 @@ from tempfile import TemporaryDirectory
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from switchboard.api import collect_workspace, get_workspace_latest, git_pull
+from switchboard.api import _raise_for_action_result, collect_workspace, get_workspace_latest, git_pull
 from switchboard.config import Settings
 from switchboard.collectors import CollectionCoordinator
 from switchboard.manifests import ManifestStore, save_json
@@ -14,6 +14,11 @@ from switchboard.storage import SnapshotStore, read_json
 
 
 class BackendRegressionTests(unittest.TestCase):
+    def test_action_in_progress_maps_to_conflict(self) -> None:
+        with self.assertRaises(HTTPException) as ctx:
+            _raise_for_action_result({"status": "action_in_progress", "message": "busy"})
+        self.assertEqual(ctx.exception.status_code, 409)
+
     def test_latest_includes_inventory_keys(self) -> None:
         body = get_workspace_latest("zapp")
         for key in ("workspace", "servers", "services", "summary", "repo_inventory", "docs_index", "logs_index"):

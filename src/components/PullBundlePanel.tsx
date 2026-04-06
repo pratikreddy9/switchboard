@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Archive, ChevronDown, ChevronRight, Download, LoaderCircle, PackagePlus } from 'lucide-react'
-import { createPullBundle, listPullBundles, acquireActionLock, releaseActionLock } from '../api/client'
+import { createPullBundle, getActionLocks, listPullBundles } from '../api/client'
 import type { PullBundleRecord, ScopeEntry, Service } from '../types/switchboard'
 import { isApiError } from '../types/switchboard'
 import { StatusBadge } from './StatusBadge'
@@ -22,6 +22,8 @@ function uniqueByPath(entries: ScopeEntry[]) {
 }
 
 export function PullBundlePanel({ service, disabled }: Props) {
+  const actionKey = 'pull_bundle'
+  const sessionKey = `pending:${actionKey}:${service.service_id}`
   const [history, setHistory] = useState<PullBundleRecord[]>([])
   const [bundleResult, setBundleResult] = useState<PullBundleRecord | null>(null)
   const [includePath, setIncludePath] = useState('')
@@ -40,13 +42,47 @@ export function PullBundlePanel({ service, disabled }: Props) {
   const [leftOutOpen, setLeftOutOpen] = useState(false)
 
   useEffect(() => {
-    const keys = Object.keys(sessionStorage)
-    const pending: Record<string, boolean> = {}
-    for (const key of keys) {
-      if (key.startsWith('pending:')) pending[key] = true
+    let cancelled = false
+
+    const refreshPending = async () => {
+      const keys = Object.keys(sessionStorage)
+      const pending: Record<string, boolean> = {}
+      for (const key of keys) {
+        if (key.startsWith('pending:')) pending[key] = true
+      }
+
+      if (disabled) {
+        if (!cancelled) setPendingActions(pending)
+        return
+      }
+
+      const result = await getActionLocks(service.service_id)
+      if (cancelled) return
+      if (isApiError(result)) {
+        setPendingActions(pending)
+        return
+      }
+
+      const bundleLocked = result.locks.some((lock) => lock.action_key === actionKey)
+      if (bundleLocked) {
+        pending[sessionKey] = true
+      } else {
+        sessionStorage.removeItem(sessionKey)
+        delete pending[sessionKey]
+      }
+      setPendingActions(pending)
     }
-    setPendingActions(pending)
-  }, [])
+
+    void refreshPending()
+    const timer = window.setInterval(() => {
+      void refreshPending()
+    }, 5000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [actionKey, disabled, service.service_id, sessionKey])
 
   useEffect(() => {
     if (disabled) return
@@ -94,23 +130,11 @@ export function PullBundlePanel({ service, disabled }: Props) {
   }
 
   async function handleCreate() {
-    const actionKey = 'pull_bundle'
-    const sessionKey = `pending:${actionKey}:${service.service_id}`
-    
     sessionStorage.setItem(sessionKey, 'true')
     setPendingActions(prev => ({ ...prev, [sessionKey]: true }))
     setConfirmOpen(false)
     setCreating(true)
     setMessage('')
-
-    const lockRes = await acquireActionLock(service.service_id, actionKey)
-    if (isApiError(lockRes) || lockRes.status !== 'ok') {
-      setMessage((lockRes as any)?.message || 'Action is already in progress.')
-      setCreating(false)
-      sessionStorage.removeItem(sessionKey)
-      setPendingActions(prev => { const next = { ...prev }; delete next[sessionKey]; return next })
-      return
-    }
 
     try {
       const result = await createPullBundle(service.service_id, {
@@ -129,7 +153,6 @@ export function PullBundlePanel({ service, disabled }: Props) {
       setHistory((current) => [result, ...current])
       setMessage(`Bundle ${result.bundle_id} created.`)
     } finally {
-      await releaseActionLock(service.service_id, actionKey)
       setCreating(false)
       sessionStorage.removeItem(sessionKey)
       setPendingActions(prev => { const next = { ...prev }; delete next[sessionKey]; return next })

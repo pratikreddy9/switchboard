@@ -841,6 +841,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
     const actionKey = confirmAction as Extract<LocationActionKey, 'runtime_check' | 'sync_from_node' | 'sync_to_node'>
     const lockKey = ACTION_LOCK_KEY[actionKey]
     const startedAt = new Date().toISOString()
+    const requiresClientLock = actionKey === 'runtime_check'
 
     markPendingAction(lockKey, locationId, startedAt)
     recordLocationAction(locationId, {
@@ -851,14 +852,16 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
       started_at: startedAt,
     })
 
-    const lockRes = await acquireActionLock(serviceId, actionKey)
-    if (isApiError(lockRes) || lockRes.status !== 'ok') {
-      setRuntimeMessage((lockRes as any)?.message || 'Action is already in progress.')
-      clearPendingAction(lockKey, locationId)
-      void refreshActionLocksSnapshot()
-      setConfirmAction(null)
-      setConfirmLocationId(null)
-      return
+    if (requiresClientLock) {
+      const lockRes = await acquireActionLock(serviceId, actionKey)
+      if (isApiError(lockRes) || lockRes.status !== 'ok') {
+        setRuntimeMessage((lockRes as any)?.message || 'Action is already in progress.')
+        clearPendingAction(lockKey, locationId)
+        void refreshActionLocksSnapshot()
+        setConfirmAction(null)
+        setConfirmLocationId(null)
+        return
+      }
     }
 
     try {
@@ -870,7 +873,9 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         await handleSyncToNode(locationId)
       }
     } finally {
-      await releaseActionLock(serviceId, actionKey)
+      if (requiresClientLock) {
+        await releaseActionLock(serviceId, actionKey)
+      }
       clearPendingAction(lockKey, locationId)
       void refreshActionLocksSnapshot()
       setConfirmAction(null)

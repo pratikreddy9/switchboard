@@ -91,6 +91,8 @@ def _enrich_latest_snapshot(snapshot: dict[str, object]) -> dict[str, object]:
 def _raise_for_action_result(result: dict[str, object]) -> None:
     status = result.get("status")
     message = str(result.get("message") or result.get("output") or "Request failed.")
+    if status == "action_in_progress":
+        raise HTTPException(status_code=409, detail={"status": status, "message": message})
     if status == "permission_limited":
         raise HTTPException(status_code=403, detail={"status": status, "message": message})
     if status == "path_missing":

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -38,9 +40,11 @@ def read_json(path: Path, default: Any) -> Any:
 
 def write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, delete=False) as handle:
         json.dump(value, handle, indent=2, sort_keys=False)
         handle.write("\n")
+        temp_path = Path(handle.name)
+    os.replace(temp_path, path)
 
 
 class SnapshotStore:
