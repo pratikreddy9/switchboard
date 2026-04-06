@@ -1,1 +1,544 @@
-[]
+[
+  {
+    "flow_id": "sys-docs-node-health",
+    "environment_id": "pesu_dev_47_prod",
+    "service_id": "sys_docs",
+    "display_name": "sys_docs node health",
+    "target_kind": "service",
+    "target_name": "sys_docs",
+    "base_url": "http://192.168.3.47:8701",
+    "execution_mode": "http",
+    "enabled": true,
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Switchboard node health for sys_docs. Local control-center runs this over VPN against the host address; if the node port remains host-local only, use runtime inspect/SSH for verification.",
+    "steps": [
+      {
+        "step_id": "sys-docs-node-health",
+        "order": 1,
+        "display_name": "Node health",
+        "method": "GET",
+        "path": "/api/health",
+        "query": {},
+        "headers": {},
+        "body": "",
+        "expected_status": 200,
+        "continue_on_failure": false,
+        "timeout_seconds": 15,
+        "notes": "Control-plane node health.",
+        "captures": []
+      }
+    ]
+  },
+  {
+    "flow_id": "aichat-node-health",
+    "environment_id": "pesu_dev_47_prod",
+    "service_id": "aichat",
+    "display_name": "aichat node health",
+    "target_kind": "service",
+    "target_name": "aichat",
+    "base_url": "http://192.168.3.47:8702",
+    "execution_mode": "http",
+    "enabled": true,
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Switchboard node health for aichat. Local control-center runs this over VPN against the host address; if the node port remains host-local only, use runtime inspect/SSH for verification.",
+    "steps": [
+      {
+        "step_id": "aichat-node-health",
+        "order": 1,
+        "display_name": "Node health",
+        "method": "GET",
+        "path": "/api/health",
+        "query": {},
+        "headers": {},
+        "body": "",
+        "expected_status": 200,
+        "continue_on_failure": false,
+        "timeout_seconds": 15,
+        "notes": "",
+        "captures": []
+      }
+    ]
+  },
+  {
+    "flow_id": "aichat-backend-probes",
+    "environment_id": "pesu_dev_47_prod",
+    "service_id": "aichat",
+    "display_name": "aichat backend probes",
+    "target_kind": "service",
+    "target_name": "aichat",
+    "base_url": "http://192.168.3.47:8506",
+    "execution_mode": "http",
+    "enabled": true,
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Primary backend health plus protected probe using X-User-UUID placeholder.",
+    "steps": [
+      {
+        "step_id": "aichat-health",
+        "order": 1,
+        "display_name": "Backend health",
+        "method": "GET",
+        "path": "/health",
+        "query": {},
+        "headers": {},
+        "body": "",
+        "expected_status": 200,
+        "continue_on_failure": false,
+        "timeout_seconds": 15,
+        "notes": "",
+        "captures": []
+      },
+      {
+        "step_id": "aichat-collections",
+        "order": 2,
+        "display_name": "Collections probe",
+        "method": "GET",
+        "path": "/api/collections/",
+        "query": {},
+        "headers": {
+          "X-User-UUID": "00000000-0000-0000-0000-000000TEST"
+        },
+        "body": "",
+        "expected_status": 200,
+        "continue_on_failure": false,
+        "timeout_seconds": 15,
+        "notes": "Protected route with placeholder test header.",
+        "captures": []
+      }
+    ]
+  },
+  {
+    "flow_id": "aichat-dashboard-health",
+    "environment_id": "pesu_dev_47_prod",
+    "service_id": "aichat",
+    "display_name": "aichat dashboard health",
+    "target_kind": "service",
+    "target_name": "aichat",
+    "base_url": "http://192.168.3.47:8505",
+    "execution_mode": "http",
+    "enabled": true,
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Auxiliary dashboard Streamlit health.",
+    "steps": [
+      {
+        "step_id": "aichat-dashboard-health",
+        "order": 1,
+        "display_name": "Dashboard health",
+        "method": "GET",
+        "path": "/_stcore/health",
+        "query": {},
+        "headers": {},
+        "body": "",
+        "expected_status": 200,
+        "continue_on_failure": false,
+        "timeout_seconds": 15,
+        "notes": "",
+        "captures": []
+      }
+    ]
+  },
+  {
+    "flow_id": "aichat-test-node-health",
+    "environment_id": "pesu_dev_47_prod",
+    "service_id": "aichat_test",
+    "display_name": "aichat_test node health",
+    "target_kind": "service",
+    "target_name": "aichat_test",
+    "base_url": "http://192.168.3.47:8708",
+    "execution_mode": "http",
+    "enabled": true,
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Test node health even when staged UI is down. Local control-center runs this over VPN against the host address; if the node port remains host-local only, use runtime inspect/SSH for verification.",
+    "steps": [
+      {
+        "step_id": "aichat-test-node-health",
+        "order": 1,
+        "display_name": "Node health",
+        "method": "GET",
+        "path": "/api/health",
+        "query": {},
+        "headers": {},
+        "body": "",
+        "expected_status": 200,
+        "continue_on_failure": false,
+        "timeout_seconds": 15,
+        "notes": "",
+        "captures": []
+      }
+    ]
+  },
+  {
+    "flow_id": "compareanswers-node-health",
+    "environment_id": "pesu_dev_47_prod",
+    "service_id": "compareanswers",
+    "display_name": "compareanswers node health",
+    "target_kind": "service",
+    "target_name": "compareanswers",
+    "base_url": "http://192.168.3.47:8703",
+    "execution_mode": "http",
+    "enabled": true,
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Switchboard node health for compareanswers. Local control-center runs this over VPN against the host address; if the node port remains host-local only, use runtime inspect/SSH for verification.",
+    "steps": [
+      {
+        "step_id": "compareanswers-node-health",
+        "order": 1,
+        "display_name": "Node health",
+        "method": "GET",
+        "path": "/api/health",
+        "query": {},
+        "headers": {},
+        "body": "",
+        "expected_status": 200,
+        "continue_on_failure": false,
+        "timeout_seconds": 15,
+        "notes": "",
+        "captures": []
+      }
+    ]
+  },
+  {
+    "flow_id": "compareanswers-api-health",
+    "environment_id": "pesu_dev_47_prod",
+    "service_id": "compareanswers",
+    "display_name": "compareanswers api health",
+    "target_kind": "service",
+    "target_name": "compareanswers",
+    "base_url": "http://192.168.3.47:8507",
+    "execution_mode": "http",
+    "enabled": true,
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Primary compareanswers API health.",
+    "steps": [
+      {
+        "step_id": "compareanswers-api-health",
+        "order": 1,
+        "display_name": "API health",
+        "method": "GET",
+        "path": "/health",
+        "query": {},
+        "headers": {},
+        "body": "",
+        "expected_status": 200,
+        "continue_on_failure": false,
+        "timeout_seconds": 15,
+        "notes": "",
+        "captures": []
+      }
+    ]
+  },
+  {
+    "flow_id": "ingest-service-node-health",
+    "environment_id": "pesu_dev_47_prod",
+    "service_id": "ingest_service",
+    "display_name": "ingest_service node health",
+    "target_kind": "service",
+    "target_name": "ingest_service",
+    "base_url": "http://192.168.3.47:8705",
+    "execution_mode": "http",
+    "enabled": true,
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Switchboard node health for process documents / ingest service. Local control-center runs this over VPN against the host address; if the node port remains host-local only, use runtime inspect/SSH for verification.",
+    "steps": [
+      {
+        "step_id": "ingest-service-node-health",
+        "order": 1,
+        "display_name": "Node health",
+        "method": "GET",
+        "path": "/api/health",
+        "query": {},
+        "headers": {},
+        "body": "",
+        "expected_status": 200,
+        "continue_on_failure": false,
+        "timeout_seconds": 15,
+        "notes": "",
+        "captures": []
+      }
+    ]
+  },
+  {
+    "flow_id": "ingest-service-chat-api",
+    "environment_id": "pesu_dev_47_prod",
+    "service_id": "ingest_service",
+    "display_name": "ingest_service chat api",
+    "target_kind": "service",
+    "target_name": "ingest_service",
+    "base_url": "http://192.168.3.47:8000",
+    "execution_mode": "http",
+    "enabled": true,
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Primary OpenAI/chat API surface.",
+    "steps": [
+      {
+        "step_id": "ingest-chat-health",
+        "order": 1,
+        "display_name": "Chat API health",
+        "method": "GET",
+        "path": "/health",
+        "query": {},
+        "headers": {},
+        "body": "",
+        "expected_status": 200,
+        "continue_on_failure": false,
+        "timeout_seconds": 15,
+        "notes": "",
+        "captures": []
+      },
+      {
+        "step_id": "ingest-chat-openapi",
+        "order": 2,
+        "display_name": "Chat API schema",
+        "method": "GET",
+        "path": "/openapi.json",
+        "query": {},
+        "headers": {},
+        "body": "",
+        "expected_status": 200,
+        "continue_on_failure": false,
+        "timeout_seconds": 15,
+        "notes": "",
+        "captures": []
+      }
+    ]
+  },
+  {
+    "flow_id": "ingest-service-main-ui",
+    "environment_id": "pesu_dev_47_prod",
+    "service_id": "ingest_service",
+    "display_name": "ingest_service main ui",
+    "target_kind": "service",
+    "target_name": "ingest_service",
+    "base_url": "http://192.168.3.47:8503",
+    "execution_mode": "http",
+    "enabled": true,
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Main Streamlit UI health.",
+    "steps": [
+      {
+        "step_id": "ingest-main-ui-health",
+        "order": 1,
+        "display_name": "Main UI health",
+        "method": "GET",
+        "path": "/_stcore/health",
+        "query": {},
+        "headers": {},
+        "body": "",
+        "expected_status": 200,
+        "continue_on_failure": false,
+        "timeout_seconds": 15,
+        "notes": "",
+        "captures": []
+      }
+    ]
+  },
+  {
+    "flow_id": "ingest-service-ingest-api",
+    "environment_id": "pesu_dev_47_prod",
+    "service_id": "ingest_service",
+    "display_name": "ingest_service ingest api",
+    "target_kind": "service",
+    "target_name": "ingest_service",
+    "base_url": "http://192.168.3.47:8099",
+    "execution_mode": "http",
+    "enabled": true,
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Read-only schema probe for ingest surface.",
+    "steps": [
+      {
+        "step_id": "ingest-api-openapi",
+        "order": 1,
+        "display_name": "Ingest schema",
+        "method": "GET",
+        "path": "/openapi.json",
+        "query": {},
+        "headers": {},
+        "body": "",
+        "expected_status": 200,
+        "continue_on_failure": false,
+        "timeout_seconds": 15,
+        "notes": "",
+        "captures": []
+      }
+    ]
+  },
+  {
+    "flow_id": "ingest-service-ops-ui",
+    "environment_id": "pesu_dev_47_prod",
+    "service_id": "ingest_service",
+    "display_name": "ingest_service ops ui",
+    "target_kind": "service",
+    "target_name": "ingest_service",
+    "base_url": "http://192.168.3.47:8508",
+    "execution_mode": "http",
+    "enabled": true,
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Auxiliary Streamlit/ops UI health.",
+    "steps": [
+      {
+        "step_id": "ingest-ops-ui-health",
+        "order": 1,
+        "display_name": "Ops UI health",
+        "method": "GET",
+        "path": "/_stcore/health",
+        "query": {},
+        "headers": {},
+        "body": "",
+        "expected_status": 200,
+        "continue_on_failure": false,
+        "timeout_seconds": 15,
+        "notes": "",
+        "captures": []
+      }
+    ]
+  },
+  {
+    "flow_id": "emailagent-node-health",
+    "environment_id": "pesu_dev_47_prod",
+    "service_id": "emailagent",
+    "display_name": "emailagent node health",
+    "target_kind": "service",
+    "target_name": "emailagent",
+    "base_url": "http://192.168.3.47:8704",
+    "execution_mode": "http",
+    "enabled": true,
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Switchboard node health for emailagent. Local control-center runs this over VPN against the host address; if the node port remains host-local only, use runtime inspect/SSH for verification.",
+    "steps": [
+      {
+        "step_id": "emailagent-node-health",
+        "order": 1,
+        "display_name": "Node health",
+        "method": "GET",
+        "path": "/api/health",
+        "query": {},
+        "headers": {},
+        "body": "",
+        "expected_status": 200,
+        "continue_on_failure": false,
+        "timeout_seconds": 15,
+        "notes": "",
+        "captures": []
+      }
+    ]
+  },
+  {
+    "flow_id": "adminchat-node-health",
+    "environment_id": "pesu_dev_47_prod",
+    "service_id": "adminchat",
+    "display_name": "adminchat node health",
+    "target_kind": "service",
+    "target_name": "adminchat",
+    "base_url": "http://192.168.3.47:8706",
+    "execution_mode": "http",
+    "enabled": true,
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Switchboard node health for adminchat. Local control-center runs this over VPN against the host address; if the node port remains host-local only, use runtime inspect/SSH for verification.",
+    "steps": [
+      {
+        "step_id": "adminchat-node-health",
+        "order": 1,
+        "display_name": "Node health",
+        "method": "GET",
+        "path": "/api/health",
+        "query": {},
+        "headers": {},
+        "body": "",
+        "expected_status": 200,
+        "continue_on_failure": false,
+        "timeout_seconds": 15,
+        "notes": "",
+        "captures": []
+      }
+    ]
+  },
+  {
+    "flow_id": "rag-node-health",
+    "environment_id": "pesu_dev_47_prod",
+    "service_id": "rag",
+    "display_name": "rag node health",
+    "target_kind": "service",
+    "target_name": "rag",
+    "base_url": "http://192.168.3.47:8707",
+    "execution_mode": "http",
+    "enabled": true,
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Switchboard node health for RAG. 8080 remains intentionally excluded because it is nginx. Local control-center runs this over VPN against the host address; if the node port remains host-local only, use runtime inspect/SSH for verification.",
+    "steps": [
+      {
+        "step_id": "rag-node-health",
+        "order": 1,
+        "display_name": "Node health",
+        "method": "GET",
+        "path": "/api/health",
+        "query": {},
+        "headers": {},
+        "body": "",
+        "expected_status": 200,
+        "continue_on_failure": false,
+        "timeout_seconds": 15,
+        "notes": "",
+        "captures": []
+      }
+    ]
+  }
+]

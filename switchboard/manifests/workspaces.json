@@ -31,10 +31,14 @@
       "pesu_dev_47"
     ],
     "services": [
-      "e",
       "aichat",
       "sys_docs",
-      "comparing"
+      "emailagent",
+      "compareanswers",
+      "aichat_test",
+      "ingest_service",
+      "adminchat",
+      "rag"
     ],
     "notes": "Seed workspace for the first named PESU lanes only."
   },

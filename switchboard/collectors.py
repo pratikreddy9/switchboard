@@ -570,6 +570,7 @@ class CollectionCoordinator:
 
         if server.connection_type == "local":
             listeners = self._collect_local_listener_details() if inspect_ports else []
+            listeners = self._filter_listeners_for_location(service, location, server, listeners)
             firewall_status = self._local_firewall_status()
             node_present = self._local_node_manifest_path(location.root).exists()
             health_result = self._run_healthcheck_local(runtime.healthcheck_command) if run_healthcheck else {"status": "skipped", "output": ""}
@@ -653,6 +654,32 @@ class CollectionCoordinator:
             "operator_commands": operator_commands,
             "matched_ports": matched_ports,
         }
+
+    def _filter_listeners_for_location(
+        self,
+        service: ServiceManifest,
+        location: Any,
+        server: ResolvedServer,
+        listeners: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        if server.connection_type != "local":
+            return listeners
+        owned: list[dict[str, Any]] = []
+        configured_ports = set(getattr(location.runtime, "expected_ports", []) or [])
+        for listener in listeners:
+            owner = self._tracked_owner_for_listener(location.server_id, listener)
+            if owner and owner.get("service_id") == service.service_id and owner.get("location_id") == location.location_id:
+                owned.append(listener)
+                continue
+            pid = listener.get("pid")
+            command = self._lookup_process_command(server, pid) if isinstance(pid, int) else ""
+            if location.root and location.root in command:
+                owned.append(listener)
+                continue
+            port = listener.get("port")
+            if isinstance(port, int) and port in configured_ports:
+                owned.append(listener)
+        return owned
 
     def workspace_health_check(self, workspace_id: str, runtime_passwords: dict[str, str] | None = None) -> dict[str, Any]:
         results = []
@@ -902,8 +929,10 @@ class CollectionCoordinator:
         node_viewers = cache.get("node_viewer", {})
         owners: dict[int, dict[str, Any]] = {}
         for service in self.manifests.load_services():
-            latest_task = service.task_ledger[0] if service.task_ledger else None
-            runtime_services = latest_task.runtime_services if latest_task else []
+            task_ledger = self.snapshots.get_service_task_ledger(service.service_id)
+            tasks = task_ledger.get("tasks", [])
+            latest_task = tasks[0] if tasks else {}
+            runtime_services = latest_task.get("runtime_services", []) if isinstance(latest_task, dict) else []
             for location in service.locations:
                 if location.server_id != server_id:
                     continue
@@ -918,7 +947,7 @@ class CollectionCoordinator:
                     if isinstance(port, int) and port > 0:
                         tracked_ports.add(port)
                 for runtime_service in runtime_services or []:
-                    port = getattr(runtime_service, "port", None)
+                    port = runtime_service.get("port") if isinstance(runtime_service, dict) else getattr(runtime_service, "port", None)
                     if isinstance(port, int) and port > 0:
                         tracked_ports.add(port)
                 cached_node = node_viewers.get(service.service_id, {}).get(location.location_id, {})
@@ -1355,6 +1384,12 @@ class CollectionCoordinator:
         service_summaries: list[dict[str, Any]] = []
         dependencies: list[dict[str, Any]] = []
         cross_dependencies: list[dict[str, Any]] = []
+        snapshot = self.snapshots.get_environment_runtime_snapshot(environment.environment_id)
+        snapshot_locations = {
+            str(location.get("location_id", "")): location
+            for location in (snapshot or {}).get("locations", [])
+            if isinstance(location, dict)
+        }
 
         for deployment in environment.deployments:
             service = services.get(deployment.service_id)
@@ -1386,6 +1421,31 @@ class CollectionCoordinator:
             created_at = str(matched_bundle.get("created_at", "") if matched_bundle else "")
             if created_at and created_at > latest_created_at:
                 latest_created_at = created_at
+            runtime_state = self.snapshots.get_service_runtime_state(deployment.service_id)
+            runtime_checks = [
+                entry for entry in runtime_state.get("runtime_checks", [])
+                if not deployment.location_id or entry.get("location_id") == deployment.location_id
+            ]
+            node_viewer = [
+                entry for entry in self.snapshots.get_service_node_viewer(deployment.service_id)
+                if not deployment.location_id or entry.get("location_id") == deployment.location_id
+            ]
+            latest_runtime_check = runtime_checks[0] if runtime_checks else {}
+            latest_node_viewer = node_viewer[0] if node_viewer else {}
+            node_health = {
+                "status": latest_node_viewer.get("runtime_status", "missing"),
+                "runtime_ready": bool(latest_node_viewer.get("runtime_ready")),
+                "bootstrap_ready": bool(latest_node_viewer.get("bootstrap_ready")),
+                "runtime_port": latest_node_viewer.get("runtime_port"),
+                "checked_at": latest_node_viewer.get("manifest_updated_at", ""),
+            }
+            service_health = {
+                "status": latest_runtime_check.get("status", "unverified"),
+                "healthcheck_status": latest_runtime_check.get("healthcheck_status", "skipped"),
+                "checked_at": latest_runtime_check.get("checked_at", ""),
+                "healthcheck_command": latest_runtime_check.get("healthcheck_command", ""),
+                "healthcheck_output": latest_runtime_check.get("healthcheck_output", ""),
+            }
 
             service_summaries.append(
                 {
@@ -1400,6 +1460,11 @@ class CollectionCoordinator:
                     "runtime_services": runtime_services,
                     "dependencies": deployment_dependencies,
                     "cross_dependencies": deployment_cross_dependencies,
+                    "runtime_snapshot": snapshot_locations.get(str(deployment.location_id or "")),
+                    "runtime_checks": runtime_checks,
+                    "node_viewer": node_viewer,
+                    "node_health": node_health,
+                    "service_health": service_health,
                     "pull_summary": {
                         "added_count": int(summary.get("added_count", 0) or 0),
                         "removed_count": int(summary.get("removed_count", 0) or 0),
@@ -1437,6 +1502,7 @@ class CollectionCoordinator:
                 "cross_dependencies": cross_dependencies,
             },
             "service_summaries": service_summaries,
+            "runtime_snapshot": snapshot,
             "runtime_snapshot_summary": {
                 "captured_at": snapshot.get("captured_at", "") if snapshot else "",
                 "open_port_count": len(snapshot.get("open_ports", [])) if snapshot else 0,
@@ -1812,7 +1878,7 @@ class CollectionCoordinator:
         for location in service.locations:
             server = resolved_servers[location.server_id]
             if server.connection_type == "local":
-                location_result = self._collect_local_location(service, location.root, excludes, secret_patterns)
+                location_result = self._collect_local_location(service, location, excludes, secret_patterns)
             else:
                 location_result = self._collect_remote_location(service, server, location.root, excludes, secret_patterns)
             location_statuses.append(location_result["status"])
@@ -1907,17 +1973,19 @@ class CollectionCoordinator:
     def _collect_local_location(
         self,
         service: ServiceManifest,
-        root: str,
+        location: Any,
         excludes: list[str],
         secret_patterns: list[str],
     ) -> dict[str, Any]:
+        root = location.root
         root_path = Path(root)
         if not root_path.exists():
             return {"status": "path_missing", "repos": [], "docs": [], "logs": [], "secrets": []}
-        repos = [self._repo_status(self.manifests.resolve_server("local_mac"), path) for path in service.repo_paths if path.startswith(root)]
-        docs = self._inventory_paths_local(service, service.docs_paths, "doc", excludes)
-        logs = self._inventory_paths_local(service, service.log_paths, "log", excludes)
-        secrets = self._scan_secret_paths_local(service, root_path, excludes, secret_patterns)
+        server = self.manifests.resolve_server(location.server_id)
+        repos = [self._repo_status(server, path) for path in service.repo_paths if path.startswith(root)]
+        docs = self._inventory_paths_local(service, location.server_id, service.docs_paths, "doc", excludes)
+        logs = self._inventory_paths_local(service, location.server_id, service.log_paths, "log", excludes)
+        secrets = self._scan_secret_paths_local(service, location.server_id, root_path, excludes, secret_patterns)
         return {"status": "ok", "repos": repos, "docs": docs, "logs": logs, "secrets": secrets}
 
     def _collect_remote_location(
@@ -2086,6 +2154,7 @@ class CollectionCoordinator:
     def _inventory_paths_local(
         self,
         service: ServiceManifest,
+        server_id: str,
         paths: list[str],
         kind: str,
         excludes: list[str],
@@ -2096,10 +2165,10 @@ class CollectionCoordinator:
             if not path.exists():
                 continue
             if path.is_file():
-                entries.append(self._file_record(service, "local_mac", path, kind))
+                entries.append(self._file_record(service, server_id, path, kind))
                 continue
             for file_path in self._walk_local_files(path, excludes):
-                entries.append(self._file_record(service, "local_mac", file_path, kind))
+                entries.append(self._file_record(service, server_id, file_path, kind))
         return entries
 
     def _inventory_paths_remote(
@@ -2126,6 +2195,7 @@ class CollectionCoordinator:
     def _scan_secret_paths_local(
         self,
         service: ServiceManifest,
+        server_id: str,
         root: Path,
         excludes: list[str],
         secret_patterns: list[str],
@@ -2137,7 +2207,7 @@ class CollectionCoordinator:
                 entries.append(
                     {
                         "service_id": service.service_id,
-                        "server_id": "local_mac",
+                        "server_id": server_id,
                         "path": str(file_path),
                         "category": "secret_path",
                         "size": stats.st_size,

@@ -197,8 +197,9 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
   const [confirmDetails, setConfirmDetails] = useState<ConfirmDetails | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [servers, setServers] = useState<ServerRecord[]>([])
-  const [pendingActions, setPendingActions] = useState<Record<string, boolean>>({})
+  const [, setPendingActions] = useState<Record<string, boolean>>({})
   const [activeLocks, setActiveLocks] = useState<Record<string, ActionLock>>({})
+  const [actionLockStatus, setActionLockStatus] = useState<'online' | 'offline'>('online')
   const [actionStartTimes, setActionStartTimes] = useState<Record<string, string>>({})
   const [panelOpen, setPanelOpen] = useState<Record<string, boolean>>({})
   const [locationPanels, setLocationPanels] = useState<Record<string, boolean>>({})
@@ -279,7 +280,18 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
 
     const refresh = async () => {
       const result = await getActionLocks(serviceId)
-      if (cancelled || isApiError(result)) return
+      if (cancelled) return
+      if (isApiError(result)) {
+        setActionLockStatus('offline')
+        setActiveLocks({})
+        setPendingActions({})
+        for (const key of Object.keys(sessionStorage)) {
+          if (key.startsWith('pending:')) sessionStorage.removeItem(key)
+          if (key.startsWith(`service-panel:${serviceId}:`)) sessionStorage.removeItem(key)
+        }
+        return
+      }
+      setActionLockStatus('online')
       setActiveLocks(Object.fromEntries(result.locks.map((lock) => [lock.action_key, lock])))
     }
 
@@ -311,6 +323,9 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         nextPending[key] = true
       } else {
         sessionStorage.removeItem(key)
+        for (const panelKey of SERVICE_PANEL_KEYS) {
+          sessionStorage.removeItem(panelStorageKey(serviceId, panelKey))
+        }
       }
     }
     setPendingActions(nextPending)
@@ -513,7 +528,17 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
   async function refreshActionLocksSnapshot() {
     if (offline) return
     const result = await getActionLocks(serviceId)
-    if (isApiError(result)) return
+    if (isApiError(result)) {
+      setActionLockStatus('offline')
+      setActiveLocks({})
+      setPendingActions({})
+      for (const key of Object.keys(sessionStorage)) {
+        if (key.startsWith('pending:')) sessionStorage.removeItem(key)
+        if (key.startsWith(`service-panel:${serviceId}:`)) sessionStorage.removeItem(key)
+      }
+      return
+    }
+    setActionLockStatus('online')
     setActiveLocks(Object.fromEntries(result.locks.map((lock) => [lock.action_key, lock])))
   }
 
@@ -1365,14 +1390,8 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                 ],
                 confirmLabel: 'Sync To Node',
               }
-              const runtimeCheckPendingKey = pendingSessionKey('runtime_check', location.location_id)
-              const syncFromPendingKey = pendingSessionKey('sync_from_node', location.location_id)
-              const syncToPendingKey = pendingSessionKey('sync_to_node', location.location_id)
-              const nodeDeployPendingKey = pendingSessionKey('node_deploy', location.location_id)
-              const nodeUpgradePendingKey = pendingSessionKey('node_upgrade', location.location_id)
-              const nodeRestartPendingKey = pendingSessionKey('node_restart', location.location_id)
               const persistedActionKey = (Object.keys(LOCK_KEY_TO_ACTION) as PersistedActionKey[]).find((actionKey) =>
-                Boolean(pendingActions[pendingSessionKey(actionKey, location.location_id)]),
+                Boolean(activeLocks[actionKey]),
               ) ?? null
               const localAction: LocationActionKey | null =
                 nodeAction ??
@@ -1473,8 +1492,8 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                         disabled={offline || locationBusy}
                         className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
                       >
-                        <RefreshCw className={`h-3.5 w-3.5 ${checkingRuntimeLocation === location.location_id || pendingActions[runtimeCheckPendingKey] ? 'animate-spin' : ''}`} />
-                        {checkingRuntimeLocation === location.location_id || pendingActions[runtimeCheckPendingKey] ? 'Refreshing…' : 'Refresh Snapshot'}
+                        <RefreshCw className={`h-3.5 w-3.5 ${checkingRuntimeLocation === location.location_id || activeLocks.runtime_check ? 'animate-spin' : ''}`} />
+                        {checkingRuntimeLocation === location.location_id || activeLocks.runtime_check ? 'Refreshing…' : actionLockStatus === 'offline' ? 'Backend Offline' : 'Refresh Snapshot'}
                       </button>
                       <button
                         type="button"
@@ -1482,7 +1501,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                         disabled={offline || locationBusy || syncBlocked}
                         className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
                       >
-                        {syncingFromLocation === location.location_id || pendingActions[syncFromPendingKey] ? 'Syncing…' : 'Sync From Node'}
+                        {syncingFromLocation === location.location_id || activeLocks.sync_from_node ? 'Syncing…' : actionLockStatus === 'offline' ? 'Backend Offline' : 'Sync From Node'}
                       </button>
                       <button
                         type="button"
@@ -1490,10 +1509,19 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                         disabled={offline || locationBusy || syncBlocked}
                         className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
                       >
-                        {syncingToLocation === location.location_id || pendingActions[syncToPendingKey] ? 'Syncing…' : 'Sync To Node'}
+                        {syncingToLocation === location.location_id || activeLocks.sync_to_node ? 'Syncing…' : actionLockStatus === 'offline' ? 'Backend Offline' : 'Sync To Node'}
                       </button>
                     </div>
                     </div>
+
+                    {actionLockStatus === 'offline' && (
+                      <div className="rounded-xl border border-rose-700/40 bg-rose-950/20 p-3">
+                        <div className="text-xs uppercase tracking-[0.16em] text-rose-300">Backend Offline</div>
+                        <div className="mt-1 text-sm text-rose-100">
+                          Action locks could not be refreshed from the control-center backend. Stale session progress was cleared instead of being treated as real runtime activity.
+                        </div>
+                      </div>
+                    )}
 
                     {nodeViewer?.needs_bootstrap && (
                       <div className="rounded-xl border border-amber-700/40 bg-amber-950/20 p-3">

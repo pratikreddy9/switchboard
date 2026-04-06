@@ -235,6 +235,23 @@ export interface ProjectEnvironmentServiceSummary {
   runtime_services?: RuntimeService[]
   dependencies?: DependencyNode[]
   cross_dependencies?: DependencyNode[]
+  runtime_snapshot?: EnvironmentLocationSnapshot
+  runtime_checks?: RuntimeCheckResult[]
+  node_viewer?: NodeViewerEntry[]
+  node_health?: {
+    status: string
+    runtime_ready: boolean
+    bootstrap_ready: boolean
+    runtime_port?: number
+    checked_at?: string
+  }
+  service_health?: {
+    status: string
+    healthcheck_status: string
+    checked_at?: string
+    healthcheck_command?: string
+    healthcheck_output?: string
+  }
   pull_summary?: ProjectPullSummary
   notes?: string
 }
@@ -243,6 +260,7 @@ export interface ProjectEnvironmentView extends ProjectEnvironmentManifest {
   pull_summary?: ProjectPullSummary
   dependency_summary?: EnvironmentDependencySummary
   service_summaries?: ProjectEnvironmentServiceSummary[]
+  runtime_snapshot?: EnvironmentRuntimeSnapshot
   runtime_snapshot_summary?: {
     captured_at: string
     open_port_count: number

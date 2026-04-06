@@ -1,1 +1,15 @@
-[]
+[
+  {
+    "project_id": "docgen",
+    "workspace_id": "zapp",
+    "display_name": "documentgenerator",
+    "parent_project_id": null,
+    "service_ids": [
+      "docgen"
+    ],
+    "tags": [
+      "pdfgenerator"
+    ],
+    "notes": "this is a pdf generator that generated candidate profiles based on data we have stored in mongo DB along with the help of open ai for data transformations."
+  }
+]
