@@ -1106,10 +1106,10 @@
           "expected_ports": [
             8704
           ],
-          "healthcheck_command": "curl -sf http://127.0.0.1:8704/api/health",
-          "run_command_hint": "Switchboard node on 8704; optional backend on 8010 is not currently live",
+          "healthcheck_command": "pgrep -f 'emailagent.*src.main' > /dev/null && echo ok",
+          "run_command_hint": "cd /home/pesu/emailagent && source venv/bin/activate && python -m src.main",
           "monitoring_mode": "manual",
-          "notes": "Primary live workload is the poller process. Optional backend listener on 8010 is currently down."
+          "notes": "Primary runtime is the Gmail polling/classification process launched with `python -m src.main`. The Switchboard node stays up on 8704. The repo-local backend on 8010 is optional and currently inactive, so it is documented as an alternate surface and not part of the always-on owned topology."
         }
       }
     ],
@@ -1189,35 +1189,35 @@
         "path": "switchboard/local/control-center-handoff.md",
         "enabled": true,
         "generated_from": "switchboard/local/tasks-completed.md",
-        "last_generated_at": null
+        "last_generated_at": "2026-04-06T14:32:28+00:00"
       },
       {
         "doc_id": "runbook",
         "path": "switchboard/local/runbook.md",
         "enabled": true,
         "generated_from": "switchboard/local/tasks-completed.md",
-        "last_generated_at": null
+        "last_generated_at": "2026-04-06T14:32:28+00:00"
       },
       {
         "doc_id": "approach_history",
         "path": "switchboard/local/approach-history.md",
         "enabled": true,
         "generated_from": "switchboard/local/tasks-completed.md",
-        "last_generated_at": null
+        "last_generated_at": "2026-04-06T14:32:28+00:00"
       },
       {
         "doc_id": "doc_index_md",
         "path": "switchboard/local/doc-index.md",
         "enabled": true,
         "generated_from": "switchboard/local/tasks-completed.md",
-        "last_generated_at": null
+        "last_generated_at": "2026-04-06T14:32:28+00:00"
       },
       {
         "doc_id": "doc_index_json",
         "path": "switchboard/evidence/doc-index.json",
         "enabled": true,
         "generated_from": "switchboard/local/tasks-completed.md",
-        "last_generated_at": null
+        "last_generated_at": "2026-04-06T14:32:28+00:00"
       }
     ],
     "repo_policies": [

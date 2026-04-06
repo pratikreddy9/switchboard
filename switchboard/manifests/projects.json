@@ -1,5 +1,125 @@
 [
   {
+    "project_id": "sys_docs_project",
+    "workspace_id": "pesu",
+    "display_name": "sys_docs",
+    "parent_project_id": null,
+    "service_ids": [
+      "sys_docs"
+    ],
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Per-service project for sys_docs on the .47 runtime host."
+  },
+  {
+    "project_id": "aichat_project",
+    "workspace_id": "pesu",
+    "display_name": "aichat",
+    "parent_project_id": null,
+    "service_ids": [
+      "aichat"
+    ],
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Per-service project for aichat on the .47 runtime host."
+  },
+  {
+    "project_id": "aichat_test_project",
+    "workspace_id": "pesu",
+    "display_name": "aichat_test",
+    "parent_project_id": null,
+    "service_ids": [
+      "aichat_test"
+    ],
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Per-service project for aichat_test on the .47 runtime host."
+  },
+  {
+    "project_id": "compareanswers_project",
+    "workspace_id": "pesu",
+    "display_name": "compareanswers",
+    "parent_project_id": null,
+    "service_ids": [
+      "compareanswers"
+    ],
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Per-service project for compareanswers on the .47 runtime host."
+  },
+  {
+    "project_id": "ingest_service_project",
+    "workspace_id": "pesu",
+    "display_name": "ingest_service",
+    "parent_project_id": null,
+    "service_ids": [
+      "ingest_service"
+    ],
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Per-service project for ingest_service on the .47 runtime host."
+  },
+  {
+    "project_id": "emailagent_project",
+    "workspace_id": "pesu",
+    "display_name": "emailagent",
+    "parent_project_id": null,
+    "service_ids": [
+      "emailagent"
+    ],
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Per-service project for emailagent on the .47 runtime host."
+  },
+  {
+    "project_id": "adminchat_project",
+    "workspace_id": "pesu",
+    "display_name": "adminchat",
+    "parent_project_id": null,
+    "service_ids": [
+      "adminchat"
+    ],
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Per-service project for adminchat on the .47 runtime host."
+  },
+  {
+    "project_id": "rag_project",
+    "workspace_id": "pesu",
+    "display_name": "rag",
+    "parent_project_id": null,
+    "service_ids": [
+      "rag"
+    ],
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime"
+    ],
+    "notes": "Per-service project for rag on the .47 runtime host."
+  },
+  {
     "project_id": "docgen",
     "workspace_id": "zapp",
     "display_name": "documentgenerator",

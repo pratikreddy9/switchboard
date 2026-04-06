@@ -1,7 +1,7 @@
 [
   {
     "flow_id": "sys-docs-node-health",
-    "environment_id": "pesu_dev_47_prod",
+    "environment_id": "sys_docs_prod",
     "service_id": "sys_docs",
     "display_name": "sys_docs node health",
     "target_kind": "service",
@@ -35,7 +35,7 @@
   },
   {
     "flow_id": "aichat-node-health",
-    "environment_id": "pesu_dev_47_prod",
+    "environment_id": "aichat_prod",
     "service_id": "aichat",
     "display_name": "aichat node health",
     "target_kind": "service",
@@ -69,7 +69,7 @@
   },
   {
     "flow_id": "aichat-backend-probes",
-    "environment_id": "pesu_dev_47_prod",
+    "environment_id": "aichat_prod",
     "service_id": "aichat",
     "display_name": "aichat backend probes",
     "target_kind": "service",
@@ -120,7 +120,7 @@
   },
   {
     "flow_id": "aichat-dashboard-health",
-    "environment_id": "pesu_dev_47_prod",
+    "environment_id": "aichat_prod",
     "service_id": "aichat",
     "display_name": "aichat dashboard health",
     "target_kind": "service",
@@ -154,7 +154,7 @@
   },
   {
     "flow_id": "aichat-test-node-health",
-    "environment_id": "pesu_dev_47_prod",
+    "environment_id": "aichat_test_prod",
     "service_id": "aichat_test",
     "display_name": "aichat_test node health",
     "target_kind": "service",
@@ -188,7 +188,7 @@
   },
   {
     "flow_id": "compareanswers-node-health",
-    "environment_id": "pesu_dev_47_prod",
+    "environment_id": "compareanswers_prod",
     "service_id": "compareanswers",
     "display_name": "compareanswers node health",
     "target_kind": "service",
@@ -222,7 +222,7 @@
   },
   {
     "flow_id": "compareanswers-api-health",
-    "environment_id": "pesu_dev_47_prod",
+    "environment_id": "compareanswers_prod",
     "service_id": "compareanswers",
     "display_name": "compareanswers api health",
     "target_kind": "service",
@@ -256,7 +256,7 @@
   },
   {
     "flow_id": "ingest-service-node-health",
-    "environment_id": "pesu_dev_47_prod",
+    "environment_id": "ingest_service_prod",
     "service_id": "ingest_service",
     "display_name": "ingest_service node health",
     "target_kind": "service",
@@ -290,7 +290,7 @@
   },
   {
     "flow_id": "ingest-service-chat-api",
-    "environment_id": "pesu_dev_47_prod",
+    "environment_id": "ingest_service_prod",
     "service_id": "ingest_service",
     "display_name": "ingest_service chat api",
     "target_kind": "service",
@@ -339,7 +339,7 @@
   },
   {
     "flow_id": "ingest-service-main-ui",
-    "environment_id": "pesu_dev_47_prod",
+    "environment_id": "ingest_service_prod",
     "service_id": "ingest_service",
     "display_name": "ingest_service main ui",
     "target_kind": "service",
@@ -373,7 +373,7 @@
   },
   {
     "flow_id": "ingest-service-ingest-api",
-    "environment_id": "pesu_dev_47_prod",
+    "environment_id": "ingest_service_prod",
     "service_id": "ingest_service",
     "display_name": "ingest_service ingest api",
     "target_kind": "service",
@@ -407,7 +407,7 @@
   },
   {
     "flow_id": "ingest-service-ops-ui",
-    "environment_id": "pesu_dev_47_prod",
+    "environment_id": "ingest_service_prod",
     "service_id": "ingest_service",
     "display_name": "ingest_service ops ui",
     "target_kind": "service",
@@ -441,7 +441,7 @@
   },
   {
     "flow_id": "emailagent-node-health",
-    "environment_id": "pesu_dev_47_prod",
+    "environment_id": "emailagent_prod",
     "service_id": "emailagent",
     "display_name": "emailagent node health",
     "target_kind": "service",
@@ -475,7 +475,7 @@
   },
   {
     "flow_id": "adminchat-node-health",
-    "environment_id": "pesu_dev_47_prod",
+    "environment_id": "adminchat_prod",
     "service_id": "adminchat",
     "display_name": "adminchat node health",
     "target_kind": "service",
@@ -509,7 +509,7 @@
   },
   {
     "flow_id": "rag-node-health",
-    "environment_id": "pesu_dev_47_prod",
+    "environment_id": "rag_prod",
     "service_id": "rag",
     "display_name": "rag node health",
     "target_kind": "service",
