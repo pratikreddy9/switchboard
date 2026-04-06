@@ -321,6 +321,10 @@ class ProcessFinding(BaseModel):
     pid: int | None = None
     state: str = ""
     raw: str = ""
+    owner_service_id: str = ""
+    owner_display_name: str = ""
+    owner_location_id: str = ""
+    owner_root: str = ""
 
 
 class PortExposureFinding(BaseModel):

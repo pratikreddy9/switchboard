@@ -26,7 +26,6 @@ from typing import Any, Iterator
 
 from pathspec import PathSpec
 
-from . import __version__
 from .config import Settings
 from .defaults import DEFAULT_EXCLUDE_GLOBS, DEFAULT_SECRET_PATTERNS, GIT_STATUS_COMMANDS, SAFE_REMOTE_COMMANDS
 from .manifests import ManifestStore
@@ -51,7 +50,6 @@ from .models import (
     ServicePatchRequest,
     ServiceManifest,
 )
-from .node import install_node, upgrade_node
 from .node_runtime import node_status, start_node_runtime, stop_node_runtime
 from .storage import SnapshotStore, utc_now_iso
 
@@ -69,6 +67,8 @@ EXPOSURE_LINE_PATTERNS = [
     ("slack_token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
     ("generic_token", re.compile(r"(?i)\b(api[_-]?key|secret|token|client[_-]?secret|password)\b")),
 ]
+GITHUB_REPO = "pratikreddy9/switchboard"
+GITHUB_LATEST_RELEASE_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
 
 class CollectionCoordinator:
@@ -548,6 +548,7 @@ class CollectionCoordinator:
             "source": "runtime_snapshot",
             "firewall_status": details["firewall_status"],
             "unexpected_ports": details["unexpected_ports"],
+            "process_findings": self._runtime_process_findings(location.server_id, details["listeners"]),
             "exposed_ports": details["exposed_ports"],
             "operator_commands": details["operator_commands"],
         }
@@ -790,7 +791,12 @@ class CollectionCoordinator:
             details = self._runtime_snapshot_for_location(service, location, server)
             for listener in details["listeners"]:
                 open_ports.add(int(listener["port"]))
-                process_findings.append(self._process_finding_from_listener(listener))
+                process_findings.append(
+                    self._process_finding_from_listener(
+                        listener,
+                        self._tracked_owner_for_listener(location.server_id, listener),
+                    )
+                )
             for port in details["configured_ports"]:
                 expected_ports.add(int(port))
             for port in details["unexpected_ports"]:
@@ -821,7 +827,7 @@ class CollectionCoordinator:
                     "open_ports": [listener["port"] for listener in details["listeners"]],
                     "unexpected_ports": details["unexpected_ports"],
                     "exposed_ports": details["exposed_ports"],
-                    "process_findings": [self._process_finding_from_listener(listener) for listener in details["listeners"]],
+                    "process_findings": self._runtime_process_findings(location.server_id, details["listeners"]),
                     "operator_commands": details["operator_commands"],
                     "runtime_hint": details["run_command_hint"],
                     "healthcheck_command": details["healthcheck_command"],
@@ -870,7 +876,14 @@ class CollectionCoordinator:
             merged.append(entry)
         return merged
 
-    def _process_finding_from_listener(self, listener: dict[str, Any]) -> dict[str, Any]:
+    def _runtime_process_findings(self, server_id: str, listeners: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [
+            self._process_finding_from_listener(listener, self._tracked_owner_for_listener(server_id, listener))
+            for listener in listeners
+        ]
+
+    def _process_finding_from_listener(self, listener: dict[str, Any], owner: dict[str, Any] | None = None) -> dict[str, Any]:
+        owner = owner or {}
         return {
             "port": listener.get("port"),
             "bind_address": listener.get("bind_address", ""),
@@ -878,7 +891,49 @@ class CollectionCoordinator:
             "pid": listener.get("pid"),
             "state": listener.get("state", ""),
             "raw": listener.get("raw", ""),
+            "owner_service_id": owner.get("service_id", ""),
+            "owner_display_name": owner.get("display_name", ""),
+            "owner_location_id": owner.get("location_id", ""),
+            "owner_root": owner.get("root", ""),
         }
+
+    def _tracked_port_owners(self, server_id: str) -> dict[int, dict[str, Any]]:
+        cache = self.snapshots._read_runtime_cache()
+        node_viewers = cache.get("node_viewer", {})
+        owners: dict[int, dict[str, Any]] = {}
+        for service in self.manifests.load_services():
+            latest_task = service.task_ledger[0] if service.task_ledger else None
+            runtime_services = latest_task.runtime_services if latest_task else []
+            for location in service.locations:
+                if location.server_id != server_id:
+                    continue
+                owner = {
+                    "service_id": service.service_id,
+                    "display_name": service.display_name,
+                    "location_id": location.location_id,
+                    "root": location.root,
+                }
+                tracked_ports: set[int] = set()
+                for port in getattr(location.runtime, "expected_ports", []) or []:
+                    if isinstance(port, int) and port > 0:
+                        tracked_ports.add(port)
+                for runtime_service in runtime_services or []:
+                    port = getattr(runtime_service, "port", None)
+                    if isinstance(port, int) and port > 0:
+                        tracked_ports.add(port)
+                cached_node = node_viewers.get(service.service_id, {}).get(location.location_id, {})
+                cached_port = cached_node.get("runtime_port")
+                if isinstance(cached_port, int) and cached_port > 0:
+                    tracked_ports.add(cached_port)
+                for port in tracked_ports:
+                    owners.setdefault(port, owner)
+        return owners
+
+    def _tracked_owner_for_listener(self, server_id: str, listener: dict[str, Any]) -> dict[str, Any] | None:
+        port = listener.get("port")
+        if not isinstance(port, int):
+            return None
+        return self._tracked_port_owners(server_id).get(port)
 
     def _port_info_from_listener(self, listener: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -1452,6 +1507,32 @@ class CollectionCoordinator:
         self.snapshots.persist_node_viewer(service_id, location.location_id, record)
         return {"status": "ok", "node": record}
 
+    def node_release_check(self, service_id: str, request: NodeActionRequest) -> dict[str, Any]:
+        service = self.manifests.get_service(service_id)
+        location = self._select_location(service, location_id=request.location_id)
+        if location is None:
+            return {"status": "path_missing", "message": "No service location available."}
+        server = self.manifests.resolve_server(
+            location.server_id,
+            {location.server_id: request.runtime_password} if request.runtime_password else {},
+        )
+        node = self._node_inspect_record(service, location, server)
+        release = self._fetch_latest_node_release()
+        status = release.get("status", "unverified")
+        latest_version = str(release.get("version", ""))
+        current_version = str(node.get("installed_version", ""))
+        return {
+            "status": status,
+            "current_version": current_version,
+            "latest_version": latest_version,
+            "update_available": bool(node.get("node_present") and latest_version and latest_version != current_version),
+            "published_at": release.get("published_at", ""),
+            "release_url": release.get("html_url", ""),
+            "asset_url": release.get("asset_url", ""),
+            "notes": release.get("notes", ""),
+            "message": release.get("message", ""),
+        }
+
     def node_deploy(self, service_id: str, request: NodeActionRequest) -> dict[str, Any]:
         with self._action_guard("node_deploy", service_id) as lock_error:
             if lock_error is not None:
@@ -1465,30 +1546,56 @@ class CollectionCoordinator:
                 {location.server_id: request.runtime_password} if request.runtime_password else {},
             )
             before = self._node_inspect_record(service, location, server)
+            release = self._fetch_latest_node_release()
+            if release.get("status") != "ok" or not release.get("asset_url"):
+                return {
+                    "status": "partial",
+                    "message": release.get("message") or "GitHub release wheel was not available.",
+                    "before": before,
+                    "node": before,
+                    "after": before,
+                    "release": self._release_check_payload(before, release),
+                }
             if server.connection_type == "local":
-                if before["node_present"]:
-                    upgrade_node(location.root)
-                else:
-                    install_node(location.root, service_id=service.service_id, display_name=service.display_name)
-                self._ensure_local_node_runtime(location.root)
+                result = self._install_local_node_release(
+                    location.root,
+                    service.service_id,
+                    service.display_name,
+                    str(release["asset_url"]),
+                )
             else:
-                self._deploy_remote_node(
+                result = self._install_remote_node_release(
                     server,
                     location.root,
                     service.service_id,
                     service.display_name,
-                    force=before["node_present"],
+                    str(release["asset_url"]),
                 )
+            if result["status"] != "ok":
+                return {
+                    **result,
+                    "before": before,
+                    "node": before,
+                    "after": before,
+                    "release": self._release_check_payload(before, release),
+                }
 
             after = self._node_inspect_record(service, location, server)
             self.snapshots.persist_node_viewer(service_id, location.location_id, after)
-            status = "ok" if after["installed_version"] == __version__ or not after["node_present"] else "partial"
+            status = "ok" if after["installed_version"] == str(release.get("version", "")) or not after["node_present"] else "partial"
             message = (
-                "Node deployed with latest control-center version."
+                "Node deployed from the latest GitHub release."
                 if not before["node_present"]
-                else "Node refreshed to latest control-center version."
+                else "Node reinstalled from the latest GitHub release."
             )
-            return {"status": status, "message": message, "before": before, "node": after, "after": after}
+            return {
+                "status": status,
+                "message": message,
+                "before": before,
+                "node": after,
+                "after": after,
+                "release": self._release_check_payload(after, release),
+            }
 
     def node_upgrade(self, service_id: str, request: NodeActionRequest) -> dict[str, Any]:
         with self._action_guard("node_upgrade", service_id) as lock_error:
@@ -1505,16 +1612,64 @@ class CollectionCoordinator:
             before = self._node_inspect_record(service, location, server)
             if not before["node_present"]:
                 return {"status": "path_missing", "message": "Node manifest not found at selected location."}
-
+            release = self._fetch_latest_node_release()
+            if release.get("status") != "ok" or not release.get("asset_url"):
+                return {
+                    "status": "partial",
+                    "message": release.get("message") or "GitHub release wheel was not available.",
+                    "before": before,
+                    "node": before,
+                    "after": before,
+                    "release": self._release_check_payload(before, release),
+                }
             if server.connection_type == "local":
-                upgrade_node(location.root)
-                self._ensure_local_node_runtime(location.root)
+                result = self._install_local_node_release(
+                    location.root,
+                    service.service_id,
+                    service.display_name,
+                    str(release["asset_url"]),
+                )
             else:
-                self._deploy_remote_node(server, location.root, service.service_id, service.display_name, force=True)
+                result = self._install_remote_node_release(
+                    server,
+                    location.root,
+                    service.service_id,
+                    service.display_name,
+                    str(release["asset_url"]),
+                )
+            if result["status"] != "ok":
+                return {
+                    **result,
+                    "before": before,
+                    "node": before,
+                    "after": before,
+                    "release": self._release_check_payload(before, release),
+                }
+            runtime_port = int(before.get("runtime_port") or 8010)
+            if server.connection_type == "local":
+                stop_node_runtime(location.root, port=runtime_port)
+                start_node_runtime(location.root, host="127.0.0.1", port=runtime_port)
+            else:
+                restart_result = self._restart_remote_node(server, location.root, runtime_port)
+                if restart_result["status"] != "ok":
+                    return {
+                        **restart_result,
+                        "before": before,
+                        "node": before,
+                        "after": before,
+                        "release": self._release_check_payload(before, release),
+                    }
 
             after = self._node_inspect_record(service, location, server)
             self.snapshots.persist_node_viewer(service_id, location.location_id, after)
-            return {"status": "ok", "message": "Node updated to latest control-center version.", "before": before, "node": after, "after": after}
+            return {
+                "status": "ok",
+                "message": "Node updated from GitHub and runtime restarted.",
+                "before": before,
+                "node": after,
+                "after": after,
+                "release": self._release_check_payload(after, release),
+            }
 
     def node_restart(self, service_id: str, request: NodeActionRequest) -> dict[str, Any]:
         with self._action_guard("node_restart", service_id) as lock_error:
@@ -1529,11 +1684,12 @@ class CollectionCoordinator:
                 {location.server_id: request.runtime_password} if request.runtime_password else {},
             )
             before = self._node_inspect_record(service, location, server)
+            runtime_port = int(before.get("runtime_port") or 8010)
             if server.connection_type == "local":
-                stop_node_runtime(location.root, port=8010)
-                start_node_runtime(location.root, host="127.0.0.1", port=8010)
+                stop_node_runtime(location.root, port=runtime_port)
+                start_node_runtime(location.root, host="127.0.0.1", port=runtime_port)
             else:
-                result = self._restart_remote_node(server, location.root)
+                result = self._restart_remote_node(server, location.root, runtime_port)
                 if result["status"] != "ok":
                     return result
 
@@ -2768,8 +2924,79 @@ class CollectionCoordinator:
             "diagram": latest_task.get("diagram", ""),
         }
 
+    def _normalize_port(self, value: Any, default: int = 8010) -> int:
+        try:
+            port = int(value)
+        except (TypeError, ValueError):
+            return default
+        return port if port > 0 else default
+
+    def _extract_port_from_command(self, command: str) -> int | None:
+        if not command:
+            return None
+        match = re.search(r"--port(?:=|\s+)(\d+)\b", command)
+        if not match:
+            return None
+        return self._normalize_port(match.group(1), default=0) or None
+
+    def _manifest_runtime_port(self, manifest: dict[str, Any] | None) -> int:
+        return self._normalize_port((manifest or {}).get("runtime_port"), default=8010)
+
+    def _cached_node_runtime_port(self, service_id: str, location_id: str) -> int | None:
+        cache = self.snapshots._read_runtime_cache()
+        record = cache.get("node_viewer", {}).get(service_id, {}).get(location_id, {})
+        port = record.get("runtime_port")
+        if isinstance(port, int) and port > 0:
+            return port
+        return None
+
+    def _detect_node_runtime_port(self, service: ServiceManifest, location: Any, server: ResolvedServer, manifest: dict[str, Any] | None) -> int:
+        manifest_port = self._manifest_runtime_port(manifest)
+        cached_port = self._cached_node_runtime_port(service.service_id, location.location_id)
+        project_root = location.root
+        listeners = self._collect_local_listener_details() if server.connection_type == "local" else []
+        if server.connection_type == "ssh":
+            with self._open_ssh(server) as connection:
+                if connection is not None:
+                    ssh, _ = connection
+                    listeners = self._collect_remote_listener_details(ssh)
+        for listener in listeners:
+            pid = listener.get("pid")
+            if not isinstance(pid, int):
+                continue
+            command = self._lookup_process_command(server, pid)
+            if "switchboard.cli" not in command or "node serve" not in command or project_root not in command:
+                continue
+            detected_port = self._extract_port_from_command(command)
+            if detected_port:
+                return detected_port
+        return cached_port or manifest_port
+
+    def _persist_manifest_runtime_port(
+        self,
+        server: ResolvedServer,
+        project_root: str,
+        manifest: dict[str, Any] | None,
+        runtime_port: int,
+    ) -> dict[str, Any] | None:
+        if manifest is None:
+            return None
+        current_port = self._manifest_runtime_port(manifest)
+        if current_port == runtime_port:
+            return manifest
+        updated_manifest = dict(manifest)
+        updated_manifest["runtime_port"] = runtime_port
+        if server.connection_type == "local":
+            self._write_local_json(self._local_node_manifest_path(project_root), updated_manifest)
+        else:
+            with self._open_ssh(server) as connection:
+                if connection is None:
+                    return updated_manifest
+                ssh, sftp = connection
+                self._write_remote_json(ssh, sftp, self._remote_node_manifest_path(project_root), updated_manifest)
+        return updated_manifest
+
     def _node_inspect_record(self, service: ServiceManifest, location: Any, server: ResolvedServer) -> dict[str, Any]:
-        runtime_port = 8010
         manifest_path = self._remote_node_manifest_path(location.root) if server.connection_type == "ssh" else str(self._local_node_manifest_path(location.root))
         manifest: dict[str, Any] | None = None
         tasks: dict[str, Any] | None = None
@@ -2783,7 +3010,11 @@ class CollectionCoordinator:
             manifest = self._read_local_json(self._local_node_manifest_path(location.root))
             tasks = self._read_local_json(self._local_completed_tasks_path(location.root))
             if manifest:
+                runtime_port = self._detect_node_runtime_port(service, location, server, manifest)
+                manifest = self._persist_manifest_runtime_port(server, location.root, manifest, runtime_port)
                 runtime_state = node_status(location.root, port=runtime_port)
+            else:
+                runtime_port = self._cached_node_runtime_port(service.service_id, location.location_id) or 8010
         else:
             with self._open_ssh(server) as connection:
                 if connection is None:
@@ -2794,7 +3025,11 @@ class CollectionCoordinator:
                 manifest = self._read_remote_json(sftp, self._remote_node_manifest_path(location.root))
                 tasks = self._read_remote_json(sftp, self._remote_completed_tasks_path(location.root))
                 if manifest:
+                    runtime_port = self._detect_node_runtime_port(service, location, server, manifest)
+                    manifest = self._persist_manifest_runtime_port(server, location.root, manifest, runtime_port)
                     runtime_state = self._remote_node_status(ssh, location.root, runtime_port)
+                else:
+                    runtime_port = self._cached_node_runtime_port(service.service_id, location.location_id) or 8010
 
         node_present = manifest is not None
         bootstrap_ready = bool(tasks and tasks.get("tasks"))
@@ -2816,9 +3051,9 @@ class CollectionCoordinator:
             "runtime_pid": runtime_state.get("pid"),
             "runtime_port": runtime_port,
             "needs_install": not node_present,
-            "needs_upgrade": bool(node_present and installed_version and installed_version != __version__),
+            "needs_upgrade": False,
             "needs_bootstrap": bool(node_present and not bootstrap_ready),
-            "attention_reason": self._node_attention_reason(node_present, installed_version, bootstrap_ready),
+            "attention_reason": self._node_attention_reason(node_present, bootstrap_ready),
             "manifest_path": manifest_path,
             "runtime_dir": runtime_state.get("runtime_dir", ""),
             "log_file": runtime_state.get("log_file", ""),
@@ -2827,6 +3062,7 @@ class CollectionCoordinator:
         return record
 
     def _node_missing_record(self, service: ServiceManifest, location: Any, manifest_path: str, reason: str) -> dict[str, Any]:
+        runtime_port = self._cached_node_runtime_port(service.service_id, location.location_id) or 8010
         return {
             "service_id": service.service_id,
             "location_id": location.location_id,
@@ -2840,7 +3076,7 @@ class CollectionCoordinator:
             "manifest_updated_at": "",
             "runtime_status": "missing",
             "runtime_pid": None,
-            "runtime_port": 8010,
+            "runtime_port": runtime_port,
             "needs_install": True,
             "needs_upgrade": False,
             "needs_bootstrap": False,
@@ -2851,11 +3087,9 @@ class CollectionCoordinator:
             "last_error": reason,
         }
 
-    def _node_attention_reason(self, node_present: bool, installed_version: str, bootstrap_ready: bool) -> str:
+    def _node_attention_reason(self, node_present: bool, bootstrap_ready: bool) -> str:
         if not node_present:
             return "deploy"
-        if installed_version and installed_version != __version__:
-            return "update"
         if not bootstrap_ready:
             return "bootstrap"
         return ""
@@ -2869,6 +3103,99 @@ class CollectionCoordinator:
         wheel_path = self._build_local_wheel()
         if wheel_path and venv_python.exists():
             subprocess.run([str(venv_python), "-m", "pip", "install", "--upgrade", str(wheel_path)], check=False)
+
+    def _fetch_latest_node_release(self) -> dict[str, Any]:
+        request = urllib.request.Request(
+            GITHUB_LATEST_RELEASE_API,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "switchboard-control-center",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            return {
+                "status": "unreachable",
+                "message": f"Failed to reach GitHub latest release: {exc}",
+                "version": "",
+                "asset_url": "",
+                "html_url": f"https://github.com/{GITHUB_REPO}/releases",
+                "published_at": "",
+                "notes": "",
+            }
+        assets = payload.get("assets", []) or []
+        wheel_asset = next((asset for asset in assets if str(asset.get("name", "")).endswith(".whl")), None)
+        tag_name = str(payload.get("tag_name", ""))
+        version = tag_name[1:] if tag_name.startswith("v") else tag_name
+        return {
+            "status": "ok" if wheel_asset else "partial",
+            "message": "" if wheel_asset else "Latest GitHub release does not contain a wheel asset.",
+            "version": version,
+            "asset_url": str((wheel_asset or {}).get("browser_download_url", "")),
+            "html_url": str(payload.get("html_url", "")),
+            "published_at": str(payload.get("published_at", "")),
+            "notes": str(payload.get("body", "")),
+        }
+
+    def _release_check_payload(self, node: dict[str, Any], release: dict[str, Any]) -> dict[str, Any]:
+        current_version = str(node.get("installed_version", ""))
+        latest_version = str(release.get("version", ""))
+        return {
+            "status": release.get("status", "unverified"),
+            "current_version": current_version,
+            "latest_version": latest_version,
+            "update_available": bool(node.get("node_present") and latest_version and latest_version != current_version),
+            "published_at": release.get("published_at", ""),
+            "release_url": release.get("html_url", ""),
+            "asset_url": release.get("asset_url", ""),
+            "notes": release.get("notes", ""),
+            "message": release.get("message", ""),
+        }
+
+    def _install_local_node_release(
+        self,
+        project_root: str,
+        service_id: str,
+        display_name: str,
+        wheel_url: str,
+    ) -> dict[str, Any]:
+        runtime_root = Path(project_root) / "switchboard" / "runtime"
+        venv_path = runtime_root / ".venv"
+        venv_python = venv_path / "bin" / "python"
+        runtime_root.mkdir(parents=True, exist_ok=True)
+        if not venv_python.exists():
+            subprocess.run([sys.executable, "-m", "venv", str(venv_path)], check=False)
+        install_result = subprocess.run(
+            [str(venv_python), "-m", "pip", "install", "--upgrade", wheel_url],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if install_result.returncode != 0:
+            return {"status": "partial", "message": (install_result.stderr or install_result.stdout).strip()}
+        scaffold_result = subprocess.run(
+            [
+                str(venv_python),
+                "-m",
+                "switchboard.cli",
+                "node",
+                "install",
+                "--project-root",
+                str(Path(project_root).resolve()),
+                "--service-id",
+                service_id,
+                "--display-name",
+                display_name,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if scaffold_result.returncode != 0:
+            return {"status": "partial", "message": (scaffold_result.stderr or scaffold_result.stdout).strip()}
+        return {"status": "ok", "message": "Installed latest GitHub release locally."}
 
     def _build_local_wheel(self) -> Path | None:
         dist_dir = Path(tempfile.mkdtemp(prefix="switchboard-wheel-"))
@@ -2884,28 +3211,35 @@ class CollectionCoordinator:
         wheels = sorted(dist_dir.glob("switchboard-*.whl"))
         return wheels[-1] if wheels else None
 
-    def _deploy_remote_node(self, server: ResolvedServer, project_root: str, service_id: str, display_name: str, force: bool = False) -> None:
-        with tempfile.TemporaryDirectory(prefix="switchboard-node-") as tmp_dir:
-            local_root = Path(tmp_dir) / "project"
-            install_node(local_root, service_id=service_id, display_name=display_name)
-            wheel_path = self._build_local_wheel()
-            with self._open_ssh(server) as connection:
-                if connection is None:
-                    raise RuntimeError("SSH connection failed.")
-                ssh, sftp = connection
-                self._run_remote(ssh, f"mkdir -p {self._quote(project_root)}")
-                self._upload_tree(sftp, local_root / "switchboard", posixpath.join(project_root, "switchboard"), force=force)
-                if wheel_path is not None:
-                    remote_wheel = posixpath.join(project_root, "switchboard", "runtime", wheel_path.name)
-                    self._run_remote(ssh, f"mkdir -p {self._quote(posixpath.dirname(remote_wheel))}")
-                    sftp.put(str(wheel_path), remote_wheel)
-                    venv_dir = posixpath.join(project_root, "switchboard", "runtime", ".venv")
-                    pip_cmd = (
-                        f"python3 -m venv {self._quote(venv_dir)} && "
-                        f"{self._quote(posixpath.join(venv_dir, 'bin', 'python'))} -m pip install --upgrade pip && "
-                        f"{self._quote(posixpath.join(venv_dir, 'bin', 'python'))} -m pip install --upgrade {self._quote(remote_wheel)}"
-                    )
-                    self._run_remote(ssh, pip_cmd)
+    def _install_remote_node_release(
+        self,
+        server: ResolvedServer,
+        project_root: str,
+        service_id: str,
+        display_name: str,
+        wheel_url: str,
+    ) -> dict[str, Any]:
+        with self._open_ssh(server) as connection:
+            if connection is None:
+                return {"status": "unreachable", "message": "SSH connection failed."}
+            ssh, _ = connection
+            runtime_root = posixpath.join(project_root, "switchboard", "runtime")
+            venv_dir = posixpath.join(runtime_root, ".venv")
+            venv_python = posixpath.join(venv_dir, "bin", "python")
+            command = (
+                f"mkdir -p {self._quote(runtime_root)} && "
+                f"python3 -m venv {self._quote(venv_dir)} && "
+                f"{self._quote(venv_python)} -m pip install --upgrade pip && "
+                f"{self._quote(venv_python)} -m pip install --upgrade {self._quote(wheel_url)} && "
+                f"{self._quote(venv_python)} -m switchboard.cli node install "
+                f"--project-root {self._quote(project_root)} "
+                f"--service-id {self._quote(service_id)} "
+                f"--display-name {self._quote(display_name)}"
+            )
+            result = self._run_remote(ssh, command)
+            if result["returncode"] != 0:
+                return {"status": "partial", "message": (result["stderr"] or result["stdout"]).strip()}
+            return {"status": "ok", "message": "Installed latest GitHub release remotely."}
 
     def _upload_tree(self, sftp: Any, local_root: Path, remote_root: str, force: bool = False) -> None:
         protected_force_paths = {
@@ -2958,7 +3292,7 @@ class CollectionCoordinator:
         pid = int(raw[1]) if len(raw) > 1 and raw[1].isdigit() else None
         return {"status": status, "pid": pid, "runtime_dir": runtime_dir, "log_file": log_file}
 
-    def _restart_remote_node(self, server: ResolvedServer, project_root: str) -> dict[str, Any]:
+    def _restart_remote_node(self, server: ResolvedServer, project_root: str, runtime_port: int) -> dict[str, Any]:
         with self._open_ssh(server) as connection:
             if connection is None:
                 return {"status": "unreachable", "message": "SSH connection failed."}
@@ -2970,7 +3304,7 @@ class CollectionCoordinator:
             command = (
                 f"mkdir -p {self._quote(runtime_root)}; "
                 f"if [ -f {self._quote(pid_file)} ]; then PID=$(cat {self._quote(pid_file)}); kill \"$PID\" 2>/dev/null || true; rm -f {self._quote(pid_file)}; fi; "
-                f"nohup {self._quote(venv_python)} -m switchboard.cli node serve --project-root {self._quote(project_root)} --host 127.0.0.1 --port 8010 "
+                f"nohup {self._quote(venv_python)} -m switchboard.cli node serve --project-root {self._quote(project_root)} --host 127.0.0.1 --port {runtime_port} "
                 f">> {self._quote(log_file)} 2>&1 < /dev/null & echo $! > {self._quote(pid_file)}"
             )
             result = self._run_remote(ssh, command)
@@ -2981,7 +3315,7 @@ class CollectionCoordinator:
                 f"PID=''; test -f {self._quote(pid_file)} && PID=$(cat {self._quote(pid_file)}); "
                 f"STATUS=stopped; "
                 f"if [ -n \"$PID\" ] && kill -0 \"$PID\" 2>/dev/null; then STATUS=running; fi; "
-                f"PORT_PID=$(lsof -tiTCP:8010 -sTCP:LISTEN 2>/dev/null | head -n1); "
+                f"PORT_PID=$(lsof -tiTCP:{runtime_port} -sTCP:LISTEN 2>/dev/null | head -n1); "
                 f"if [ \"$STATUS\" = stopped ] && [ -n \"$PORT_PID\" ]; then STATUS=running_unmanaged; fi; "
                 f"if [ \"$STATUS\" = stopped ]; then tail -n 40 {self._quote(log_file)} 2>/dev/null || true; fi; "
                 f"printf '\\n__STATUS__=%s\\n__PID__=%s\\n__PORT_PID__=%s\\n' \"$STATUS\" \"$PID\" \"$PORT_PID\""

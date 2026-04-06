@@ -429,7 +429,7 @@ export function EnvironmentApiLabPage({ environmentId, offline, onBack, onSelect
             Back
           </button>
           <div>
-            <div className="text-xs uppercase tracking-[0.18em] text-cyan-400">Environment API Lab</div>
+            <div className="text-xs uppercase tracking-[0.18em] text-cyan-400">Dedicated Environment API Lab</div>
             <h2 className="mt-2 text-2xl font-semibold text-white">{lab.project.display_name} · {lab.environment.display_name}</h2>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-400">
               <span>{lab.environment.kind}</span>

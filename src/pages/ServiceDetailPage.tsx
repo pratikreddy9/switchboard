@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, FileStack, FolderTree, LoaderCircle, Pencil, RefreshCw, Save, Server, Trash2, X } from 'lucide-react'
 import type {
+  ActionLock,
   ManagedDocConfig,
   NodeActionResult,
+  NodeReleaseCheck,
   ProjectEnvironmentView,
   RuntimeCheckResult,
   Service,
@@ -15,8 +17,10 @@ import type {
 import {
   deleteService,
   deployNode,
+  getNodeReleaseCheck,
   getService,
   getServiceScope,
+  getActionLocks,
   listServers,
   getWorkspaceRuns,
   inspectNode,
@@ -61,16 +65,105 @@ function parsePorts(value: string): number[] {
 const SERVICE_PANEL_KEYS = ['network', 'runtime', 'managed_docs', 'task_ledger', 'repositories', 'scope', 'pull_bundles', 'secret_paths', 'run_history'] as const
 type ServicePanelKey = (typeof SERVICE_PANEL_KEYS)[number]
 type NodeActionKey = 'inspect' | 'deploy' | 'upgrade' | 'restart'
+type LocationActionKey = NodeActionKey | 'runtime_check' | 'sync_from_node' | 'sync_to_node'
+type PersistedActionKey = 'node_deploy' | 'node_upgrade' | 'node_restart' | 'runtime_check' | 'sync_from_node' | 'sync_to_node'
+type ConfirmActionKey = 'node_inspect' | 'node_deploy' | 'node_upgrade' | 'node_restart' | 'runtime_check' | 'sync_from_node' | 'sync_to_node'
+
+interface ConfirmDetails {
+  preflight?: string[]
+  followUp?: string[]
+  commandPreview?: string[]
+  confirmLabel?: string
+}
 
 interface LocationActionEvent {
-  action: NodeActionKey | 'runtime_check' | 'sync_from_node' | 'sync_to_node'
+  action: LocationActionKey
   status: 'running' | 'ok' | 'error'
   message: string
   timestamp: string
+  started_at?: string
+  duration_seconds?: number
+}
+
+const ACTION_LOCK_KEY: Record<Exclude<LocationActionKey, 'inspect'>, PersistedActionKey> = {
+  deploy: 'node_deploy',
+  upgrade: 'node_upgrade',
+  restart: 'node_restart',
+  runtime_check: 'runtime_check',
+  sync_from_node: 'sync_from_node',
+  sync_to_node: 'sync_to_node',
+}
+
+const LOCK_KEY_TO_ACTION: Record<PersistedActionKey, Exclude<LocationActionKey, 'inspect'>> = {
+  node_deploy: 'deploy',
+  node_upgrade: 'upgrade',
+  node_restart: 'restart',
+  runtime_check: 'runtime_check',
+  sync_from_node: 'sync_from_node',
+  sync_to_node: 'sync_to_node',
+}
+
+const ACTION_META: Record<LocationActionKey, { label: string; running_label: string; eta_seconds: number }> = {
+  inspect: { label: 'Inspect Node', running_label: 'Inspecting node state', eta_seconds: 12 },
+  deploy: { label: 'Deploy From GitHub', running_label: 'Deploying latest GitHub release', eta_seconds: 45 },
+  upgrade: { label: 'Update + Restart', running_label: 'Installing latest GitHub release and restarting', eta_seconds: 45 },
+  restart: { label: 'Restart Node', running_label: 'Restarting node runtime', eta_seconds: 18 },
+  runtime_check: { label: 'Refresh Snapshot', running_label: 'Refreshing runtime snapshot', eta_seconds: 28 },
+  sync_from_node: { label: 'Sync From Node', running_label: 'Syncing from node', eta_seconds: 22 },
+  sync_to_node: { label: 'Sync To Node', running_label: 'Syncing to node', eta_seconds: 22 },
 }
 
 function panelStorageKey(serviceId: string, key: string) {
   return `service-panel:${serviceId}:${key}`
+}
+
+function pendingSessionKey(actionKey: PersistedActionKey, locationId: string) {
+  return `pending:${actionKey}:${locationId}`
+}
+
+function actionStartKey(locationId: string, action: LocationActionKey) {
+  return `${locationId}:${action}`
+}
+
+function formatDurationLabel(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
+}
+
+function getActionProgress(startedAt: string, etaSeconds: number, nowMs: number) {
+  const startedMs = Number.isNaN(Date.parse(startedAt)) ? nowMs : Date.parse(startedAt)
+  const elapsedSeconds = Math.max(0, Math.floor((nowMs - startedMs) / 1000))
+  const remainingSeconds = Math.max(0, etaSeconds - elapsedSeconds)
+  const overrunSeconds = Math.max(0, elapsedSeconds - etaSeconds)
+  const percent = etaSeconds > 0 ? Math.min(100, Math.round((elapsedSeconds / etaSeconds) * 100)) : 0
+  return { elapsedSeconds, remainingSeconds, overrunSeconds, percent }
+}
+
+function quoteShell(value: string) {
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`
+}
+
+function shellPrefix(host?: string, username?: string, port?: number) {
+  if (!host) return ''
+  const target = username ? `${username}@${host}` : host
+  return port && port !== 22 ? `ssh -p ${port} ${target}` : `ssh ${target}`
+}
+
+function serverShellCommand(server?: ServerRecord, command?: string) {
+  if (!command) return ''
+  if (server?.connection_type === 'ssh' && server.host) {
+    return `${shellPrefix(server.host, server.username, server.port)} ${quoteShell(command)}`
+  }
+  return command
+}
+
+function releaseNoteLines(release?: NodeReleaseCheck) {
+  return (release?.notes ?? '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 3)
 }
 
 export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDeleted, onOpenEnvironmentLab }: Props) {
@@ -99,11 +192,14 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
   const [checkingRuntimeLocation, setCheckingRuntimeLocation] = useState<string | null>(null)
   const [syncingFromLocation, setSyncingFromLocation] = useState<string | null>(null)
   const [syncingToLocation, setSyncingToLocation] = useState<string | null>(null)
-  const [confirmAction, setConfirmAction] = useState<string | null>(null)
+  const [confirmAction, setConfirmAction] = useState<ConfirmActionKey | null>(null)
   const [confirmLocationId, setConfirmLocationId] = useState<string | null>(null)
+  const [confirmDetails, setConfirmDetails] = useState<ConfirmDetails | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [servers, setServers] = useState<ServerRecord[]>([])
   const [pendingActions, setPendingActions] = useState<Record<string, boolean>>({})
+  const [activeLocks, setActiveLocks] = useState<Record<string, ActionLock>>({})
+  const [actionStartTimes, setActionStartTimes] = useState<Record<string, string>>({})
   const [panelOpen, setPanelOpen] = useState<Record<string, boolean>>({})
   const [locationPanels, setLocationPanels] = useState<Record<string, boolean>>({})
   const [nodeActionResults, setNodeActionResults] = useState<Record<string, NodeActionResult>>({})
@@ -111,14 +207,11 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
   const [locationActionEvents, setLocationActionEvents] = useState<Record<string, LocationActionEvent[]>>({})
   const [bundleHistoryMeta, setBundleHistoryMeta] = useState<{ count: number; latestCreatedAt: string }>({ count: 0, latestCreatedAt: '' })
   const [projectEnvironments, setProjectEnvironments] = useState<ProjectEnvironmentView[]>([])
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   useEffect(() => {
-    const keys = Object.keys(sessionStorage)
-    const pending: Record<string, boolean> = {}
-    for (const key of keys) {
-      if (key.startsWith('pending:')) pending[key] = true
-    }
-    setPendingActions(pending)
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000)
+    return () => window.clearInterval(timer)
   }, [])
 
   useEffect(() => {
@@ -179,6 +272,49 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
       }
     })
   }, [offline, serviceId])
+
+  useEffect(() => {
+    if (offline) return
+    let cancelled = false
+
+    const refresh = async () => {
+      const result = await getActionLocks(serviceId)
+      if (cancelled || isApiError(result)) return
+      setActiveLocks(Object.fromEntries(result.locks.map((lock) => [lock.action_key, lock])))
+    }
+
+    void refresh()
+    const timer = window.setInterval(() => {
+      void refresh()
+    }, 5000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [offline, serviceId])
+
+  useEffect(() => {
+    if (!service) {
+      setPendingActions({})
+      return
+    }
+    const locationIds = new Set(service.locations.map((location) => location.location_id))
+    const nextPending: Record<string, boolean> = {}
+    for (const key of Object.keys(sessionStorage)) {
+      if (!key.startsWith('pending:')) continue
+      const match = /^pending:([^:]+):(.+)$/.exec(key)
+      if (!match) continue
+      const [, actionKey, locationId] = match
+      if (!locationIds.has(locationId)) continue
+      if (activeLocks[actionKey]) {
+        nextPending[key] = true
+      } else {
+        sessionStorage.removeItem(key)
+      }
+    }
+    setPendingActions(nextPending)
+  }, [activeLocks, service])
 
   const docs = runResult?.docs_files ?? []
   const logs = runResult?.logs_files ?? []
@@ -374,9 +510,50 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
     }))
   }
 
+  async function refreshActionLocksSnapshot() {
+    if (offline) return
+    const result = await getActionLocks(serviceId)
+    if (isApiError(result)) return
+    setActiveLocks(Object.fromEntries(result.locks.map((lock) => [lock.action_key, lock])))
+  }
+
+  function setActionStartedAt(locationId: string, action: LocationActionKey, startedAt: string) {
+    setActionStartTimes((current) => ({ ...current, [actionStartKey(locationId, action)]: startedAt }))
+  }
+
+  function clearActionStartedAt(locationId: string, action: LocationActionKey) {
+    setActionStartTimes((current) => {
+      const next = { ...current }
+      delete next[actionStartKey(locationId, action)]
+      return next
+    })
+  }
+
+  function markPendingAction(actionKey: PersistedActionKey, locationId: string, startedAt: string) {
+    const sessionKey = pendingSessionKey(actionKey, locationId)
+    sessionStorage.setItem(sessionKey, 'true')
+    setPendingActions((current) => ({ ...current, [sessionKey]: true }))
+    setActionStartedAt(locationId, LOCK_KEY_TO_ACTION[actionKey], startedAt)
+  }
+
+  function clearPendingAction(actionKey: PersistedActionKey, locationId: string) {
+    const sessionKey = pendingSessionKey(actionKey, locationId)
+    sessionStorage.removeItem(sessionKey)
+    setPendingActions((current) => {
+      const next = { ...current }
+      delete next[sessionKey]
+      return next
+    })
+    clearActionStartedAt(locationId, LOCK_KEY_TO_ACTION[actionKey])
+  }
+
   async function handleNodeAction(action: 'inspect' | 'deploy' | 'upgrade' | 'restart', locationId: string) {
     if (!service) return
+    const startedAt = new Date().toISOString()
+    const persistedActionKey = action === 'inspect' ? null : ACTION_LOCK_KEY[action]
     setNodeActionLoading((current) => ({ ...current, [locationId]: action }))
+    setActionStartedAt(locationId, action, startedAt)
+    if (persistedActionKey) markPendingAction(persistedActionKey, locationId, startedAt)
     recordLocationAction(locationId, {
       action,
       status: 'running',
@@ -384,51 +561,73 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         action === 'inspect'
           ? 'Inspecting node state and runtime.'
           : action === 'deploy'
-            ? 'Deploying latest node files and runtime.'
+            ? 'Deploying the latest GitHub release for this node.'
             : action === 'upgrade'
-              ? 'Updating node files to the latest local version.'
-              : 'Starting or restarting the node runtime.',
-      timestamp: new Date().toISOString(),
+            ? 'Installing the latest GitHub release and restarting the node runtime.'
+            : 'Starting or restarting the node runtime.',
+      timestamp: startedAt,
+      started_at: startedAt,
     })
-    const result =
-      action === 'inspect'
-        ? await inspectNode(service.service_id, locationId)
-        : action === 'deploy'
-          ? await deployNode(service.service_id, locationId)
-          : action === 'upgrade'
-            ? await upgradeNode(service.service_id, locationId)
-            : await restartNode(service.service_id, locationId)
-    setNodeActionLoading((current) => ({ ...current, [locationId]: null }))
-    if (isApiError(result)) {
-      setRuntimeMessage(result.message)
+    try {
+      const result =
+        action === 'inspect'
+          ? await inspectNode(service.service_id, locationId)
+          : action === 'deploy'
+            ? await deployNode(service.service_id, locationId)
+            : action === 'upgrade'
+              ? await upgradeNode(service.service_id, locationId)
+              : await restartNode(service.service_id, locationId)
+      if (isApiError(result)) {
+        setRuntimeMessage(result.message)
+        recordLocationAction(locationId, {
+          action,
+          status: 'error',
+          message: result.message,
+          timestamp: new Date().toISOString(),
+          started_at: startedAt,
+          duration_seconds: Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000)),
+        })
+        return
+      }
+      setNodeViewerEntry(result.node)
+      setNodeActionResults((current) => ({ ...current, [locationId]: result }))
+      const successMessage =
+        result.message ||
+        (action === 'inspect'
+          ? 'Node viewer refreshed.'
+          : action === 'deploy'
+            ? 'Latest node deployed.'
+            : action === 'upgrade'
+              ? 'Node updated to the latest local version.'
+              : result.node.runtime_status === 'running'
+                ? 'Node runtime started.'
+                : 'Node restart command completed.')
+      setRuntimeMessage(successMessage)
+      recordLocationAction(locationId, {
+        action,
+        status: 'ok',
+        message: successMessage,
+        timestamp: new Date().toISOString(),
+        started_at: startedAt,
+        duration_seconds: Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000)),
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Node action failed unexpectedly.'
+      setRuntimeMessage(message)
       recordLocationAction(locationId, {
         action,
         status: 'error',
-        message: result.message,
+        message,
         timestamp: new Date().toISOString(),
+        started_at: startedAt,
+        duration_seconds: Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000)),
       })
-      return
+    } finally {
+      setNodeActionLoading((current) => ({ ...current, [locationId]: null }))
+      clearActionStartedAt(locationId, action)
+      if (persistedActionKey) clearPendingAction(persistedActionKey, locationId)
+      void refreshActionLocksSnapshot()
     }
-    setNodeViewerEntry(result.node)
-    setNodeActionResults((current) => ({ ...current, [locationId]: result }))
-    const successMessage =
-      result.message ||
-      (action === 'inspect'
-        ? 'Node viewer refreshed.'
-        : action === 'deploy'
-          ? 'Latest node deployed.'
-          : action === 'upgrade'
-            ? 'Node updated to the latest local version.'
-            : result.node.runtime_status === 'running'
-              ? 'Node runtime started.'
-              : 'Node restart command completed.')
-    setRuntimeMessage(successMessage)
-    recordLocationAction(locationId, {
-      action,
-      status: 'ok',
-      message: successMessage,
-      timestamp: new Date().toISOString(),
-    })
   }
 
   function handleCancelRuntimeEdit() {
@@ -462,12 +661,21 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
   }
 
   async function handleRuntimeCheck(locationId: string) {
+    const startedAt = actionStartTimes[actionStartKey(locationId, 'runtime_check')] ?? new Date().toISOString()
     setCheckingRuntimeLocation(locationId)
     setRuntimeMessage(null)
     const result = await runRuntimeCheck(serviceId, { location_id: locationId })
     setCheckingRuntimeLocation(null)
     if (isApiError(result)) {
       setRuntimeMessage(result.message)
+      recordLocationAction(locationId, {
+        action: 'runtime_check',
+        status: 'error',
+        message: result.message,
+        timestamp: new Date().toISOString(),
+        started_at: startedAt,
+        duration_seconds: Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000)),
+      })
       return
     }
     setService((current) =>
@@ -482,15 +690,32 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         : current,
     )
     setRuntimeMessage('Runtime check completed.')
+    recordLocationAction(locationId, {
+      action: 'runtime_check',
+      status: 'ok',
+      message: 'Runtime snapshot refreshed.',
+      timestamp: new Date().toISOString(),
+      started_at: startedAt,
+      duration_seconds: Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000)),
+    })
   }
 
   async function handleSyncFromNode(locationId: string) {
+    const startedAt = actionStartTimes[actionStartKey(locationId, 'sync_from_node')] ?? new Date().toISOString()
     setSyncingFromLocation(locationId)
     setRuntimeMessage(null)
     const result = await syncFromNode(serviceId, { location_id: locationId })
     setSyncingFromLocation(null)
     if (isApiError(result)) {
       setRuntimeMessage(result.message)
+      recordLocationAction(locationId, {
+        action: 'sync_from_node',
+        status: 'error',
+        message: result.message,
+        timestamp: new Date().toISOString(),
+        started_at: startedAt,
+        duration_seconds: Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000)),
+      })
       return
     }
     handleServiceUpdated(result.service)
@@ -503,15 +728,32 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         : result.service,
     )
     setRuntimeMessage('Synced from node.')
+    recordLocationAction(locationId, {
+      action: 'sync_from_node',
+      status: 'ok',
+      message: 'Imported node scope and task ledger.',
+      timestamp: new Date().toISOString(),
+      started_at: startedAt,
+      duration_seconds: Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000)),
+    })
   }
 
   async function handleSyncToNode(locationId: string) {
+    const startedAt = actionStartTimes[actionStartKey(locationId, 'sync_to_node')] ?? new Date().toISOString()
     setSyncingToLocation(locationId)
     setRuntimeMessage(null)
     const result = await syncToNode(serviceId, { location_id: locationId })
     setSyncingToLocation(null)
     if (isApiError(result)) {
       setRuntimeMessage(result.message)
+      recordLocationAction(locationId, {
+        action: 'sync_to_node',
+        status: 'error',
+        message: result.message,
+        timestamp: new Date().toISOString(),
+        started_at: startedAt,
+        duration_seconds: Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000)),
+      })
       return
     }
     setService((current) =>
@@ -523,30 +765,74 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         : current,
     )
     setRuntimeMessage(result.node_manifest_path ? `Synced to node at ${result.node_manifest_path}.` : 'Synced to node.')
+    recordLocationAction(locationId, {
+      action: 'sync_to_node',
+      status: 'ok',
+      message: result.node_manifest_path ? `Synced to node at ${result.node_manifest_path}.` : 'Synced to node.',
+      timestamp: new Date().toISOString(),
+      started_at: startedAt,
+      duration_seconds: Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000)),
+    })
   }
 
-  function initiateAction(actionKey: string, locationId: string) {
+  function initiateAction(actionKey: ConfirmActionKey, locationId: string, details?: ConfirmDetails) {
     setConfirmAction(actionKey)
     setConfirmLocationId(locationId)
+    setConfirmDetails(details ?? null)
     setConfirmOpen(true)
   }
 
   async function handleConfirmAction() {
     if (!confirmAction || !confirmLocationId) return
-    const actionKey = confirmAction
     const locationId = confirmLocationId
-    const compositeKey = `${actionKey}:${locationId}`
-    const sessionKey = `pending:${compositeKey}`
-    
-    sessionStorage.setItem(sessionKey, 'true')
-    setPendingActions(prev => ({ ...prev, [sessionKey]: true }))
     setConfirmOpen(false)
+    setConfirmDetails(null)
+
+    if (confirmAction === 'node_inspect') {
+      await handleNodeAction('inspect', locationId)
+      setConfirmAction(null)
+      setConfirmLocationId(null)
+      return
+    }
+    if (confirmAction === 'node_deploy') {
+      await handleNodeAction('deploy', locationId)
+      setConfirmAction(null)
+      setConfirmLocationId(null)
+      return
+    }
+    if (confirmAction === 'node_upgrade') {
+      await handleNodeAction('upgrade', locationId)
+      setConfirmAction(null)
+      setConfirmLocationId(null)
+      return
+    }
+    if (confirmAction === 'node_restart') {
+      await handleNodeAction('restart', locationId)
+      setConfirmAction(null)
+      setConfirmLocationId(null)
+      return
+    }
+
+    const actionKey = confirmAction as Extract<LocationActionKey, 'runtime_check' | 'sync_from_node' | 'sync_to_node'>
+    const lockKey = ACTION_LOCK_KEY[actionKey]
+    const startedAt = new Date().toISOString()
+
+    markPendingAction(lockKey, locationId, startedAt)
+    recordLocationAction(locationId, {
+      action: actionKey,
+      status: 'running',
+      message: ACTION_META[actionKey].running_label,
+      timestamp: startedAt,
+      started_at: startedAt,
+    })
 
     const lockRes = await acquireActionLock(serviceId, actionKey)
     if (isApiError(lockRes) || lockRes.status !== 'ok') {
       setRuntimeMessage((lockRes as any)?.message || 'Action is already in progress.')
-      sessionStorage.removeItem(sessionKey)
-      setPendingActions(prev => { const next = { ...prev }; delete next[sessionKey]; return next })
+      clearPendingAction(lockKey, locationId)
+      void refreshActionLocksSnapshot()
+      setConfirmAction(null)
+      setConfirmLocationId(null)
       return
     }
 
@@ -560,11 +846,47 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
       }
     } finally {
       await releaseActionLock(serviceId, actionKey)
-      sessionStorage.removeItem(sessionKey)
-      setPendingActions(prev => { const next = { ...prev }; delete next[sessionKey]; return next })
+      clearPendingAction(lockKey, locationId)
+      void refreshActionLocksSnapshot()
       setConfirmAction(null)
       setConfirmLocationId(null)
     }
+  }
+
+  async function openGithubNodeAction(
+    actionKey: 'node_deploy' | 'node_upgrade',
+    locationId: string,
+    fallbackDetails: ConfirmDetails,
+  ) {
+    const release = await getNodeReleaseCheck(serviceId, locationId)
+    if (isApiError(release)) {
+      initiateAction(actionKey, locationId, fallbackDetails)
+      return
+    }
+    const notes = releaseNoteLines(release)
+    const preflight = [
+      ...(fallbackDetails.preflight ?? []),
+      release.latest_version
+        ? `GitHub latest release: ${release.latest_version}${release.published_at ? ` (${new Date(release.published_at).toLocaleString()})` : ''}.`
+        : 'GitHub latest release version was not resolved.',
+      release.current_version
+        ? `Current installed version: ${release.current_version}.`
+        : 'No installed version is recorded yet at this location.',
+      ...(release.message ? [release.message] : []),
+      ...notes.map((line, index) => `Release note ${index + 1}: ${line}`),
+    ]
+    const commandPreview = [
+      ...(fallbackDetails.commandPreview ?? []),
+      release.asset_url ? `GitHub wheel asset: ${release.asset_url}` : '',
+      release.release_url ? `Release page: ${release.release_url}` : '',
+    ].filter(Boolean)
+    const confirmLabel =
+      actionKey === 'node_upgrade'
+        ? release.update_available
+          ? `Update ${release.current_version || 'node'} -> ${release.latest_version} + Restart`
+          : 'Reinstall Current Release + Restart'
+        : `Deploy GitHub ${release.latest_version || 'Release'}`
+    initiateAction(actionKey, locationId, { ...fallbackDetails, preflight, commandPreview, confirmLabel })
   }
 
   function addScopeEntry() {
@@ -914,15 +1236,166 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
               const locationOpen = Boolean(locationPanels[location.location_id])
               const portsValue = location.runtime.expected_ports.join(', ')
               const matchedEnvironments = environmentMatchesByLocation.get(location.location_id) ?? environmentMatchesByLocation.get('__service__') ?? []
+              const apiLabEnvironment = matchedEnvironments[0] ?? null
               const nodeControlLabel = !nodeViewer?.node_present
-                ? 'Deploy Latest Node'
-                : nodeViewer?.needs_upgrade
-                  ? 'Update Node'
-                  : 'Refresh Latest Node'
+                ? 'Deploy From GitHub'
+                : 'Update + Restart'
               const runtimeControlLabel = nodeViewer?.runtime_status === 'running' || nodeViewer?.runtime_status === 'running_unmanaged'
                 ? 'Restart Node'
                 : 'Start Node'
-              const nodeStartCommand = `switchboard node serve --project-root ${location.root} --host 127.0.0.1 --port ${nodeViewer?.runtime_port ?? 8010}`
+              const syncBlocked = nodeViewer?.node_present === true && !nodeViewer.bootstrap_ready
+              const nodePort = nodeViewer?.runtime_port ?? 8010
+              const nodeStartCommand = `switchboard node serve --project-root ${location.root} --host 127.0.0.1 --port ${nodePort}`
+              const nodeManifestPath = `${location.root}/switchboard/node.manifest.json`
+              const runtimePidPath = `${location.root}/switchboard/runtime/node.pid`
+              const runtimeLogPath = `${location.root}/switchboard/runtime/node.log`
+              const runtimeScopePath = `${location.root}/switchboard/evidence/scope.snapshot.json`
+              const inspectCommand = serverShellCommand(serverMeta, `test -f ${quoteShell(nodeManifestPath)} && cat ${quoteShell(nodeManifestPath)}; test -f ${quoteShell(runtimePidPath)} && ps -p "$(cat ${quoteShell(runtimePidPath)})" -o command=; ss -ltnp 2>/dev/null || lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null`)
+              const deployAction = nodeViewer?.node_present ? 'node_upgrade' : 'node_deploy'
+              const deployCommandPreview = serverMeta?.connection_type === 'ssh'
+                ? [
+                    `POST /services/${serviceId}/node/${nodeViewer?.node_present ? 'upgrade' : 'deploy'} {"location_id":"${location.location_id}"}`,
+                    serverShellCommand(serverMeta, `python3 -m venv ${quoteShell(`${location.root}/switchboard/runtime/.venv`)} && ${quoteShell(`${location.root}/switchboard/runtime/.venv/bin/python`)} -m pip install --upgrade <github-release-wheel> && ${quoteShell(`${location.root}/switchboard/runtime/.venv/bin/python`)} -m switchboard.cli node install --project-root ${quoteShell(location.root)} --service-id ${quoteShell(serviceId)} --display-name ${quoteShell(service.display_name)}`),
+                  ]
+                : [
+                    `POST /services/${serviceId}/node/${nodeViewer?.node_present ? 'upgrade' : 'deploy'} {"location_id":"${location.location_id}"}`,
+                    `${location.root}/switchboard/runtime/.venv/bin/python -m pip install --upgrade <github-release-wheel> && ${location.root}/switchboard/runtime/.venv/bin/python -m switchboard.cli node install --project-root ${location.root} --service-id ${serviceId} --display-name ${service.display_name}`,
+                  ]
+              const restartCommandPreview = serverMeta?.connection_type === 'ssh'
+                ? [
+                    `POST /services/${serviceId}/node/restart {"location_id":"${location.location_id}"}`,
+                    serverShellCommand(serverMeta, `if [ -f ${quoteShell(runtimePidPath)} ]; then kill "$(cat ${quoteShell(runtimePidPath)})" 2>/dev/null || true; rm -f ${quoteShell(runtimePidPath)}; fi; nohup ${quoteShell(`${location.root}/switchboard/runtime/.venv/bin/python`)} -m switchboard.cli node serve --project-root ${quoteShell(location.root)} --host 127.0.0.1 --port ${nodePort} >> ${quoteShell(runtimeLogPath)} 2>&1 < /dev/null & echo $! > ${quoteShell(runtimePidPath)}`),
+                  ]
+                : [
+                    `POST /services/${serviceId}/node/restart {"location_id":"${location.location_id}"}`,
+                    `switchboard node restart --project-root ${location.root} --host 127.0.0.1 --port ${nodePort}`,
+                  ]
+              const runtimeCheckCommandPreview = [
+                `POST /services/${serviceId}/runtime/check {"location_id":"${location.location_id}"}`,
+                serverShellCommand(serverMeta, `ss -ltnp 2>/dev/null || lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null`),
+                location.runtime.healthcheck_command
+                  ? serverShellCommand(serverMeta, location.runtime.healthcheck_command)
+                  : 'Health check skipped because no command is configured.',
+              ].filter(Boolean)
+              const syncFromCommandPreview = [
+                `POST /services/${serviceId}/node/sync-from {"location_id":"${location.location_id}"}`,
+                serverShellCommand(serverMeta, `cat ${quoteShell(nodeManifestPath)}; test -f ${quoteShell(runtimeScopePath)} && cat ${quoteShell(runtimeScopePath)}`),
+              ].filter(Boolean)
+              const syncToCommandPreview = [
+                `POST /services/${serviceId}/node/sync-to {"location_id":"${location.location_id}"}`,
+                serverShellCommand(serverMeta, `mkdir -p ${quoteShell(`${location.root}/switchboard/evidence`)} && cat > ${quoteShell(nodeManifestPath)} && cat > ${quoteShell(runtimeScopePath)}`),
+              ].filter(Boolean)
+              const inspectDetails: ConfirmDetails = {
+                preflight: [
+                  serverMeta?.vpn_required ? 'VPN access must already be up for this server.' : 'Server route should already be reachable.',
+                  'This reads node manifest, pid/log state, and active listeners only.',
+                  nodeViewer?.node_present ? `Tracked node manifest already exists at ${nodeManifestPath}.` : 'No tracked node manifest is cached yet; inspect will confirm whether one exists on disk.',
+                ],
+                commandPreview: [`POST /services/${serviceId}/node/inspect {"location_id":"${location.location_id}"}`, inspectCommand].filter(Boolean),
+                followUp: [
+                  'Check the refreshed Node Viewer block for actual runtime port, pid, bootstrap state, and errors.',
+                  'If the node port changed, later restart actions will reuse the discovered port instead of blindly defaulting.',
+                ],
+                confirmLabel: 'Inspect Server State',
+              }
+              const deployDetails: ConfirmDetails = {
+                preflight: [
+                  serverMeta?.vpn_required ? 'VPN access must already be up for this server.' : 'Server route should already be reachable.',
+                  nodeViewer?.node_present ? 'An existing node install was already detected; this action will check GitHub, install the selected latest release, and restart the runtime.' : 'No tracked node install was detected; this will install the latest GitHub release and scaffold the Switchboard node files.',
+                  'Make sure this project root is the correct owner before writing control-center files under switchboard/.',
+                ],
+                commandPreview: deployCommandPreview,
+                followUp: [
+                  nodeViewer?.node_present
+                    ? 'The runtime will come back on the tracked control port after the release install completes.'
+                    : 'Run Inspect Node or Restart Node if you want an immediate runtime start after the first install.',
+                  'Bootstrap can still remain not ready until the first task-ledger/bootstrap write happens.',
+                ],
+                confirmLabel: nodeViewer?.node_present ? 'Update + Restart' : 'Deploy From GitHub',
+              }
+              const restartDetails: ConfirmDetails = {
+                preflight: [
+                  serverMeta?.vpn_required ? 'VPN access must already be up for this server.' : 'Server route should already be reachable.',
+                  `This will reuse the tracked control port ${nodePort} for this node.`,
+                  'Restart only affects this tracked node runtime and its pid/log files.',
+                ],
+                commandPreview: restartCommandPreview,
+                followUp: [
+                  'Check the action timeline for live elapsed time and ETA while restart runs.',
+                  'If restart still fails, inspect node logs immediately from the refreshed Node Viewer.',
+                ],
+                confirmLabel: runtimeControlLabel,
+              }
+              const runtimeCheckDetails: ConfirmDetails = {
+                preflight: [
+                  serverMeta?.vpn_required ? 'VPN access must already be up for this server.' : 'Server route should already be reachable.',
+                  'Snapshot reads listeners, exposure, process ownership, and optional health output.',
+                  location.runtime.healthcheck_command ? 'A health command is configured and will be executed as part of this snapshot.' : 'No health command is configured, so health will stay skipped.',
+                ],
+                commandPreview: runtimeCheckCommandPreview,
+                followUp: [
+                  'Use the refreshed ownership list below to see which tracked service/location each detected port belongs to.',
+                  'Unexpected public listeners should be investigated before any new deploy or restart step.',
+                ],
+                confirmLabel: 'Refresh Runtime Snapshot',
+              }
+              const syncFromDetails: ConfirmDetails = {
+                preflight: [
+                  serverMeta?.vpn_required ? 'VPN access must already be up for this server.' : 'Server route should already be reachable.',
+                  syncBlocked ? 'Bootstrap is still not ready, so sync from node is blocked until the node writes its first bootstrap/task-ledger entry.' : 'Node bootstrap is ready, so manifest and scope data can be imported.',
+                  'This will update control-center records from the selected node location.',
+                ],
+                commandPreview: syncFromCommandPreview,
+                followUp: [
+                  'Review imported runtime config, scope, and managed-doc metadata after the sync completes.',
+                  'If the node is stale, refresh or redeploy it before trusting imported state.',
+                ],
+                confirmLabel: 'Sync From Node',
+              }
+              const syncToDetails: ConfirmDetails = {
+                preflight: [
+                  serverMeta?.vpn_required ? 'VPN access must already be up for this server.' : 'Server route should already be reachable.',
+                  syncBlocked ? 'Bootstrap is still not ready, so sync to node is blocked until the node writes its first bootstrap/task-ledger entry.' : 'Node bootstrap is ready, so scope and runtime metadata can be mirrored.',
+                  'This writes the control-center service scope and runtime metadata into the selected project root.',
+                ],
+                commandPreview: syncToCommandPreview,
+                followUp: [
+                  'Inspect the node again if you want to verify the written manifest and scope snapshot immediately.',
+                  'Use the dedicated API Lab page separately for environment-level runtime review and API flow runs.',
+                ],
+                confirmLabel: 'Sync To Node',
+              }
+              const runtimeCheckPendingKey = pendingSessionKey('runtime_check', location.location_id)
+              const syncFromPendingKey = pendingSessionKey('sync_from_node', location.location_id)
+              const syncToPendingKey = pendingSessionKey('sync_to_node', location.location_id)
+              const nodeDeployPendingKey = pendingSessionKey('node_deploy', location.location_id)
+              const nodeUpgradePendingKey = pendingSessionKey('node_upgrade', location.location_id)
+              const nodeRestartPendingKey = pendingSessionKey('node_restart', location.location_id)
+              const persistedActionKey = (Object.keys(LOCK_KEY_TO_ACTION) as PersistedActionKey[]).find((actionKey) =>
+                Boolean(pendingActions[pendingSessionKey(actionKey, location.location_id)]),
+              ) ?? null
+              const localAction: LocationActionKey | null =
+                nodeAction ??
+                (checkingRuntimeLocation === location.location_id
+                  ? 'runtime_check'
+                  : syncingFromLocation === location.location_id
+                    ? 'sync_from_node'
+                    : syncingToLocation === location.location_id
+                      ? 'sync_to_node'
+                      : null)
+              const activeAction = localAction ?? (persistedActionKey ? LOCK_KEY_TO_ACTION[persistedActionKey] : null)
+              const activeActionStartedAt =
+                activeAction === null
+                  ? null
+                  : actionStartTimes[actionStartKey(location.location_id, activeAction)] ??
+                    (persistedActionKey ? activeLocks[persistedActionKey]?.started_at : null) ??
+                    new Date().toISOString()
+              const activeActionMeta = activeAction ? ACTION_META[activeAction] : null
+              const activeActionProgress =
+                activeAction && activeActionStartedAt && activeActionMeta
+                  ? getActionProgress(activeActionStartedAt, activeActionMeta.eta_seconds, nowMs)
+                  : null
+              const locationBusy = activeAction !== null
               return (
                 <div key={location.location_id} className="rounded-xl border border-gray-800 bg-gray-950 p-4">
                   <div className="flex flex-col gap-3">
@@ -960,93 +1433,117 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                       <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() => handleNodeAction('inspect', location.location_id)}
-                        disabled={offline || nodeAction !== null}
+                        onClick={() => initiateAction('node_inspect', location.location_id, inspectDetails)}
+                        disabled={offline || locationBusy}
                         className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
                       >
-                        {nodeAction === 'inspect' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
-                        {nodeAction === 'inspect' ? 'Inspecting…' : 'Inspect Node'}
+                        {activeAction === 'inspect' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
+                        {activeAction === 'inspect' ? 'Inspecting…' : 'Inspect Node'}
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleNodeAction(nodeViewer?.node_present ? 'upgrade' : 'deploy', location.location_id)}
-                        disabled={offline || nodeAction !== null}
-                        data-attention={nodeViewer?.needs_install || nodeViewer?.needs_upgrade ? 'true' : 'false'}
+                        onClick={() => void openGithubNodeAction(deployAction, location.location_id, deployDetails)}
+                        disabled={offline || locationBusy}
+                        data-attention={nodeViewer?.needs_install ? 'true' : 'false'}
                         className={`inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs transition-colors disabled:opacity-50 ${
-                          nodeViewer?.needs_install || nodeViewer?.needs_upgrade
+                          nodeViewer?.needs_install
                             ? 'border-amber-700 text-amber-200 shadow-[0_0_0_1px_rgba(250,204,21,0.2),0_0_18px_rgba(250,204,21,0.12)]'
                             : 'border-gray-700 text-gray-200 hover:border-cyan-500 hover:text-white'
                         }`}
                       >
-                        {nodeAction === 'deploy' || nodeAction === 'upgrade' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
-                        {nodeAction === 'deploy'
+                        {activeAction === 'deploy' || activeAction === 'upgrade' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
+                        {activeAction === 'deploy'
                           ? 'Deploying…'
-                          : nodeAction === 'upgrade'
-                            ? 'Updating…'
+                          : activeAction === 'upgrade'
+                            ? 'Updating + Restarting…'
                             : nodeControlLabel}
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleNodeAction('restart', location.location_id)}
-                        disabled={offline || !nodeViewer?.node_present || nodeAction !== null}
+                        onClick={() => initiateAction('node_restart', location.location_id, restartDetails)}
+                        disabled={offline || !nodeViewer?.node_present || locationBusy}
                         className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
                       >
-                        {nodeAction === 'restart' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
-                        {nodeAction === 'restart' ? `${runtimeControlLabel === 'Start Node' ? 'Starting' : 'Restarting'}…` : runtimeControlLabel}
+                        {activeAction === 'restart' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
+                        {activeAction === 'restart' ? `${runtimeControlLabel === 'Start Node' ? 'Starting' : 'Restarting'}…` : runtimeControlLabel}
                       </button>
                       <button
                         type="button"
-                        onClick={() => initiateAction('runtime_check', location.location_id)}
-                        disabled={offline || checkingRuntimeLocation === location.location_id || pendingActions[`pending:runtime_check:${location.location_id}`]}
+                        onClick={() => initiateAction('runtime_check', location.location_id, runtimeCheckDetails)}
+                        disabled={offline || locationBusy}
                         className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
                       >
-                        <RefreshCw className={`h-3.5 w-3.5 ${checkingRuntimeLocation === location.location_id || pendingActions[`pending:runtime_check:${location.location_id}`] ? 'animate-spin' : ''}`} />
-                        {checkingRuntimeLocation === location.location_id || pendingActions[`pending:runtime_check:${location.location_id}`] ? 'Refreshing…' : 'Refresh Snapshot'}
+                        <RefreshCw className={`h-3.5 w-3.5 ${checkingRuntimeLocation === location.location_id || pendingActions[runtimeCheckPendingKey] ? 'animate-spin' : ''}`} />
+                        {checkingRuntimeLocation === location.location_id || pendingActions[runtimeCheckPendingKey] ? 'Refreshing…' : 'Refresh Snapshot'}
                       </button>
                       <button
                         type="button"
-                        onClick={() => matchedEnvironments[0] && onOpenEnvironmentLab(matchedEnvironments[0].environment_id)}
-                        disabled={matchedEnvironments.length === 0}
-                        className="inline-flex items-center gap-1 rounded-lg border border-cyan-900/40 bg-cyan-950/20 px-3 py-2 text-xs text-cyan-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
+                        onClick={() => initiateAction('sync_from_node', location.location_id, syncFromDetails)}
+                        disabled={offline || locationBusy || syncBlocked}
+                        className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
                       >
-                        Open API Lab
+                        {syncingFromLocation === location.location_id || pendingActions[syncFromPendingKey] ? 'Syncing…' : 'Sync From Node'}
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleSyncFromNode(location.location_id)}
-                        disabled={offline || syncingFromLocation === location.location_id || (nodeViewer?.node_present === true && !nodeViewer.bootstrap_ready)}
+                        onClick={() => initiateAction('sync_to_node', location.location_id, syncToDetails)}
+                        disabled={offline || locationBusy || syncBlocked}
                         className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
                       >
-                        {syncingFromLocation === location.location_id ? 'Syncing…' : 'Sync From Node'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSyncToNode(location.location_id)}
-                        disabled={offline || syncingToLocation === location.location_id || (nodeViewer?.node_present === true && !nodeViewer.bootstrap_ready)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
-                      >
-                        {syncingToLocation === location.location_id ? 'Syncing…' : 'Sync To Node'}
+                        {syncingToLocation === location.location_id || pendingActions[syncToPendingKey] ? 'Syncing…' : 'Sync To Node'}
                       </button>
                     </div>
                     </div>
 
-                    {(nodeAction !== null || recentLocationEvents.length > 0) && (
+                    {nodeViewer?.needs_bootstrap && (
+                      <div className="rounded-xl border border-amber-700/40 bg-amber-950/20 p-3">
+                        <div className="text-xs uppercase tracking-[0.16em] text-amber-300">Bootstrap Still Missing</div>
+                        <div className="mt-1 text-sm text-amber-100">
+                          The node runtime is up, but bootstrap metadata has not been written yet.
+                        </div>
+                        <div className="mt-2 text-xs text-amber-200/80">
+                          Current state: install {nodeViewer.installed_version || 'not installed'} · runtime {nodeViewer.runtime_status} · bootstrap not ready. Sync actions stay blocked until the first task-ledger/bootstrap entry is produced.
+                        </div>
+                      </div>
+                    )}
+
+                    {(activeAction !== null || recentLocationEvents.length > 0) && (
                       <div className="rounded-xl border border-gray-800 bg-gray-900/70 p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Button Activity</div>
-                          {nodeAction !== null && (
+                          <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Action Timeline</div>
+                          {activeAction !== null && activeActionMeta && activeActionProgress && activeActionStartedAt && (
                             <div className="inline-flex items-center gap-2 rounded-full border border-cyan-900/40 bg-cyan-950/20 px-2 py-1 text-[11px] uppercase tracking-[0.14em] text-cyan-200">
                               <LoaderCircle className="h-3 w-3 animate-spin" />
-                              {nodeAction === 'inspect'
-                                ? 'Inspect in progress'
-                                : nodeAction === 'deploy'
-                                  ? 'Deploy in progress'
-                                  : nodeAction === 'upgrade'
-                                    ? 'Update in progress'
-                                    : 'Start / restart in progress'}
+                              {activeActionMeta.running_label}
                             </div>
                           )}
                         </div>
+                        {activeAction !== null && activeActionMeta && activeActionProgress && activeActionStartedAt && (
+                          <div className="mt-3 rounded-lg border border-cyan-900/30 bg-cyan-950/20 p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-cyan-100">
+                              <div>{activeActionMeta.running_label}</div>
+                              <div className="text-xs text-cyan-100/70">
+                                Started {new Date(activeActionStartedAt).toLocaleTimeString()} · elapsed {formatDurationLabel(activeActionProgress.elapsedSeconds)}
+                              </div>
+                            </div>
+                            <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-900">
+                              <div
+                                className="h-full rounded-full bg-cyan-400 transition-[width]"
+                                style={{ width: `${Math.max(8, activeActionProgress.percent)}%` }}
+                              />
+                            </div>
+                            <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-400">
+                              <span>
+                                {activeActionProgress.overrunSeconds > 0
+                                  ? `Past estimate by ${formatDurationLabel(activeActionProgress.overrunSeconds)}`
+                                  : `ETA about ${formatDurationLabel(activeActionProgress.remainingSeconds)} remaining`}
+                              </span>
+                              {persistedActionKey && activeLocks[persistedActionKey]?.expires_at && (
+                                <span>Lock expires {new Date(activeLocks[persistedActionKey].expires_at).toLocaleTimeString()}</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
                         <div className="mt-3 space-y-2">
                           {recentLocationEvents.map((event, index) => (
                             <div key={`${event.timestamp}:${event.action}:${index}`} className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-gray-800 bg-black/20 px-3 py-2 text-xs">
@@ -1061,6 +1558,9 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                                   {event.action.split('_').join(' ')}
                                 </div>
                                 <div className="mt-1 text-gray-300">{event.message}</div>
+                                {event.duration_seconds !== undefined && (
+                                  <div className="mt-1 text-gray-500">Duration {formatDurationLabel(event.duration_seconds)}</div>
+                                )}
                               </div>
                               <div className="text-gray-500">{new Date(event.timestamp).toLocaleTimeString()}</div>
                             </div>
@@ -1068,6 +1568,36 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                         </div>
                       </div>
                     )}
+
+                    <div className="rounded-xl border border-cyan-900/40 bg-cyan-950/20 p-3">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <div className="text-xs uppercase tracking-[0.16em] text-cyan-300">Dedicated API Lab</div>
+                          {apiLabEnvironment ? (
+                            <>
+                              <div className="mt-1 text-sm text-cyan-100">
+                                {apiLabEnvironment.display_name} opens as its own full-page environment viewer.
+                              </div>
+                              <div className="mt-1 text-xs text-cyan-100/70">
+                                Use it for runtime snapshots, API flows, dependency review, and run history outside this runtime card.
+                              </div>
+                            </>
+                          ) : (
+                            <div className="mt-1 text-sm text-cyan-100/80">
+                              No project environment is linked to this location yet. Add one in Projects &amp; Environments to unlock the dedicated API Lab page.
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => apiLabEnvironment && onOpenEnvironmentLab(apiLabEnvironment.environment_id)}
+                          disabled={!apiLabEnvironment}
+                          className="inline-flex items-center gap-1 rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100 transition-colors hover:border-cyan-400 hover:text-white disabled:opacity-50"
+                        >
+                          Open Full Page
+                        </button>
+                      </div>
+                    </div>
 
                     {locationOpen && (
                       <>
@@ -1243,6 +1773,36 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                           <div>
                             <span className="text-gray-500">Node present:</span> {latestRuntime.node_present ? 'yes' : 'no'}
                           </div>
+                          {latestRuntime.process_findings && latestRuntime.process_findings.length > 0 && (
+                            <div className="rounded-lg border border-gray-800 bg-black/20 p-2">
+                              <div className="text-xs uppercase tracking-[0.14em] text-gray-500">Port ownership</div>
+                              <div className="mt-2 space-y-2">
+                                {latestRuntime.process_findings.map((finding, index) => {
+                                  const exposure = latestRuntime.exposed_ports?.find((entry) => entry.port === finding.port)
+                                  const ownerLabel = finding.owner_display_name || finding.owner_root || finding.process_name || 'Untracked process'
+                                  return (
+                                    <div key={`${finding.port ?? 'na'}:${finding.pid ?? index}`} className="rounded-lg border border-gray-800 px-3 py-2">
+                                      <div className="flex flex-wrap items-center gap-2 text-sm text-gray-200">
+                                        <span className="font-mono text-cyan-300">:{finding.port ?? 'unknown'}</span>
+                                        <span>{ownerLabel}</span>
+                                        {exposure && (
+                                          <span className="rounded-full border border-gray-700 bg-gray-900 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-gray-300">
+                                            {exposure.exposure}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="mt-1 text-xs text-gray-500">
+                                        {finding.owner_service_id ? `service ${finding.owner_service_id}` : finding.process_name || 'unknown process'}
+                                        {finding.owner_root ? ` · ${finding.owner_root}` : ''}
+                                        {finding.pid ? ` · pid ${finding.pid}` : ''}
+                                        {finding.bind_address ? ` · ${finding.bind_address}` : ''}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )}
                           {latestRuntime.exposed_ports && latestRuntime.exposed_ports.length > 0 && (
                             <div>
                               <span className="text-gray-500">Exposed ports:</span>{' '}
@@ -1726,8 +2286,17 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
           willDo={ACTION_EXPLAIN[confirmAction].happens}
           willNotChange={ACTION_EXPLAIN[confirmAction].untouched}
           writesTo={ACTION_EXPLAIN[confirmAction].writesTo}
+          preflight={confirmDetails?.preflight}
+          followUp={confirmDetails?.followUp}
+          commandPreview={confirmDetails?.commandPreview}
+          confirmLabel={confirmDetails?.confirmLabel}
           onConfirm={handleConfirmAction}
-          onCancel={() => setConfirmOpen(false)}
+          onCancel={() => {
+            setConfirmOpen(false)
+            setConfirmAction(null)
+            setConfirmLocationId(null)
+            setConfirmDetails(null)
+          }}
         />
       )}
     </div>

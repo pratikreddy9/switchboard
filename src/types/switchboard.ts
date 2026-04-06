@@ -337,6 +337,10 @@ export interface ProcessFinding {
   pid?: number
   state: string
   raw: string
+  owner_service_id: string
+  owner_display_name: string
+  owner_location_id: string
+  owner_root: string
 }
 
 export interface PortExposureFinding {
@@ -793,6 +797,7 @@ export interface RuntimeCheckResult {
   source?: string
   firewall_status?: string
   unexpected_ports?: number[]
+  process_findings?: ProcessFinding[]
   exposed_ports?: PortExposureFinding[]
   operator_commands?: OperatorCommand[]
 }
@@ -876,6 +881,19 @@ export interface NodeActionResult {
   node: NodeViewerEntry
   before?: NodeViewerEntry
   after?: NodeViewerEntry
+  message?: string
+  release?: NodeReleaseCheck
+}
+
+export interface NodeReleaseCheck {
+  status: CollectStatus
+  current_version: string
+  latest_version: string
+  update_available: boolean
+  published_at?: string
+  release_url?: string
+  asset_url?: string
+  notes?: string
   message?: string
 }
 

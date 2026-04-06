@@ -53,6 +53,7 @@ import type {
   ScopeEntry,
   ManagedDocConfig,
   NodeActionResult,
+  NodeReleaseCheck,
   NodeViewerEntry,
   Workspace,
   WorkspaceLatest,
@@ -253,6 +254,7 @@ function normalizeRuntimeCheck(result: any): RuntimeCheckResult {
     source: result.source,
     firewall_status: result.firewall_status ?? 'unverified',
     unexpected_ports: Array.isArray(result.unexpected_ports) ? result.unexpected_ports.map((port: unknown) => Number(port)).filter((port: number) => Number.isFinite(port)) : [],
+    process_findings: (result.process_findings ?? []).map(normalizeProcessFinding),
     exposed_ports: (result.exposed_ports ?? []).map(normalizePortExposureFinding),
     operator_commands: (result.operator_commands ?? []).map(normalizeOperatorCommand),
   }
@@ -266,6 +268,10 @@ function normalizeProcessFinding(result: any): ProcessFinding {
     pid: typeof result?.pid === 'number' ? result.pid : result?.pid ? Number(result.pid) : undefined,
     state: result?.state ?? '',
     raw: result?.raw ?? '',
+    owner_service_id: result?.owner_service_id ?? '',
+    owner_display_name: result?.owner_display_name ?? '',
+    owner_location_id: result?.owner_location_id ?? '',
+    owner_root: result?.owner_root ?? '',
   }
 }
 
@@ -287,6 +293,20 @@ function normalizeOperatorCommand(result: any): OperatorCommand {
     label: result?.label ?? '',
     command: result?.command ?? '',
     notes: result?.notes ?? '',
+  }
+}
+
+function normalizeNodeReleaseCheck(result: any): NodeReleaseCheck {
+  return {
+    status: result?.status ?? 'unverified',
+    current_version: result?.current_version ?? '',
+    latest_version: result?.latest_version ?? '',
+    update_available: Boolean(result?.update_available),
+    published_at: result?.published_at ?? '',
+    release_url: result?.release_url ?? '',
+    asset_url: result?.asset_url ?? '',
+    notes: result?.notes ?? '',
+    message: result?.message ?? '',
   }
 }
 
@@ -826,6 +846,7 @@ export const deployNode = (
       before: res.before ? normalizeNodeViewer(res.before) : undefined,
       after: res.after ? normalizeNodeViewer(res.after) : undefined,
       message: res.message,
+      release: res.release ? normalizeNodeReleaseCheck(res.release) : undefined,
     }
   })
 
@@ -843,6 +864,7 @@ export const upgradeNode = (
       before: res.before ? normalizeNodeViewer(res.before) : undefined,
       after: res.after ? normalizeNodeViewer(res.after) : undefined,
       message: res.message,
+      release: res.release ? normalizeNodeReleaseCheck(res.release) : undefined,
     }
   })
 
@@ -860,8 +882,18 @@ export const restartNode = (
       before: res.before ? normalizeNodeViewer(res.before) : undefined,
       after: res.after ? normalizeNodeViewer(res.after) : undefined,
       message: res.message,
+      release: res.release ? normalizeNodeReleaseCheck(res.release) : undefined,
     }
   })
+
+export const getNodeReleaseCheck = (
+  id: string,
+  locationId?: string,
+): Promise<ApiResult<NodeReleaseCheck>> =>
+  apiFetch<any>(`/services/${id}/actions/node-release-check`, {
+    method: 'POST',
+    body: JSON.stringify({ location_id: locationId }),
+  }).then((res) => (isApiError(res) ? res : normalizeNodeReleaseCheck(res)))
 
 export const createPullBundle = (
   id: string,

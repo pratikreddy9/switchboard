@@ -21,12 +21,13 @@ export const TECH_STACK_LINES = [
 
 export const HOW_TO_USE_LINES = [
   'Pick a company, then run Collect to refresh ports, repo state, docs, and logs.',
-  'Use Add Project to open one root path, expand the tree, and uncheck dump paths you do not want.',
+  'Use Add Service to open one root path, expand the tree, and uncheck dump paths you do not want.',
   'Category rules are simple: repo, doc, log, or exclude. You can override the auto-suggestion.',
   'Create service saves the chosen scope and per-location runtime config into the manifest.',
+  'Use Projects & Environments to group tracked services into business projects and attach dev/test/staging/prod views.',
   'Servers belong to a company and can be marked VPN-required plus either native-agent or local-bundle-only.',
   'Pull Bundles create a new timestamped local copy while preserving the source tree.',
-  'Service detail pages now handle runtime snapshots plus Sync From Node, Sync To Node, and environment API Lab entry points.',
+  'Service detail pages now handle runtime snapshots plus Sync From Node, Sync To Node, and dedicated environment API Lab entry points.',
   'Node-side agents should read switchboard/core/playbook.md and update only switchboard/local/tasks-completed.md.',
   'Managed root docs like README.md, API.md, and CHANGELOG.md are opt-in and controlled from the service page.',
   'Repo actions stay per service: git status, safety check, git pull, git push.',

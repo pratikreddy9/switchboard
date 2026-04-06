@@ -332,13 +332,25 @@ def _tasks_completed_template() -> str:
 
 
 def _node_start_script(project_root: Path) -> str:
-    default_port = "8010"
     return f"""#!/bin/bash
 set -euo pipefail
 
 PROJECT_ROOT="{project_root}"
 DEFAULT_HOST="127.0.0.1"
-DEFAULT_PORT="{default_port}"
+DEFAULT_PORT="$(python3 - <<'PY'
+import json
+from pathlib import Path
+
+manifest_path = Path(r"{project_root}") / "switchboard" / "node.manifest.json"
+default_port = 8010
+try:
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    value = payload.get("runtime_port", default_port)
+    print(int(value))
+except Exception:
+    print(default_port)
+PY
+)"
 
 echo "Switchboard Node"
 echo "Project root: $PROJECT_ROOT"
@@ -419,6 +431,7 @@ def _manifest_payload(project_root: Path, service_id: str, display_name: str, ex
         "project_root": str(project_root),
         "mode": "node",
         "installed_version": __version__,
+        "runtime_port": int(existing.get("runtime_port", 8010) or 8010),
         "repo_paths": existing.get("repo_paths", [str(project_root)]),
         "docs_paths": docs_paths,
         "log_paths": existing.get("log_paths", []),

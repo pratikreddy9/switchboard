@@ -194,7 +194,7 @@ export function WorkspacePage({ workspaceId, offline, onSelectService, onOpenEnv
         <div className="text-gray-500 text-sm">Loading…</div>
       ) : services.length === 0 ? (
         <div className="rounded-xl border border-dashed border-gray-800 bg-gray-900 px-4 py-6 text-gray-500 text-sm italic">
-          No services found. {offline ? 'Backend offline.' : 'Use Add Project to seed this workspace manually.'}
+          No services found. {offline ? 'Backend offline.' : 'Use Add Service to seed this workspace manually.'}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

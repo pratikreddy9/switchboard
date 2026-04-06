@@ -437,6 +437,13 @@ def node_inspect(service_id: str, request: NodeActionRequest) -> dict[str, objec
     return result
 
 
+@app.post("/api/services/{service_id}/actions/node-release-check")
+def node_release_check(service_id: str, request: NodeActionRequest) -> dict[str, object]:
+    result = coordinator.node_release_check(service_id, request)
+    _raise_for_action_result(result)
+    return result
+
+
 @app.post("/api/services/{service_id}/actions/node-deploy")
 def node_deploy(service_id: str, request: NodeActionRequest) -> dict[str, object]:
     result = coordinator.node_deploy(service_id, request)
