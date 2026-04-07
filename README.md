@@ -1,12 +1,12 @@
 # Switchboard
 
-Switchboard is a control-center-first framework for tracking services, servers, projects, project environments, bundle pulls, node state, and agent-generated system context from one canonical node file:
+Switchboard is a project-first control center for tracking services, servers, projects, project environments, bundle pulls, node state, and agent-generated system context from one canonical node file:
 
 ```text
 switchboard/local/tasks-completed.md
 ```
 
-Current release: `1.12.1`
+Current release: `1.12.2`
 
 ## What 1.10.0 Adds
 

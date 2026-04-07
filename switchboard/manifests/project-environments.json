@@ -10,11 +10,28 @@
         "location_id": "sys_docs-pesu_dev_47-primary",
         "server_id": "pesu_dev_47",
         "root": "/home/pesu/sys_docs",
-        "version": "1.12.0",
-        "runtime_services": [],
+        "version": "1.12.1",
+        "runtime_services": [
+          {
+            "name": "switchboard-node",
+            "host": "127.0.0.1",
+            "port": 8701,
+            "purpose": "project-local Switchboard node API",
+            "health_path": "/api/health",
+            "owner": ""
+          },
+          {
+            "name": "sysdocs-dashboard",
+            "host": "127.0.0.1",
+            "port": 8550,
+            "purpose": "Streamlit dashboard for server inventory and status",
+            "health_path": "/_stcore/health",
+            "owner": ""
+          }
+        ],
         "dependencies": [],
         "cross_dependencies": [],
-        "notes": "Switchboard node and repo runtime on the .47 host."
+        "notes": "The node API on 8701 is the local verification surface for this project. The optional dashboard on 8550 is started separately with `bash dashboard/start.sh`."
       }
     ],
     "tags": [
@@ -35,11 +52,80 @@
         "location_id": "aichat-pesu_dev_47-primary",
         "server_id": "pesu_dev_47",
         "root": "/home/pesu/aichat",
-        "version": "1.12.0",
-        "runtime_services": [],
-        "dependencies": [],
-        "cross_dependencies": [],
-        "notes": "Backend API on 8506, auxiliary dashboard on 8505, node on 8702."
+        "version": "1.12.1",
+        "runtime_services": [
+          {
+            "name": "switchboard-node",
+            "host": "127.0.0.1",
+            "port": 8702,
+            "purpose": "project-local Switchboard node API",
+            "health_path": "/api/health",
+            "owner": ""
+          },
+          {
+            "name": "aichat-backend",
+            "host": "127.0.0.1",
+            "port": 8506,
+            "purpose": "primary chat and retrieval FastAPI backend",
+            "health_path": "/health",
+            "owner": ""
+          },
+          {
+            "name": "token-usage-dashboard",
+            "host": "127.0.0.1",
+            "port": 8505,
+            "purpose": "auxiliary Streamlit dashboard for token tracking",
+            "health_path": "/_stcore/health",
+            "owner": ""
+          }
+        ],
+        "dependencies": [
+          {
+            "kind": "database",
+            "name": "milvus",
+            "host": "127.0.0.1",
+            "port": 19530,
+            "notes": "vector store for retrieval over `documentdb` and `documentdb_v2`"
+          },
+          {
+            "kind": "service",
+            "name": "mysql",
+            "host": "",
+            "port": null,
+            "notes": "conversation, document metadata, analytics, and test persistence"
+          },
+          {
+            "kind": "service",
+            "name": "keycloak",
+            "host": "",
+            "port": null,
+            "notes": "JWT and role-based access control"
+          },
+          {
+            "kind": "api",
+            "name": "openai",
+            "host": "api.openai.com",
+            "port": 443,
+            "notes": "LLM, query expansion, and generation support"
+          }
+        ],
+        "cross_dependencies": [
+          {
+            "kind": "service",
+            "name": "aichat_test",
+            "host": "127.0.0.1",
+            "port": 8504,
+            "notes": "separate sibling test frontend that targets the live backend on 8506"
+          },
+          {
+            "kind": "service",
+            "name": "aichat_ingestion",
+            "host": "127.0.0.1",
+            "port": 8709,
+            "notes": "separate sibling ingestion node rooted in `/home/pesu/aichat_test/project` that writes extracted assets and Milvus corpora used by aichat retrieval"
+          }
+        ],
+        "notes": "Main chat backend is on 8506. Auxiliary token dashboard is on 8505. The Switchboard node on 8702 is the local verification surface for this project."
       }
     ],
     "tags": [
@@ -60,11 +146,65 @@
         "location_id": "aichat_test-pesu_dev_47-primary",
         "server_id": "pesu_dev_47",
         "root": "/home/pesu/aichat_test",
-        "version": "1.12.0",
-        "runtime_services": [],
-        "dependencies": [],
-        "cross_dependencies": [],
-        "notes": "Node is always on; app surface is intentionally down on this host."
+        "version": "1.12.1",
+        "runtime_services": [
+          {
+            "name": "switchboard-node",
+            "host": "127.0.0.1",
+            "port": 8708,
+            "purpose": "project-local Switchboard node API",
+            "health_path": "/api/health",
+            "owner": ""
+          },
+          {
+            "name": "aichat-test-frontend",
+            "host": "127.0.0.1",
+            "port": 8504,
+            "purpose": "separate Streamlit test frontend for the aichat backend",
+            "health_path": "/",
+            "owner": ""
+          }
+        ],
+        "dependencies": [
+          {
+            "kind": "service",
+            "name": "aichat",
+            "host": "127.0.0.1",
+            "port": 8506,
+            "notes": "live backend used by the test frontend"
+          },
+          {
+            "kind": "service",
+            "name": "keycloak",
+            "host": "",
+            "port": null,
+            "notes": "auth flow shared with the aichat environment"
+          },
+          {
+            "kind": "runtime",
+            "name": "shared-venv",
+            "host": "/home/pesu/aichat/project/venv",
+            "port": null,
+            "notes": "frontend launch currently reuses the aichat virtualenv"
+          }
+        ],
+        "cross_dependencies": [
+          {
+            "kind": "service",
+            "name": "aichat",
+            "host": "127.0.0.1",
+            "port": 8506,
+            "notes": "separate sibling service; keep the main backend and this test frontend unmerged"
+          },
+          {
+            "kind": "service",
+            "name": "aichat_ingestion",
+            "host": "127.0.0.1",
+            "port": 8709,
+            "notes": "separate sibling node under `/home/pesu/aichat_test/project` that owns ingestion scripts, extracted assets, mappings, and ingestion logs"
+          }
+        ],
+        "notes": "The Switchboard node on 8708 is always kept up. The Streamlit frontend on 8504 is intentionally left down by default on this host."
       }
     ],
     "tags": [
@@ -85,11 +225,43 @@
         "location_id": "compareanswers-pesu_dev_47-primary",
         "server_id": "pesu_dev_47",
         "root": "/home/pesu/compareanswers",
-        "version": "1.12.0",
-        "runtime_services": [],
-        "dependencies": [],
+        "version": "1.12.1",
+        "runtime_services": [
+          {
+            "name": "switchboard-node",
+            "host": "127.0.0.1",
+            "port": 8703,
+            "purpose": "project-local Switchboard node API",
+            "health_path": "/api/health",
+            "owner": ""
+          },
+          {
+            "name": "compareanswers-api",
+            "host": "127.0.0.1",
+            "port": 8507,
+            "purpose": "live answer-scoring API for compare, score, stats, and vector-match flows",
+            "health_path": "/health",
+            "owner": ""
+          }
+        ],
+        "dependencies": [
+          {
+            "kind": "runtime",
+            "name": "sentence-transformers",
+            "host": "local",
+            "port": null,
+            "notes": "semantic embedding model path used for scoring and vector-match workflows"
+          },
+          {
+            "kind": "library",
+            "name": "rapidfuzz",
+            "host": "local",
+            "port": null,
+            "notes": "fuzzy matching and scoring support"
+          }
+        ],
         "cross_dependencies": [],
-        "notes": "Primary API surface on 8507 and node on 8703."
+        "notes": "The Switchboard node on 8703 is the local verification surface for this project. The live compareanswers app surface is the Flask API on 8507."
       }
     ],
     "tags": [
@@ -102,7 +274,7 @@
   {
     "environment_id": "ingest_service_prod",
     "project_id": "ingest_service_project",
-    "display_name": "ingest-service-prod",
+    "display_name": "process-documents-prod",
     "kind": "prod",
     "deployments": [
       {
@@ -110,11 +282,74 @@
         "location_id": "ingest_service-pesu_dev_47-primary",
         "server_id": "pesu_dev_47",
         "root": "/home/pesu/process documents",
-        "version": "1.12.0",
-        "runtime_services": [],
-        "dependencies": [],
+        "version": "1.12.1",
+        "runtime_services": [
+          {
+            "name": "switchboard-node",
+            "host": "127.0.0.1",
+            "port": 8705,
+            "purpose": "project-local Switchboard node API",
+            "health_path": "/api/health",
+            "owner": ""
+          },
+          {
+            "name": "process-chat-api",
+            "host": "127.0.0.1",
+            "port": 8000,
+            "purpose": "global and process-specific chat API layer",
+            "health_path": "/health",
+            "owner": ""
+          },
+          {
+            "name": "process-chat-ui",
+            "host": "127.0.0.1",
+            "port": 8503,
+            "purpose": "primary Streamlit interface for process chat",
+            "health_path": "/_stcore/health",
+            "owner": ""
+          },
+          {
+            "name": "ingestion-worker",
+            "host": "127.0.0.1",
+            "port": 8099,
+            "purpose": "ingestion into Milvus-backed process collections",
+            "health_path": "/docs",
+            "owner": ""
+          },
+          {
+            "name": "process-ops-ui",
+            "host": "127.0.0.1",
+            "port": 8508,
+            "purpose": "auxiliary Streamlit surface in the same project root",
+            "health_path": "/_stcore/health",
+            "owner": ""
+          }
+        ],
+        "dependencies": [
+          {
+            "kind": "database",
+            "name": "milvus",
+            "host": "127.0.0.1",
+            "port": 19530,
+            "notes": "vector store for process knowledge-base and ingestion targets"
+          },
+          {
+            "kind": "service",
+            "name": "ollama",
+            "host": "192.168.3.47",
+            "port": 11434,
+            "notes": "embeddings endpoint used by `ingest_service.py`"
+          },
+          {
+            "kind": "api",
+            "name": "openai",
+            "host": "api.openai.com",
+            "port": 443,
+            "notes": "default model path for the process chat API and Streamlit UI"
+          }
+        ],
         "cross_dependencies": [],
-        "notes": "Node on 8705, chat API on 8000, main UI on 8503, ingest API on 8099, ops UI on 8508."
+        "notes": "The Switchboard node on 8705 is the local verification surface for this project. The chat API on 8000 and the ingest service on 8099 are separate runtime layers within the same project root."
       }
     ],
     "tags": [
@@ -122,7 +357,7 @@
       ".47",
       "runtime"
     ],
-    "notes": "Production environment for ingest_service on the .47 runtime host."
+    "notes": "Production environment for process documents on the .47 runtime host."
   },
   {
     "environment_id": "emailagent_prod",
@@ -135,11 +370,58 @@
         "location_id": "emailagent-pesu_dev_47-primary",
         "server_id": "pesu_dev_47",
         "root": "/home/pesu/emailagent",
-        "version": "1.12.0",
-        "runtime_services": [],
-        "dependencies": [],
+        "version": "1.12.1",
+        "runtime_services": [
+          {
+            "name": "switchboard-node",
+            "host": "127.0.0.1",
+            "port": 8704,
+            "purpose": "project-local Switchboard node API",
+            "health_path": "/api/health",
+            "owner": ""
+          },
+          {
+            "name": "email-poller",
+            "host": "127.0.0.1",
+            "port": 0,
+            "purpose": "Gmail polling and classification process started with `python -m src.main`",
+            "health_path": "",
+            "owner": ""
+          },
+          {
+            "name": "pes-backend",
+            "host": "127.0.0.1",
+            "port": 8010,
+            "purpose": "optional repo-local backend surface used by the EOD stack",
+            "health_path": "/health",
+            "owner": ""
+          }
+        ],
+        "dependencies": [
+          {
+            "kind": "database",
+            "name": "mysql",
+            "host": "192.168.3.33",
+            "port": 3306,
+            "notes": "stores support email classifications and reply state according to the README example env"
+          },
+          {
+            "kind": "api",
+            "name": "gmail",
+            "host": "gmail.googleapis.com",
+            "port": 443,
+            "notes": "inbox polling, labels, and replies"
+          },
+          {
+            "kind": "api",
+            "name": "openai",
+            "host": "api.openai.com",
+            "port": 443,
+            "notes": "classification and reply-generation support"
+          }
+        ],
         "cross_dependencies": [],
-        "notes": "Node on 8704; primary live workload is the poller process. Optional backend on 8010 remains inactive."
+        "notes": "The Switchboard node on 8704 is the local verification surface for this project. The Gmail poller is the main runtime; the repo-local backend on 8010 is optional."
       }
     ],
     "tags": [
@@ -160,11 +442,57 @@
         "location_id": "adminchat-pesu_dev_47-primary",
         "server_id": "pesu_dev_47",
         "root": "/home/pesu/adminchat",
-        "version": "1.12.0",
-        "runtime_services": [],
-        "dependencies": [],
+        "version": "1.12.1",
+        "runtime_services": [
+          {
+            "name": "switchboard-node",
+            "host": "127.0.0.1",
+            "port": 8706,
+            "purpose": "project-local Switchboard node API",
+            "health_path": "/api/health",
+            "owner": ""
+          },
+          {
+            "name": "adminchat-batch-pipeline",
+            "host": "127.0.0.1",
+            "port": 0,
+            "purpose": "PDF extraction and embedding pipeline rooted in `project/main.py`",
+            "health_path": "",
+            "owner": ""
+          }
+        ],
+        "dependencies": [
+          {
+            "kind": "database",
+            "name": "milvus",
+            "host": "127.0.0.1",
+            "port": 19530,
+            "notes": "vector store for extracted adminchat content"
+          },
+          {
+            "kind": "service",
+            "name": "ollama",
+            "host": "127.0.0.1",
+            "port": 11434,
+            "notes": "embeddings endpoint used by `project/embeddings.py`"
+          },
+          {
+            "kind": "api",
+            "name": "openai",
+            "host": "api.openai.com",
+            "port": 443,
+            "notes": "image interpretation and generation support"
+          },
+          {
+            "kind": "api",
+            "name": "adobe-pdf-services",
+            "host": "",
+            "port": null,
+            "notes": "PDF extraction API used by `project/extract_data.py`"
+          }
+        ],
         "cross_dependencies": [],
-        "notes": "Node is always on; app surfaces are not modeled as always-on listeners."
+        "notes": "The Switchboard node on 8706 is the local verification surface for this project. The pipeline itself is batch-oriented and intentionally not modeled as an always-on HTTP app."
       }
     ],
     "tags": [
@@ -185,11 +513,50 @@
         "location_id": "rag-pesu_dev_47-primary",
         "server_id": "pesu_dev_47",
         "root": "/home/pesu/RAG",
-        "version": "1.12.0",
-        "runtime_services": [],
-        "dependencies": [],
+        "version": "1.12.1",
+        "runtime_services": [
+          {
+            "name": "switchboard-node",
+            "host": "127.0.0.1",
+            "port": 8707,
+            "purpose": "project-local Switchboard node API",
+            "health_path": "/api/health",
+            "owner": ""
+          },
+          {
+            "name": "rag-local-app",
+            "host": "127.0.0.1",
+            "port": 0,
+            "purpose": "optional local RAG app rooted in `RAG_Local/app.py`",
+            "health_path": "",
+            "owner": ""
+          }
+        ],
+        "dependencies": [
+          {
+            "kind": "database",
+            "name": "chroma",
+            "host": "local filesystem",
+            "port": null,
+            "notes": "local vector-store path used by the repo's RAG flows"
+          },
+          {
+            "kind": "service",
+            "name": "ollama",
+            "host": "127.0.0.1",
+            "port": 11434,
+            "notes": "optional local model/embedding path"
+          },
+          {
+            "kind": "api",
+            "name": "openai",
+            "host": "api.openai.com",
+            "port": 443,
+            "notes": "optional remote model path"
+          }
+        ],
         "cross_dependencies": [],
-        "notes": "Node on 8707; repo app intentionally unmodeled/off. 8080 remains nginx, not rag."
+        "notes": "The Switchboard node on 8707 is the local verification surface for this project. The optional repo app is documented but intentionally not treated as always-on."
       }
     ],
     "tags": [
@@ -197,6 +564,108 @@
       ".47",
       "runtime"
     ],
-    "notes": "Production environment for rag on the .47 runtime host."
+    "notes": "Production environment for RAG on the .47 runtime host."
+  },
+  {
+    "environment_id": "aichat_ingestion_prod",
+    "project_id": "aichat_ingestion_project",
+    "display_name": "aichat-ingestion-prod",
+    "kind": "prod",
+    "deployments": [
+      {
+        "service_id": "aichat_ingestion",
+        "location_id": "aichat_ingestion-pesu_dev_47-primary",
+        "server_id": "pesu_dev_47",
+        "root": "/home/pesu/aichat_test/project",
+        "version": "1.12.1",
+        "runtime_services": [
+          {
+            "name": "switchboard-node",
+            "host": "127.0.0.1",
+            "port": 8709,
+            "purpose": "project-local Switchboard node API",
+            "health_path": "/api/health",
+            "owner": ""
+          },
+          {
+            "name": "ingestion-runner",
+            "host": "127.0.0.1",
+            "port": 0,
+            "purpose": "batch PDF ingestion pipeline rooted in `main.py`",
+            "health_path": "",
+            "owner": ""
+          },
+          {
+            "name": "reingest-v2",
+            "host": "127.0.0.1",
+            "port": 0,
+            "purpose": "batch reingestion flow that writes `documentdb_v2` and `extracted_data_v2`",
+            "health_path": "",
+            "owner": ""
+          }
+        ],
+        "dependencies": [
+          {
+            "kind": "database",
+            "name": "milvus",
+            "host": "127.0.0.1",
+            "port": 19530,
+            "notes": "vector store used for `documentdb` and `documentdb_v2`"
+          },
+          {
+            "kind": "service",
+            "name": "ollama",
+            "host": "127.0.0.1",
+            "port": 11434,
+            "notes": "embeddings endpoint used by `embeddings.py`"
+          },
+          {
+            "kind": "api",
+            "name": "openai",
+            "host": "api.openai.com",
+            "port": 443,
+            "notes": "figure/image interpretation used by `extract_image.py`"
+          },
+          {
+            "kind": "api",
+            "name": "adobe-pdf-services",
+            "host": "",
+            "port": null,
+            "notes": "structured PDF extraction used by `extract_data.py`"
+          },
+          {
+            "kind": "runtime",
+            "name": "shared-venv",
+            "host": "/home/pesu/aichat/project/venv",
+            "port": null,
+            "notes": "shared interpreter used by both aichat and this ingestion pipeline"
+          }
+        ],
+        "cross_dependencies": [
+          {
+            "kind": "service",
+            "name": "aichat",
+            "host": "127.0.0.1",
+            "port": 8506,
+            "notes": "separate sibling backend that serves files and queries Milvus corpora produced by this subtree"
+          },
+          {
+            "kind": "service",
+            "name": "aichat_test",
+            "host": "127.0.0.1",
+            "port": 8504,
+            "notes": "separate sibling test frontend that validates this content when enabled"
+          }
+        ],
+        "notes": "The Switchboard node on 8709 is the local verification surface for this ingestion subtree. The ingestion pipeline itself is batch-oriented and intentionally not modeled as an always-on HTTP app."
+      }
+    ],
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime",
+      "ingestion"
+    ],
+    "notes": "Production environment for the separate aichat ingestion subtree on the .47 runtime host."
   }
 ]

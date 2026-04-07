@@ -307,6 +307,18 @@ function normalizeNodeReleaseCheck(result: any): NodeReleaseCheck {
     asset_url: result?.asset_url ?? '',
     notes: result?.notes ?? '',
     message: result?.message ?? '',
+    exact_match_known: Boolean(result?.exact_match_known),
+    exact_match: Boolean(result?.exact_match),
+    current_release_version: result?.current_release_version ?? '',
+    current_release_asset_id: result?.current_release_asset_id ?? '',
+    current_release_asset_name: result?.current_release_asset_name ?? '',
+    current_release_published_at: result?.current_release_published_at ?? '',
+    current_release_url: result?.current_release_url ?? '',
+    current_release_commitish: result?.current_release_commitish ?? '',
+    latest_release_asset_id: result?.latest_release_asset_id ?? '',
+    latest_release_asset_name: result?.latest_release_asset_name ?? '',
+    latest_release_asset_updated_at: result?.latest_release_asset_updated_at ?? '',
+    latest_release_commitish: result?.latest_release_commitish ?? '',
   }
 }
 
@@ -449,6 +461,12 @@ function normalizeNodeViewer(result: any): NodeViewerEntry {
     runtime_dir: result.runtime_dir ?? '',
     log_file: result.log_file ?? '',
     last_error: result.last_error ?? '',
+    installed_release_version: result.installed_release_version ?? '',
+    installed_release_asset_id: result.installed_release_asset_id ?? '',
+    installed_release_asset_name: result.installed_release_asset_name ?? '',
+    installed_release_published_at: result.installed_release_published_at ?? '',
+    installed_release_url: result.installed_release_url ?? '',
+    installed_release_commitish: result.installed_release_commitish ?? '',
   }
 }
 

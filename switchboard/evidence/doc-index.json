@@ -1,5 +1,5 @@
 {
-  "generated": "2026-04-06T15:53:33+00:00",
+  "generated": "2026-04-07T04:05:14+00:00",
   "service_id": "dashboard",
   "project_root": "/Users/p/Desktop/dashboard",
   "docs": [
@@ -29,7 +29,8 @@
       "generated_at": null,
       "generated_from": "switchboard/local/tasks-completed.md",
       "contributor_timestamps": [
-        "2026-04-06T15:30:38+00:00"
+        "2026-04-06T15:30:38+00:00",
+        "2026-04-07T04:01:16Z"
       ]
     },
     {
@@ -37,10 +38,11 @@
       "label": "Control Center Handoff",
       "path": "switchboard/local/control-center-handoff.md",
       "enabled": true,
-      "generated_at": "2026-04-06T15:53:33+00:00",
+      "generated_at": "2026-04-07T04:05:14+00:00",
       "generated_from": "switchboard/local/tasks-completed.md",
       "contributor_timestamps": [
-        "2026-04-06T15:30:38+00:00"
+        "2026-04-06T15:30:38+00:00",
+        "2026-04-07T04:01:16Z"
       ]
     },
     {
@@ -48,7 +50,7 @@
       "label": "Runbook",
       "path": "switchboard/local/runbook.md",
       "enabled": true,
-      "generated_at": "2026-04-06T15:53:33+00:00",
+      "generated_at": "2026-04-07T04:05:14+00:00",
       "generated_from": "switchboard/local/tasks-completed.md",
       "contributor_timestamps": []
     },
@@ -57,7 +59,7 @@
       "label": "Approach History",
       "path": "switchboard/local/approach-history.md",
       "enabled": true,
-      "generated_at": "2026-04-06T15:53:33+00:00",
+      "generated_at": "2026-04-07T04:05:14+00:00",
       "generated_from": "switchboard/local/tasks-completed.md",
       "contributor_timestamps": []
     },
@@ -66,10 +68,11 @@
       "label": "Doc Index Markdown",
       "path": "switchboard/local/doc-index.md",
       "enabled": true,
-      "generated_at": "2026-04-06T15:53:33+00:00",
+      "generated_at": "2026-04-07T04:05:14+00:00",
       "generated_from": "switchboard/local/tasks-completed.md",
       "contributor_timestamps": [
-        "2026-04-06T15:30:38+00:00"
+        "2026-04-06T15:30:38+00:00",
+        "2026-04-07T04:01:16Z"
       ]
     },
     {
@@ -77,10 +80,11 @@
       "label": "Doc Index JSON",
       "path": "switchboard/evidence/doc-index.json",
       "enabled": true,
-      "generated_at": "2026-04-06T15:53:33+00:00",
+      "generated_at": "2026-04-07T04:05:14+00:00",
       "generated_from": "switchboard/local/tasks-completed.md",
       "contributor_timestamps": [
-        "2026-04-06T15:30:38+00:00"
+        "2026-04-06T15:30:38+00:00",
+        "2026-04-07T04:01:16Z"
       ]
     }
   ]

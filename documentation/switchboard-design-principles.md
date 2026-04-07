@@ -1,6 +1,6 @@
 # Switchboard Design Principles
 
-Switchboard `v1` is a control-center-first framework with an explicit node standard.
+Switchboard `v1` is a project-first control center with an explicit node standard.
 
 It exists to make server pulls, project visibility, node docs, and future agent coordination predictable without broad crawling or doc sprawl.
 
@@ -22,7 +22,8 @@ It exists to make server pulls, project visibility, node docs, and future agent 
 - `switchboard/core/playbook.md` is the only primary instruction doc
 - agents should normally edit only `switchboard/local/tasks-completed.md`
 - `switchboard node snapshot` rebuilds derived docs deterministically from that canonical file
-- root `README.md`, `API.md`, and `CHANGELOG.md` are opt-in framework-managed outputs
+- root `README.md`, `API.md`, and `CHANGELOG.md` remain first-class project docs in scope even when Switchboard does not own them
+- `managed_docs` only controls whether Switchboard may rewrite those root docs
 - if a root doc is not enabled in `managed_docs`, Switchboard must not edit it
 
 ## Runtime Rules

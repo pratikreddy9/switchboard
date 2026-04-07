@@ -13,6 +13,7 @@ import type {
   RunRecord,
   ScopeEntry,
   ServerRecord,
+  TaskLedgerEntry,
 } from '../types/switchboard'
 import {
   deleteService,
@@ -62,7 +63,7 @@ function parsePorts(value: string): number[] {
     .filter((port) => Number.isFinite(port) && port > 0 && port <= 65535)
 }
 
-const SERVICE_PANEL_KEYS = ['network', 'runtime', 'managed_docs', 'task_ledger', 'repositories', 'scope', 'pull_bundles', 'secret_paths', 'run_history'] as const
+const SERVICE_PANEL_KEYS = ['project', 'network', 'runtime', 'managed_docs', 'task_ledger', 'repositories', 'scope', 'pull_bundles', 'secret_paths', 'run_history'] as const
 type ServicePanelKey = (typeof SERVICE_PANEL_KEYS)[number]
 type NodeActionKey = 'inspect' | 'deploy' | 'upgrade' | 'restart'
 type LocationActionKey = NodeActionKey | 'runtime_check' | 'sync_from_node' | 'sync_to_node'
@@ -105,8 +106,8 @@ const LOCK_KEY_TO_ACTION: Record<PersistedActionKey, Exclude<LocationActionKey, 
 
 const ACTION_META: Record<LocationActionKey, { label: string; running_label: string; eta_seconds: number }> = {
   inspect: { label: 'Inspect Node', running_label: 'Inspecting node state', eta_seconds: 12 },
-  deploy: { label: 'Deploy From GitHub', running_label: 'Deploying latest GitHub release', eta_seconds: 45 },
-  upgrade: { label: 'Update + Restart', running_label: 'Installing latest GitHub release and restarting', eta_seconds: 45 },
+  deploy: { label: 'Install Node Release', running_label: 'Installing latest node release', eta_seconds: 45 },
+  upgrade: { label: 'Reinstall / Update Node', running_label: 'Installing release and restarting node', eta_seconds: 45 },
   restart: { label: 'Restart Node', running_label: 'Restarting node runtime', eta_seconds: 18 },
   runtime_check: { label: 'Refresh Snapshot', running_label: 'Refreshing runtime snapshot', eta_seconds: 28 },
   sync_from_node: { label: 'Sync From Node', running_label: 'Syncing from node', eta_seconds: 22 },
@@ -166,6 +167,42 @@ function releaseNoteLines(release?: NodeReleaseCheck) {
     .slice(0, 3)
 }
 
+function stripCodeFence(value?: string) {
+  if (!value) return ''
+  const trimmed = value.trim()
+  const match = /^```[a-zA-Z0-9_-]*\n([\s\S]*?)\n```$/.exec(trimmed)
+  return match ? match[1].trim() : trimmed
+}
+
+function isFrameworkOverheadDoc(path?: string) {
+  const normalized = (path ?? '').trim().toLowerCase().replace(/\\/g, '/')
+  if (!normalized) return true
+  return (
+    normalized.includes('/switchboard/local/') ||
+    normalized.includes('/switchboard/evidence/') ||
+    normalized.includes('/switchboard/core/') ||
+    normalized.includes('/switchboard/runtime/') ||
+    normalized.startsWith('switchboard/local/') ||
+    normalized.startsWith('switchboard/evidence/') ||
+    normalized.startsWith('switchboard/core/') ||
+    normalized.startsWith('switchboard/runtime/')
+  )
+}
+
+function isFrameworkMaintenanceTask(task?: TaskLedgerEntry) {
+  if (!task) return false
+  const title = (task.title ?? '').toLowerCase()
+  const summary = (task.summary ?? '').toLowerCase()
+  const tags = Array.isArray(task.tags) ? task.tags.map((tag: string) => tag.toLowerCase()) : []
+  const changedPaths = Array.isArray(task.changed_paths) ? task.changed_paths : []
+  const mentionsSwitchboard = title.includes('switchboard') || summary.includes('switchboard')
+  const mentionsBootstrap = title.includes('bootstrap') || summary.includes('bootstrap')
+  const frameworkOnlyPaths =
+    changedPaths.length > 0 &&
+    changedPaths.every((path: string) => path.startsWith('switchboard/') || path === 'README.md' || path === 'API.md' || path === 'CHANGELOG.md')
+  return mentionsSwitchboard || (mentionsBootstrap && (tags.includes('handoff') || frameworkOnlyPaths))
+}
+
 export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDeleted, onOpenEnvironmentLab }: Props) {
   const [service, setService] = useState<Service | null>(null)
   const [runs, setRuns] = useState<RunRecord[]>([])
@@ -209,6 +246,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
   const [bundleHistoryMeta, setBundleHistoryMeta] = useState<{ count: number; latestCreatedAt: string }>({ count: 0, latestCreatedAt: '' })
   const [projectEnvironments, setProjectEnvironments] = useState<ProjectEnvironmentView[]>([])
   const [nowMs, setNowMs] = useState(() => Date.now())
+  const [docPreviewId, setDocPreviewId] = useState<string | null>(null)
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1000)
@@ -418,15 +456,65 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
     return counts
   }, [scopeEntries])
 
-  const enabledManagedDocs = useMemo(
-    () => (service?.managed_docs ?? []).filter((entry) => entry.enabled),
-    [service?.managed_docs],
+  const latestTask = service?.task_ledger?.[0]
+  const featuredTask = useMemo(
+    () => (service?.task_ledger ?? []).find((entry) => !isFrameworkMaintenanceTask(entry)) ?? service?.task_ledger?.[0],
+    [service?.task_ledger],
+  )
+  const latestTaskNotes = useMemo(() => {
+    const notes = featuredTask?.notes
+    return Array.isArray(notes) ? notes.filter(Boolean) : []
+  }, [featuredTask?.notes])
+  const latestTaskDependencies = featuredTask?.dependencies ?? []
+  const latestTaskCrossDependencies = featuredTask?.cross_dependencies ?? []
+  const latestTaskDiagram = useMemo(() => stripCodeFence(featuredTask?.diagram), [featuredTask?.diagram])
+
+  const quickDocPreviews = useMemo(
+    () =>
+      [
+        { id: 'readme', label: 'README', content: stripCodeFence(featuredTask?.readme) },
+        { id: 'api', label: 'API', content: stripCodeFence(featuredTask?.api) },
+        { id: 'changelog', label: 'CHANGELOG', content: stripCodeFence(featuredTask?.changelog) },
+      ].filter((entry) => entry.content),
+    [featuredTask?.api, featuredTask?.changelog, featuredTask?.readme],
   )
 
-  const latestManagedDocGeneratedAt = useMemo(() => {
-    const values = enabledManagedDocs.map((entry) => entry.last_generated_at).filter(Boolean) as string[]
-    return values.sort().reverse()[0] ?? ''
-  }, [enabledManagedDocs])
+  const projectDocEntries = useMemo(() => {
+    const seen = new Set<string>()
+    const entries: Array<{ id: string; label: string; path: string; frameworkWritesEnabled: boolean; generatedAt?: string | null }> = []
+    for (const entry of latestNodeDocIndex?.docs ?? []) {
+      if (isFrameworkOverheadDoc(entry.path)) continue
+      const key = `${entry.doc_id}:${entry.path}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      entries.push({
+        id: entry.doc_id,
+        label: entry.label ?? entry.doc_id.toUpperCase(),
+        path: entry.path,
+        frameworkWritesEnabled: Boolean(entry.enabled),
+        generatedAt: entry.generated_at,
+      })
+    }
+    for (const entry of service?.managed_docs ?? []) {
+      if (isFrameworkOverheadDoc(entry.path)) continue
+      const key = `${entry.doc_id}:${entry.path}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      entries.push({
+        id: entry.doc_id,
+        label: entry.doc_id.toUpperCase(),
+        path: entry.path,
+        frameworkWritesEnabled: Boolean(entry.enabled),
+        generatedAt: entry.last_generated_at,
+      })
+    }
+    return entries
+  }, [latestNodeDocIndex?.docs, service?.managed_docs])
+
+  const quickPreviewById = useMemo(
+    () => Object.fromEntries(quickDocPreviews.map((entry) => [entry.id, entry.content])),
+    [quickDocPreviews],
+  )
 
   const runtimeAttentionCount = useMemo(
     () =>
@@ -902,6 +990,13 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
       release.current_version
         ? `Current installed version: ${release.current_version}.`
         : 'No installed version is recorded yet at this location.',
+      release.exact_match_known
+        ? release.exact_match
+          ? 'Exact GitHub release asset already matches this node.'
+          : `Installed release asset differs from latest GitHub asset${release.current_release_asset_name ? ` (${release.current_release_asset_name})` : ''}.`
+        : release.current_version
+          ? 'Exact installed GitHub release asset is not recorded on this node yet.'
+          : '',
       ...(release.message ? [release.message] : []),
       ...notes.map((line, index) => `Release note ${index + 1}: ${line}`),
     ]
@@ -912,10 +1007,12 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
     ].filter(Boolean)
     const confirmLabel =
       actionKey === 'node_upgrade'
-        ? release.update_available
-          ? `Update ${release.current_version || 'node'} -> ${release.latest_version} + Restart`
-          : 'Reinstall Current Release + Restart'
-        : `Deploy GitHub ${release.latest_version || 'Release'}`
+        ? release.exact_match
+          ? 'Reinstall Exact Release + Restart'
+          : release.latest_version
+            ? `Install ${release.latest_version} Release + Restart`
+            : 'Install Release + Restart'
+        : `Install ${release.latest_version || 'GitHub'} Release`
     initiateAction(actionKey, locationId, { ...fallbackDetails, preflight, commandPreview, confirmLabel })
   }
 
@@ -991,16 +1088,6 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
           {service && (
             <div className="hidden md:flex items-center gap-2">
               <InfoDropdown
-                label="Node Commands"
-                title="Switchboard Node Commands"
-                lines={[
-                  'switchboard node snapshot',
-                  'switchboard node start',
-                  'switchboard node stop',
-                  'switchboard node status',
-                ]}
-              />
-              <InfoDropdown
                 label="Health Check Commands"
                 title="Location Health Checks"
                 lines={
@@ -1010,14 +1097,15 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                 }
               />
               <InfoDropdown
-                label="Diagnostics"
-                title="Diagnostics & Hints"
+                label="Project Context"
+                title="Latest Project Context"
                 lines={[
-                  `Bootstrap Version: ${service.task_ledger?.[0]?.bootstrap_version || 'Unknown'}`,
-                  ...service.locations.map(
-                    (loc) =>
-                      `[${loc.location_id}] Hint: ${loc.runtime?.run_command_hint || 'None'} | Mode: ${loc.runtime?.monitoring_mode}`
-                  ),
+                  featuredTask?.title ? `Featured entry: ${featuredTask.title}` : 'No project task entry imported yet.',
+                  featuredTask?.summary ? featuredTask.summary : '',
+                  service.notes ? `Service note: ${service.notes}` : '',
+                  ...(latestTaskCrossDependencies.slice(0, 3).map(
+                    (dep) => `Cross dependency: ${dep.name}${dep.port ? `:${dep.port}` : ''} ${dep.notes ? `| ${dep.notes}` : ''}`,
+                  )),
                 ]}
               />
             </div>
@@ -1038,16 +1126,6 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         {service && (
           <>
             <InfoDropdown
-              label="Node Commands"
-              title="Switchboard Node Commands"
-              lines={[
-                'switchboard node snapshot',
-                'switchboard node start',
-                'switchboard node stop',
-                'switchboard node status',
-              ]}
-            />
-            <InfoDropdown
               label="Health Checks"
               title="Location Health Checks"
               lines={
@@ -1057,14 +1135,15 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
               }
             />
             <InfoDropdown
-              label="Diagnostics"
-              title="Diagnostics & Hints"
+              label="Project Context"
+              title="Latest Project Context"
               lines={[
-                `Bootstrap Version: ${service.task_ledger?.[0]?.bootstrap_version || 'Unknown'}`,
-                ...service.locations.map(
-                  (loc) =>
-                    `[${loc.location_id}] Hint: ${loc.runtime?.run_command_hint || 'None'} | Mode: ${loc.runtime?.monitoring_mode}`
-                ),
+                featuredTask?.title ? `Featured entry: ${featuredTask.title}` : 'No project task entry imported yet.',
+                featuredTask?.summary ? featuredTask.summary : '',
+                service.notes ? `Service note: ${service.notes}` : '',
+                ...(latestTaskCrossDependencies.slice(0, 3).map(
+                  (dep) => `Cross dependency: ${dep.name}${dep.port ? `:${dep.port}` : ''} ${dep.notes ? `| ${dep.notes}` : ''}`,
+                )),
               ]}
             />
           </>
@@ -1173,6 +1252,120 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
 
       {service && (
         <AccordionSection
+          title="Project Snapshot"
+          icon={<FileStack className="h-4 w-4 text-cyan-400" />}
+          open={Boolean(panelOpen.project)}
+          onToggle={() => togglePanel('project')}
+          summary={`${projectDocEntries.length} docs · ${latestTaskDependencies.length} deps · ${latestTaskCrossDependencies.length} cross`}
+        >
+          <div className="grid gap-4 xl:grid-cols-[1.2fr,0.8fr]">
+            <div className="space-y-4">
+              <div className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-3">
+                <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Featured Project Entry</div>
+                <div className="mt-2 text-sm font-medium text-white">{featuredTask?.title || 'No imported project task yet.'}</div>
+                {featuredTask?.summary && <div className="mt-2 text-sm text-gray-300">{featuredTask.summary}</div>}
+                {featuredTask && latestTask && featuredTask.task_id !== latestTask.task_id && (
+                  <div className="mt-2 text-xs text-gray-500">
+                    Latest maintenance entry remains in the task ledger below.
+                  </div>
+                )}
+                {service.notes && <div className="mt-3 text-sm text-cyan-100/80">{service.notes}</div>}
+              </div>
+
+              {latestTaskNotes.length > 0 && (
+                <div className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-3">
+                  <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Operator Notes</div>
+                  <div className="mt-2 space-y-2 text-sm text-gray-300">
+                    {latestTaskNotes.map((note, index) => (
+                      <div key={`${note}:${index}`} className="rounded-lg border border-gray-800 bg-black/20 px-3 py-2">
+                        {note}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {quickDocPreviews.length > 0 && (
+                <div className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Project Doc Quick View</div>
+                    <div className="flex flex-wrap gap-2">
+                      {quickDocPreviews.map((entry) => {
+                        const selected = docPreviewId === entry.id || (!docPreviewId && quickDocPreviews[0]?.id === entry.id)
+                        return (
+                          <button
+                            key={entry.id}
+                            type="button"
+                            onClick={() => setDocPreviewId((current) => (current === entry.id ? null : entry.id))}
+                            className={`rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+                              selected
+                                ? 'border-cyan-500 bg-cyan-500/10 text-cyan-100'
+                                : 'border-gray-700 text-gray-300 hover:border-cyan-500 hover:text-white'
+                            }`}
+                          >
+                            {entry.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  <pre className="mt-3 max-h-80 overflow-auto rounded-lg border border-gray-800 bg-black/20 p-3 text-xs text-gray-200 whitespace-pre-wrap">
+                    {quickPreviewById[docPreviewId || quickDocPreviews[0]?.id || ''] || 'No preview available.'}
+                  </pre>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-3">
+                <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Cross Dependencies</div>
+                {latestTaskCrossDependencies.length === 0 ? (
+                  <div className="mt-2 text-sm text-gray-500">No cross dependencies recorded yet.</div>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {latestTaskCrossDependencies.map((dependency, index) => (
+                      <div key={`${dependency.name}:${index}`} className="rounded-lg border border-gray-800 bg-black/20 px-3 py-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded border border-gray-700 px-1.5 py-0.5 text-[10px] uppercase text-gray-400">{dependency.kind}</span>
+                          <span className="text-sm font-medium text-white">{dependency.name}</span>
+                          {(dependency.host || dependency.port) && (
+                            <span className="font-mono text-xs text-cyan-300">{dependency.host || '*'}:{dependency.port || 'any'}</span>
+                          )}
+                        </div>
+                        {dependency.notes && <div className="mt-1 text-xs text-gray-400">{dependency.notes}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {latestTaskDiagram && (
+                <div className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-3">
+                  <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Project Diagram</div>
+                  <pre className="mt-2 overflow-auto rounded-lg border border-gray-800 bg-black/20 p-3 text-xs text-gray-200 whitespace-pre-wrap">
+                    {latestTaskDiagram}
+                  </pre>
+                </div>
+              )}
+            </div>
+          </div>
+        </AccordionSection>
+      )}
+
+      {service && service.task_ledger && service.task_ledger.length > 0 && (
+        <AccordionSection
+          title="Task Ledger"
+          icon={<FileStack className="h-4 w-4 text-cyan-400" />}
+          open={Boolean(panelOpen.task_ledger)}
+          onToggle={() => togglePanel('task_ledger')}
+          summary={`${service.task_ledger.length} entries · latest ${new Date(service.task_ledger[0].timestamp).toLocaleString()}`}
+        >
+          <TaskLedgerPanel tasks={service.task_ledger} />
+        </AccordionSection>
+      )}
+
+      {service && (
+        <AccordionSection
           title="Runtime"
           icon={<RefreshCw className="h-4 w-4 text-cyan-400" />}
           open={Boolean(panelOpen.runtime)}
@@ -1268,8 +1461,8 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
               const matchedEnvironments = environmentMatchesByLocation.get(location.location_id) ?? environmentMatchesByLocation.get('__service__') ?? []
               const apiLabEnvironment = matchedEnvironments[0] ?? null
               const nodeControlLabel = !nodeViewer?.node_present
-                ? 'Deploy From GitHub'
-                : 'Update + Restart'
+                ? 'Install Node Release'
+                : 'Reinstall / Update Node'
               const runtimeControlLabel = nodeViewer?.runtime_status === 'running' || nodeViewer?.runtime_status === 'running_unmanaged'
                 ? 'Restart Node'
                 : 'Start Node'
@@ -1331,7 +1524,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
               const deployDetails: ConfirmDetails = {
                 preflight: [
                   serverMeta?.vpn_required ? 'VPN access must already be up for this server.' : 'Server route should already be reachable.',
-                  nodeViewer?.node_present ? 'An existing node install was already detected; this action will check GitHub, install the selected latest release, and restart the runtime.' : 'No tracked node install was detected; this will install the latest GitHub release and scaffold the Switchboard node files.',
+                  nodeViewer?.node_present ? 'An existing node install was already detected; this action will compare the exact GitHub release asset, install the selected release if needed, and restart the runtime.' : 'No tracked node install was detected; this will install the latest GitHub release and scaffold the node files.',
                   'Make sure this project root is the correct owner before writing control-center files under switchboard/.',
                 ],
                 commandPreview: deployCommandPreview,
@@ -1341,7 +1534,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                     : 'Run Inspect Node or Restart Node if you want an immediate runtime start after the first install.',
                   'Bootstrap can still remain not ready until the first task-ledger/bootstrap write happens.',
                 ],
-                confirmLabel: nodeViewer?.node_present ? 'Update + Restart' : 'Deploy From GitHub',
+                confirmLabel: nodeViewer?.node_present ? 'Reinstall / Update Node' : 'Install Node Release',
               }
               const restartDetails: ConfirmDetails = {
                 preflight: [
@@ -1641,11 +1834,29 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                       <div className="mt-2 grid gap-2 text-sm text-gray-300 md:grid-cols-2">
                         <div><span className="text-gray-500">Installed:</span> {nodeViewer.installed_version || 'not installed'}</div>
                         <div><span className="text-gray-500">Bootstrap:</span> {nodeViewer.bootstrap_version || 'not ready'}</div>
+                        <div><span className="text-gray-500">Release asset:</span> {nodeViewer.installed_release_asset_name || 'unknown'}</div>
+                        <div><span className="text-gray-500">Release commit:</span> {nodeViewer.installed_release_commitish || 'unknown'}</div>
                         <div><span className="text-gray-500">Runtime:</span> {nodeViewer.runtime_status}</div>
                         <div><span className="text-gray-500">Manifest:</span> <span className="font-mono text-xs">{nodeViewer.manifest_path}</span></div>
                         <div><span className="text-gray-500">Port:</span> {nodeViewer.runtime_port}</div>
                         <div><span className="text-gray-500">Runtime ready:</span> {nodeViewer.runtime_ready ? 'yes' : 'no'}</div>
+                        <div><span className="text-gray-500">Release published:</span> {nodeViewer.installed_release_published_at ? new Date(nodeViewer.installed_release_published_at).toLocaleString() : 'unknown'}</div>
+                        <div>
+                          <span className="text-gray-500">Release page:</span>{' '}
+                          {nodeViewer.installed_release_url ? (
+                            <a href={nodeViewer.installed_release_url} target="_blank" rel="noreferrer" className="text-cyan-300 hover:text-cyan-200">
+                              open
+                            </a>
+                          ) : (
+                            'unknown'
+                          )}
+                        </div>
                         {nodeViewer.last_error && <div className="md:col-span-2 text-amber-200">{nodeViewer.last_error}</div>}
+                        {nodeViewer.node_present && !nodeViewer.installed_release_asset_id && (
+                          <div className="md:col-span-2 text-xs text-amber-200">
+                            Exact GitHub release identity is not recorded on this node yet. Inspect can confirm package version, but release-asset equality stays unknown until the node is installed from a tracked GitHub release.
+                          </div>
+                        )}
                         {nodeViewer.node_present && !nodeViewer.bootstrap_ready && (
                           <div className="md:col-span-2 text-xs text-amber-200">
                             Node scaffold is present, but sync stays blocked until bootstrap writes the first task entry.
@@ -1881,166 +2092,6 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         </AccordionSection>
       )}
 
-      {service && (
-        <AccordionSection
-          title="Managed Docs"
-          icon={<FileStack className="h-4 w-4 text-cyan-400" />}
-          open={Boolean(panelOpen.managed_docs)}
-          onToggle={() => togglePanel('managed_docs')}
-          summary={`${enabledManagedDocs.length} enabled${latestManagedDocGeneratedAt ? ` · latest ${new Date(latestManagedDocGeneratedAt).toLocaleString()}` : ''}`}
-        >
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <div className="mt-1 text-xs text-gray-500">
-                Framework-owned derived docs generated from <code>switchboard/local/tasks-completed.md</code>.
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {editingManagedDocs ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={handleCancelManagedDocsEdit}
-                    disabled={savingManagedDocs}
-                    className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-300 transition-colors hover:border-gray-500 hover:text-white disabled:opacity-50"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveManagedDocs}
-                    disabled={offline || savingManagedDocs}
-                    className="inline-flex items-center gap-1 rounded-lg bg-white px-3 py-2 text-xs font-medium text-black transition-colors hover:bg-gray-200 disabled:opacity-50"
-                  >
-                    <Save className="h-3.5 w-3.5" />
-                    {savingManagedDocs ? 'Saving…' : 'Save Managed Docs'}
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setManagedDocsDraft(service.managed_docs.map((entry) => ({ ...entry })))
-                    setEditingManagedDocs(true)
-                    setManagedDocsMessage(null)
-                  }}
-                  disabled={offline}
-                  className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-300 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                  Edit Managed Docs
-                </button>
-              )}
-            </div>
-          </div>
-
-          {managedDocsMessage && (
-            <div className="mb-4 rounded-xl border border-gray-800 bg-gray-950 px-3 py-2 text-sm text-gray-300">
-              {managedDocsMessage}
-            </div>
-          )}
-
-          <div className="grid gap-3 md:grid-cols-2">
-            {(editingManagedDocs ? managedDocsDraft : service.managed_docs).map((entry, index) => (
-              <div key={`${entry.doc_id}:${index}`} className="rounded-xl border border-gray-800 bg-gray-950 p-4">
-                {editingManagedDocs ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-medium text-white">{entry.doc_id}</div>
-                      <label className="inline-flex items-center gap-2 text-xs text-gray-300">
-                        <input
-                          type="checkbox"
-                          checked={entry.enabled}
-                          onChange={(event) =>
-                            setManagedDocsDraft((current) =>
-                              current.map((candidate, candidateIndex) =>
-                                candidateIndex === index ? { ...candidate, enabled: event.target.checked } : candidate,
-                              ),
-                            )
-                          }
-                        />
-                        Enabled
-                      </label>
-                    </div>
-                    <input
-                      value={entry.path}
-                      onChange={(event) =>
-                        setManagedDocsDraft((current) =>
-                          current.map((candidate, candidateIndex) =>
-                            candidateIndex === index ? { ...candidate, path: event.target.value } : candidate,
-                          ),
-                        )
-                      }
-                      className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-xs text-white outline-none focus:border-cyan-500"
-                    />
-                  </div>
-                ) : (
-                  <div className="space-y-2 text-sm text-gray-300">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-medium text-white">{entry.doc_id}</span>
-                      <span
-                        className={`rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-[0.16em] ${
-                          entry.enabled
-                            ? 'border-cyan-900 bg-cyan-950/60 text-cyan-300'
-                            : 'border-gray-700 text-gray-500'
-                        }`}
-                      >
-                        {entry.enabled ? 'enabled' : 'disabled'}
-                      </span>
-                    </div>
-                    <div className="font-mono text-xs text-gray-400 break-all">{entry.path}</div>
-                    <div className="text-xs text-gray-500">
-                      Generated: {entry.last_generated_at ? new Date(entry.last_generated_at).toLocaleString() : 'not yet'}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-4 rounded-xl border border-gray-800 bg-gray-950 p-4">
-            <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Latest Doc Index</div>
-            {latestNodeDocIndex ? (
-              <div className="mt-2 space-y-3 text-sm text-gray-300">
-                <div>
-                  <span className="text-gray-500">Generated:</span>{' '}
-                  {latestNodeDocIndex.generated ? new Date(latestNodeDocIndex.generated).toLocaleString() : 'unknown'}
-                </div>
-                <div className="grid gap-2 md:grid-cols-2">
-                  {latestNodeDocIndex.docs.map((entry) => (
-                    <div key={`${entry.doc_id}:${entry.path}`} className="rounded-lg border border-gray-800 bg-gray-900 px-3 py-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="font-medium text-white">{entry.label ?? entry.doc_id}</span>
-                        <span className="text-xs text-gray-500">{entry.enabled ? 'enabled' : 'disabled'}</span>
-                      </div>
-                      <div className="mt-1 font-mono text-[11px] text-gray-400 break-all">{entry.path}</div>
-                      <div className="mt-1 text-[11px] text-gray-500">
-                        Contributors: {entry.contributor_timestamps.length > 0 ? entry.contributor_timestamps.length : 0}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="mt-2 text-sm text-gray-500">No doc index metadata synced from the node yet.</div>
-            )}
-          </div>
-        </AccordionSection>
-      )}
-
-      {service && service.task_ledger && service.task_ledger.length > 0 && (
-        <AccordionSection
-          title="Task Ledger"
-          icon={<FileStack className="h-4 w-4 text-cyan-400" />}
-          open={Boolean(panelOpen.task_ledger)}
-          onToggle={() => togglePanel('task_ledger')}
-          summary={`${service.task_ledger.length} entries · latest ${new Date(service.task_ledger[0].timestamp).toLocaleString()}`}
-        >
-          <TaskLedgerPanel tasks={service.task_ledger} />
-        </AccordionSection>
-      )}
-
       <AccordionSection
         title="Repositories"
         icon={<FolderTree className="h-4 w-4 text-cyan-400" />}
@@ -2057,14 +2108,14 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
       </AccordionSection>
 
       <AccordionSection
-        title="Scope"
+        title="Project Files"
         icon={<FolderTree className="h-4 w-4 text-cyan-400" />}
         open={Boolean(panelOpen.scope)}
         onToggle={() => togglePanel('scope')}
-        summary={`${scopeSummary.repo} repo · ${scopeSummary.doc} doc · ${scopeSummary.log} log · ${scopeSummary.exclude} exclude`}
+        summary={`${projectDocEntries.length} project docs · ${scopeSummary.repo} repo · ${scopeSummary.doc} doc · ${scopeSummary.log} log`}
       >
         <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="text-xs text-gray-500">Scope summary, detailed entries, and collected file downloads live here.</div>
+          <div className="text-xs text-gray-500">Project docs, quick previews, managed-doc controls, and saved scope live in one compact place. Root project docs stay in scope; framework local/evidence overhead stays out.</div>
           <div className="flex items-center gap-2">
             {editingScope ? (
               <>
@@ -2104,6 +2155,157 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
             )}
           </div>
         </div>
+        <div className="mb-4 rounded-xl border border-gray-800 bg-gray-950 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Project Docs</div>
+              <div className="mt-1 text-xs text-gray-500">
+                README/API/CHANGELOG and other project-facing docs synced from the node. These should be included in quick review and pull bundles.
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {editingManagedDocs ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleCancelManagedDocsEdit}
+                    disabled={savingManagedDocs}
+                    className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-300 transition-colors hover:border-gray-500 hover:text-white disabled:opacity-50"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Cancel Docs
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveManagedDocs}
+                    disabled={offline || savingManagedDocs}
+                    className="inline-flex items-center gap-1 rounded-lg bg-white px-3 py-2 text-xs font-medium text-black transition-colors hover:bg-gray-200 disabled:opacity-50"
+                  >
+                    <Save className="h-3.5 w-3.5" />
+                    {savingManagedDocs ? 'Saving…' : 'Save Docs'}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManagedDocsDraft(service?.managed_docs.map((entry) => ({ ...entry })) ?? [])
+                    setEditingManagedDocs(true)
+                    setManagedDocsMessage(null)
+                  }}
+                  disabled={offline}
+                  className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-300 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Edit Docs
+                </button>
+              )}
+            </div>
+          </div>
+          {managedDocsMessage && (
+            <div className="mt-3 rounded-xl border border-gray-800 bg-black/20 px-3 py-2 text-sm text-gray-300">
+              {managedDocsMessage}
+            </div>
+          )}
+          <div className="mt-3 space-y-2">
+            {projectDocEntries.length === 0 ? (
+              <div className="text-sm text-gray-500">No project-facing docs have been synced yet.</div>
+            ) : (
+              projectDocEntries.map((entry) => {
+                const hasPreview = Boolean(quickPreviewById[entry.id])
+                const selected = docPreviewId === entry.id || (!docPreviewId && quickDocPreviews[0]?.id === entry.id && hasPreview)
+                return (
+                  <div key={`${entry.id}:${entry.path}`} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-800 bg-black/20 px-3 py-2 text-sm">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-white">{entry.label}</span>
+                        <span className="rounded-full border border-cyan-900 bg-cyan-950/60 px-2 py-0.5 text-[11px] uppercase tracking-[0.14em] text-cyan-300">
+                          tracked
+                        </span>
+                        <span className={`rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-[0.14em] ${entry.frameworkWritesEnabled ? 'border-emerald-900 bg-emerald-950/60 text-emerald-300' : 'border-gray-700 text-gray-500'}`}>
+                          {entry.frameworkWritesEnabled ? 'framework writes on' : 'project-owned'}
+                        </span>
+                      </div>
+                      <div className="mt-1 font-mono text-[11px] text-gray-400 break-all">{entry.path}</div>
+                    </div>
+                    {hasPreview && (
+                      <button
+                        type="button"
+                        onClick={() => setDocPreviewId((current) => (current === entry.id ? null : entry.id))}
+                        className={`rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+                          selected
+                            ? 'border-cyan-500 bg-cyan-500/10 text-cyan-100'
+                            : 'border-gray-700 text-gray-300 hover:border-cyan-500 hover:text-white'
+                        }`}
+                      >
+                        {selected ? 'Hide Preview' : 'Quick View'}
+                      </button>
+                    )}
+                  </div>
+                )
+              })
+            )}
+          </div>
+          {(editingManagedDocs ? managedDocsDraft : service?.managed_docs ?? []).filter((entry) => !isFrameworkOverheadDoc(entry.path)).length > 0 && (
+            <div className="mt-4 space-y-2">
+              <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Framework Write Policy</div>
+              <div className="text-xs text-gray-500">
+                These entries only control whether Switchboard may rewrite the root file. They do not decide whether the project doc exists, shows up in quick view, or gets included in scope and pull bundles.
+              </div>
+              {(editingManagedDocs ? managedDocsDraft : service?.managed_docs ?? [])
+                .filter((entry) => !isFrameworkOverheadDoc(entry.path))
+                .map((entry, index) => (
+                  <div key={`${entry.doc_id}:${entry.path}:${index}`} className="grid gap-2 rounded-lg border border-gray-800 bg-black/20 px-3 py-2 md:grid-cols-[auto,1fr,auto] md:items-center">
+                    <div className="text-xs font-medium uppercase tracking-[0.14em] text-gray-300">{entry.doc_id}</div>
+                    {editingManagedDocs ? (
+                      <input
+                        value={entry.path}
+                        onChange={(event) =>
+                          setManagedDocsDraft((current) =>
+                            current.map((candidate, candidateIndex) =>
+                              candidateIndex === index ? { ...candidate, path: event.target.value } : candidate,
+                            ),
+                          )
+                        }
+                        className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-xs text-white outline-none focus:border-cyan-500"
+                      />
+                    ) : (
+                      <div className="font-mono text-[11px] text-gray-400 break-all">{entry.path}</div>
+                    )}
+                    {editingManagedDocs ? (
+                      <label className="inline-flex items-center gap-2 text-xs text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={entry.enabled}
+                          onChange={(event) =>
+                            setManagedDocsDraft((current) =>
+                              current.map((candidate, candidateIndex) =>
+                                candidateIndex === index ? { ...candidate, enabled: event.target.checked } : candidate,
+                              ),
+                            )
+                          }
+                        />
+                        Enabled
+                      </label>
+                    ) : (
+                      <div className="text-[11px] text-gray-500">
+                        {entry.enabled
+                          ? entry.last_generated_at
+                            ? `Framework last wrote ${new Date(entry.last_generated_at).toLocaleString()}`
+                            : 'Framework writes enabled for this file'
+                          : 'Project-owned source file. Framework writes disabled.'}
+                      </div>
+                    )}
+                  </div>
+                ))}
+            </div>
+          )}
+          {quickDocPreviews.length > 0 && (
+            <pre className="mt-4 max-h-80 overflow-auto rounded-lg border border-gray-800 bg-black/20 p-3 text-xs text-gray-200 whitespace-pre-wrap">
+              {quickPreviewById[docPreviewId || quickDocPreviews[0]?.id || ''] || 'No preview available.'}
+            </pre>
+          )}
+        </div>
         {scopeMessage && (
           <div className="mb-3 rounded-xl border border-gray-800 bg-gray-950 px-3 py-2 text-sm text-gray-300">
             {scopeMessage}
@@ -2112,9 +2314,9 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         {(editingScope ? scopeDraft : scopeEntries).length === 0 ? (
           <div className="text-sm text-gray-500">No saved scope entries yet.</div>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-2">
             {(editingScope ? scopeDraft : scopeEntries).map((entry, index) => (
-              <div key={`${entry.entry_id ?? entry.kind}:${entry.path}:${index}`} className="rounded-xl border border-gray-800 bg-gray-950 px-3 py-3">
+              <div key={`${entry.entry_id ?? entry.kind}:${entry.path}:${index}`} className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-2.5">
                 {editingScope ? (
                   <div className="space-y-3">
                     <input
@@ -2192,16 +2394,21 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="font-mono text-xs text-gray-300 break-all">{entry.path}</div>
-                      <div className="mt-1 text-xs uppercase tracking-[0.16em] text-gray-500">
-                        {entry.path_type} · {entry.source}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-gray-700 px-2 py-0.5 text-[11px] uppercase tracking-[0.16em] text-cyan-300">
+                          {entry.kind}
+                        </span>
+                        <span className={`rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-[0.16em] ${entry.enabled ? 'border-emerald-900 text-emerald-300' : 'border-gray-700 text-gray-500'}`}>
+                          {entry.enabled ? 'enabled' : 'disabled'}
+                        </span>
+                        <span className="text-[11px] uppercase tracking-[0.16em] text-gray-500">
+                          {entry.path_type} · {entry.source}
+                        </span>
                       </div>
+                      <div className="mt-1 font-mono text-xs text-gray-300 break-all">{entry.path}</div>
                     </div>
-                    <span className="rounded-full border border-gray-700 px-2 py-0.5 text-[11px] uppercase tracking-[0.16em] text-cyan-300">
-                      {entry.kind}
-                    </span>
                   </div>
                 )}
               </div>

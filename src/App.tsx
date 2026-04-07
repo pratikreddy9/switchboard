@@ -29,7 +29,7 @@ export const HOW_TO_USE_LINES = [
   'Pull Bundles create a new timestamped local copy while preserving the source tree.',
   'Service detail pages now handle runtime snapshots plus Sync From Node, Sync To Node, and dedicated environment API Lab entry points.',
   'Node-side agents should read switchboard/core/playbook.md and update only switchboard/local/tasks-completed.md.',
-  'Managed root docs like README.md, API.md, and CHANGELOG.md are opt-in and controlled from the service page.',
+  'Root project docs like README.md, API.md, and CHANGELOG.md stay tracked in scope; the service page only controls whether Switchboard may rewrite them.',
   'Repo actions stay per service: git status, safety check, git pull, git push.',
 ]
 

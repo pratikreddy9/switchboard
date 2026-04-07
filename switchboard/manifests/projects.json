@@ -27,7 +27,7 @@
       ".47",
       "runtime"
     ],
-    "notes": "Per-service project for aichat on the .47 runtime host."
+    "notes": "Primary aichat backend on .47. Keep the sibling aichat_test frontend and aichat_ingestion subtree separate and model them as dependencies, not merged services."
   },
   {
     "project_id": "aichat_test_project",
@@ -42,7 +42,7 @@
       ".47",
       "runtime"
     ],
-    "notes": "Per-service project for aichat_test on the .47 runtime host."
+    "notes": "Separate aichat test frontend on .47. This project targets aichat and depends on the separate aichat_ingestion subtree but must not be merged into either."
   },
   {
     "project_id": "compareanswers_project",
@@ -62,7 +62,7 @@
   {
     "project_id": "ingest_service_project",
     "workspace_id": "pesu",
-    "display_name": "ingest_service",
+    "display_name": "process documents",
     "parent_project_id": null,
     "service_ids": [
       "ingest_service"
@@ -72,7 +72,7 @@
       ".47",
       "runtime"
     ],
-    "notes": "Per-service project for ingest_service on the .47 runtime host."
+    "notes": "Separate process-documents project on .47 with its own chat and ingestion layers. Do not merge this project into aichat, aichat_test, or aichat_ingestion."
   },
   {
     "project_id": "emailagent_project",
@@ -107,7 +107,7 @@
   {
     "project_id": "rag_project",
     "workspace_id": "pesu",
-    "display_name": "rag",
+    "display_name": "RAG",
     "parent_project_id": null,
     "service_ids": [
       "rag"
@@ -117,7 +117,7 @@
       ".47",
       "runtime"
     ],
-    "notes": "Per-service project for rag on the .47 runtime host."
+    "notes": "Per-service project for RAG on the .47 runtime host."
   },
   {
     "project_id": "docgen",
@@ -131,5 +131,21 @@
       "pdfgenerator"
     ],
     "notes": "this is a pdf generator that generated candidate profiles based on data we have stored in mongo DB along with the help of open ai for data transformations."
+  },
+  {
+    "project_id": "aichat_ingestion_project",
+    "workspace_id": "pesu",
+    "display_name": "aichat_ingestion",
+    "parent_project_id": null,
+    "service_ids": [
+      "aichat_ingestion"
+    ],
+    "tags": [
+      "pesu",
+      ".47",
+      "runtime",
+      "ingestion"
+    ],
+    "notes": "Separate ingestion subtree rooted at /home/pesu/aichat_test/project on .47. It owns ingestion scripts, extracted assets, mappings, and Milvus content shared with aichat and aichat_test."
   }
 ]

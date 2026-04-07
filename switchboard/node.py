@@ -452,6 +452,7 @@ def _manifest_payload(project_root: Path, service_id: str, display_name: str, ex
         "dependencies": existing.get("dependencies", []),
         "cross_dependencies": existing.get("cross_dependencies", []),
         "diagram": existing.get("diagram", ""),
+        "installed_release": existing.get("installed_release", {}),
         "doc_index": existing.get("doc_index", {"generated": "", "docs": []}),
         "evidence_paths": {
             "completed_tasks": str(paths["completed_tasks_json"].relative_to(project_root)),

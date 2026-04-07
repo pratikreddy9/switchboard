@@ -11,3 +11,16 @@
   - - `action_in_progress` now maps to HTTP 409 so real lock conflicts surface as API errors instead of HTTP 200 responses.
   - - Runtime cache writes now use atomic file replacement so `/action-locks` polling does not hit transient JSON decode failures during concurrent writes.
   - - Verified the frontend production build and confirmed the backend now returns 409 for a forced `sync_from_node` lock collision after restart.
+
+## 2026-04-07T04:01:16Z | Recenter service pages on the tracked project
+- Tags: task, handoff, scope
+- Summary: Shifted the control center back to project-first context by clarifying project-doc ownership, surfacing project history ahead of framework maintenance, and tightening exact node release checks.
+- Changed Paths: src/pages/ServiceDetailPage.tsx, src/components/TaskLedgerPanel.tsx, src/components/ConfirmationModal.tsx, src/api/client.ts, src/types/switchboard.ts, src/App.tsx, switchboard/collectors.py, switchboard/models.py, switchboard/node.py, tests_backend/test_runtime_and_node_sync.py, documentation/switchboard-design-principles.md, package.json, pyproject.toml, switchboard/__init__.py, README.md, CHANGELOG.md, switchboard/local/tasks-completed.md
+- Version: 1.12.2
+- Notes:
+  - - Root project docs stay tracked in scope and quick review even when `managed_docs` leaves framework writes disabled for `README.md`, `API.md`, and `CHANGELOG.md`.
+  - - The service page now treats `managed_docs` as a write-policy control instead of implying that disabled project docs are missing or invalid.
+  - - Project Snapshot now prefers a real project ledger entry when the task list contains both project work and later Switchboard maintenance/bootstrap entries.
+  - - Node inspect and release-check payloads now carry GitHub release asset metadata so same-version installs can still be identified as exact-match or mismatch.
+  - - Remote runtime checks now fall back to `unverified` firewall state when a mocked or partial SSH object cannot execute commands, keeping the check resilient during tests.
+  - - Built the frontend bundle into `switchboard/static/app/` and produced the `dist/switchboard-1.12.2-py3-none-any.whl` package artifact.

@@ -979,6 +979,8 @@ class CollectionCoordinator:
         return (result["stdout"] or result["stderr"]).strip() or "unverified"
 
     def _remote_firewall_status(self, ssh: Any) -> str:
+        if not hasattr(ssh, "exec_command"):
+            return "unverified"
         result = self._run_remote(ssh, SAFE_REMOTE_COMMANDS["firewall"])
         return (result["stdout"] or result["stderr"]).strip() or "unverified"
 
@@ -1119,6 +1121,7 @@ class CollectionCoordinator:
             patch_payload: dict[str, Any] = {"locations": updated_locations}
             if node_manifest.get("managed_docs"):
                 patch_payload["managed_docs"] = node_manifest["managed_docs"]
+            current_scope_entries = [entry.model_dump(mode="json") for entry in service.scope_entries]
             should_import_scope = (
                 request.include_scope_snapshot
                 and scope_snapshot is not None
@@ -1131,8 +1134,14 @@ class CollectionCoordinator:
                     )
                 )
             )
-            if should_import_scope:
-                scope_entries = scope_snapshot["scope_entries"]
+            scope_entries = scope_snapshot["scope_entries"] if should_import_scope else current_scope_entries
+            scope_entries = self._merge_project_doc_scope_entries(
+                scope_entries,
+                location.root,
+                doc_index or node_manifest.get("doc_index", {}),
+                node_manifest.get("managed_docs", []),
+            )
+            if should_import_scope or scope_entries != current_scope_entries:
                 flattened = self._flatten_scope_entries(scope_entries)
                 patch_payload.update(
                     {
@@ -1628,6 +1637,7 @@ class CollectionCoordinator:
                     service.service_id,
                     service.display_name,
                     str(release["asset_url"]),
+                    release,
                 )
             else:
                 result = self._install_remote_node_release(
@@ -1636,6 +1646,7 @@ class CollectionCoordinator:
                     service.service_id,
                     service.display_name,
                     str(release["asset_url"]),
+                    release,
                 )
             if result["status"] != "ok":
                 return {
@@ -1648,7 +1659,8 @@ class CollectionCoordinator:
 
             after = self._node_inspect_record(service, location, server)
             self.snapshots.persist_node_viewer(service_id, location.location_id, after)
-            status = "ok" if after["installed_version"] == str(release.get("version", "")) or not after["node_present"] else "partial"
+            release_payload = self._release_check_payload(after, release)
+            status = "ok" if bool(release_payload.get("exact_match")) or not after["node_present"] else "partial"
             message = (
                 "Node deployed from the latest GitHub release."
                 if not before["node_present"]
@@ -1660,7 +1672,7 @@ class CollectionCoordinator:
                 "before": before,
                 "node": after,
                 "after": after,
-                "release": self._release_check_payload(after, release),
+                "release": release_payload,
             }
 
     def node_upgrade(self, service_id: str, request: NodeActionRequest) -> dict[str, Any]:
@@ -1694,6 +1706,7 @@ class CollectionCoordinator:
                     service.service_id,
                     service.display_name,
                     str(release["asset_url"]),
+                    release,
                 )
             else:
                 result = self._install_remote_node_release(
@@ -1702,6 +1715,7 @@ class CollectionCoordinator:
                     service.service_id,
                     service.display_name,
                     str(release["asset_url"]),
+                    release,
                 )
             if result["status"] != "ok":
                 return {
@@ -1728,13 +1742,14 @@ class CollectionCoordinator:
 
             after = self._node_inspect_record(service, location, server)
             self.snapshots.persist_node_viewer(service_id, location.location_id, after)
+            release_payload = self._release_check_payload(after, release)
             return {
-                "status": "ok",
+                "status": "ok" if bool(release_payload.get("exact_match")) else "partial",
                 "message": "Node updated from GitHub and runtime restarted.",
                 "before": before,
                 "node": after,
                 "after": after,
-                "release": self._release_check_payload(after, release),
+                "release": release_payload,
             }
 
     def node_restart(self, service_id: str, request: NodeActionRequest) -> dict[str, Any]:
@@ -1802,6 +1817,71 @@ class CollectionCoordinator:
             "log_paths": log_paths,
             "exclude_globs": exclude_globs,
         }
+
+    def _should_import_project_doc(self, path: str, doc_id: str = "") -> bool:
+        normalized = str(path or "").strip().lstrip("./")
+        if not normalized:
+            return False
+        if doc_id in {"handoff", "runbook", "approach_history", "doc_index_md", "doc_index_json"}:
+            return False
+        lowered = normalized.lower()
+        blocked_prefixes = (
+            "switchboard/local/",
+            "switchboard/evidence/",
+            "switchboard/core/",
+            "switchboard/runtime/",
+        )
+        if lowered.startswith(blocked_prefixes):
+            return False
+        blocked_fragments = (
+            "/switchboard/local/",
+            "/switchboard/evidence/",
+            "/switchboard/core/",
+            "/switchboard/runtime/",
+        )
+        return not any(fragment in lowered for fragment in blocked_fragments)
+
+    def _merge_project_doc_scope_entries(
+        self,
+        scope_entries: list[dict[str, Any]],
+        location_root: str,
+        doc_index: dict[str, Any] | None,
+        managed_docs: list[dict[str, Any]] | None,
+    ) -> list[dict[str, Any]]:
+        merged = [dict(entry) for entry in scope_entries]
+        seen = {
+            (str(entry.get("kind", "")), str(entry.get("path", "")))
+            for entry in merged
+            if entry.get("enabled", True)
+        }
+        candidate_paths: list[tuple[str, str]] = []
+        for entry in (doc_index or {}).get("docs", []) or []:
+            raw_path = str(entry.get("path", "")).strip()
+            doc_id = str(entry.get("doc_id", "")).strip()
+            if self._should_import_project_doc(raw_path, doc_id):
+                candidate_paths.append((raw_path, doc_id or "doc_index"))
+        for entry in managed_docs or []:
+            raw_path = str(entry.get("path", "")).strip()
+            doc_id = str(entry.get("doc_id", "")).strip()
+            if self._should_import_project_doc(raw_path, doc_id):
+                candidate_paths.append((raw_path, doc_id or "managed_doc"))
+
+        for raw_path, source_tag in candidate_paths:
+            resolved = raw_path if raw_path.startswith("/") else posixpath.normpath(posixpath.join(location_root, raw_path))
+            key = ("doc", resolved)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(
+                {
+                    "kind": "doc",
+                    "path": resolved,
+                    "path_type": "file",
+                    "source": "node_manifest" if source_tag in {"readme", "api", "changelog"} else "tasks_completed",
+                    "enabled": True,
+                }
+            )
+        return merged
 
     def _repo_policies_for_paths(self, repo_paths: list[str]) -> list[dict[str, Any]]:
         policies: list[dict[str, Any]] = []
@@ -3105,6 +3185,7 @@ class CollectionCoordinator:
         bootstrap_ready = bool(tasks and tasks.get("tasks"))
         installed_version = str((manifest or {}).get("installed_version", ""))
         bootstrap_version = str((manifest or {}).get("bootstrap_version", ""))
+        installed_release = (manifest or {}).get("installed_release", {}) if isinstance((manifest or {}).get("installed_release", {}), dict) else {}
         runtime_status = runtime_state.get("status", "missing")
         record = {
             "service_id": service.service_id,
@@ -3128,6 +3209,13 @@ class CollectionCoordinator:
             "runtime_dir": runtime_state.get("runtime_dir", ""),
             "log_file": runtime_state.get("log_file", ""),
             "last_error": last_error,
+            "installed_release": installed_release,
+            "installed_release_version": str(installed_release.get("version", "")),
+            "installed_release_asset_id": str(installed_release.get("asset_id", "")),
+            "installed_release_asset_name": str(installed_release.get("asset_name", "")),
+            "installed_release_published_at": str(installed_release.get("published_at", "")),
+            "installed_release_url": str(installed_release.get("release_url", "")),
+            "installed_release_commitish": str(installed_release.get("target_commitish", "")),
         }
         return record
 
@@ -3155,6 +3243,13 @@ class CollectionCoordinator:
             "runtime_dir": "",
             "log_file": "",
             "last_error": reason,
+            "installed_release": {},
+            "installed_release_version": "",
+            "installed_release_asset_id": "",
+            "installed_release_asset_name": "",
+            "installed_release_published_at": "",
+            "installed_release_url": "",
+            "installed_release_commitish": "",
         }
 
     def _node_attention_reason(self, node_present: bool, bootstrap_ready: bool) -> str:
@@ -3193,6 +3288,12 @@ class CollectionCoordinator:
                 "asset_url": "",
                 "html_url": f"https://github.com/{GITHUB_REPO}/releases",
                 "published_at": "",
+                "tag_name": "",
+                "release_id": "",
+                "asset_id": "",
+                "asset_name": "",
+                "asset_updated_at": "",
+                "target_commitish": "",
                 "notes": "",
             }
         assets = payload.get("assets", []) or []
@@ -3203,25 +3304,90 @@ class CollectionCoordinator:
             "status": "ok" if wheel_asset else "partial",
             "message": "" if wheel_asset else "Latest GitHub release does not contain a wheel asset.",
             "version": version,
+            "tag_name": tag_name,
+            "release_id": str(payload.get("id", "")),
             "asset_url": str((wheel_asset or {}).get("browser_download_url", "")),
+            "asset_id": str((wheel_asset or {}).get("id", "")),
+            "asset_name": str((wheel_asset or {}).get("name", "")),
+            "asset_updated_at": str((wheel_asset or {}).get("updated_at", "")),
             "html_url": str(payload.get("html_url", "")),
             "published_at": str(payload.get("published_at", "")),
+            "target_commitish": str(payload.get("target_commitish", "")),
             "notes": str(payload.get("body", "")),
         }
+
+    def _release_install_metadata(self, release: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "version": str(release.get("version", "")),
+            "tag_name": str(release.get("tag_name", "")),
+            "release_id": str(release.get("release_id", "")),
+            "asset_id": str(release.get("asset_id", "")),
+            "asset_name": str(release.get("asset_name", "")),
+            "asset_url": str(release.get("asset_url", "")),
+            "release_url": str(release.get("html_url", "")),
+            "published_at": str(release.get("published_at", "")),
+            "asset_updated_at": str(release.get("asset_updated_at", "")),
+            "target_commitish": str(release.get("target_commitish", "")),
+            "installed_at": utc_now_iso(),
+        }
+
+    def _persist_local_installed_release(self, project_root: str, release: dict[str, Any]) -> None:
+        manifest_path = self._local_node_manifest_path(project_root)
+        manifest = self._read_local_json(manifest_path)
+        if not manifest:
+            return
+        manifest["installed_release"] = release
+        manifest["updated_at"] = utc_now_iso()
+        self._write_local_json(manifest_path, manifest)
+
+    def _persist_remote_installed_release(self, ssh: Any, sftp: Any, project_root: str, release: dict[str, Any]) -> None:
+        manifest_path = self._remote_node_manifest_path(project_root)
+        manifest = self._read_remote_json(sftp, manifest_path)
+        if not manifest:
+            return
+        manifest["installed_release"] = release
+        manifest["updated_at"] = utc_now_iso()
+        self._write_remote_json(ssh, sftp, manifest_path, manifest)
 
     def _release_check_payload(self, node: dict[str, Any], release: dict[str, Any]) -> dict[str, Any]:
         current_version = str(node.get("installed_version", ""))
         latest_version = str(release.get("version", ""))
+        latest_asset_id = str(release.get("asset_id", ""))
+        current_release = node.get("installed_release", {}) if isinstance(node.get("installed_release"), dict) else {}
+        current_asset_id = str(current_release.get("asset_id", ""))
+        exact_match_known = bool(current_asset_id and latest_asset_id)
+        exact_match = exact_match_known and current_asset_id == latest_asset_id
+        same_version = bool(current_version and latest_version and current_version == latest_version)
+        message = str(release.get("message", ""))
+        if not message:
+            if exact_match:
+                message = "Exact latest GitHub release asset is already recorded on this node."
+            elif same_version and not exact_match_known:
+                message = "Same package version is installed, but this node does not record the exact GitHub release asset yet."
+            elif same_version:
+                message = "Same package version is installed, but it is not the exact latest GitHub release asset."
         return {
             "status": release.get("status", "unverified"),
             "current_version": current_version,
             "latest_version": latest_version,
-            "update_available": bool(node.get("node_present") and latest_version and latest_version != current_version),
+            "update_available": bool(node.get("node_present") and latest_asset_id and (not exact_match if exact_match_known else True)),
             "published_at": release.get("published_at", ""),
             "release_url": release.get("html_url", ""),
             "asset_url": release.get("asset_url", ""),
             "notes": release.get("notes", ""),
-            "message": release.get("message", ""),
+            "message": message,
+            "exact_match_known": exact_match_known,
+            "exact_match": exact_match,
+            "current_release_version": str(current_release.get("version", "")),
+            "current_release_asset_id": current_asset_id,
+            "current_release_asset_name": str(current_release.get("asset_name", "")),
+            "current_release_published_at": str(current_release.get("published_at", "")),
+            "current_release_url": str(current_release.get("release_url", "")),
+            "current_release_commitish": str(current_release.get("target_commitish", "")),
+            "latest_release_asset_id": latest_asset_id,
+            "latest_release_asset_name": str(release.get("asset_name", "")),
+            "latest_release_asset_updated_at": str(release.get("asset_updated_at", "")),
+            "latest_release_commitish": str(release.get("target_commitish", "")),
         }
 
     def _install_local_node_release(
@@ -3230,6 +3396,7 @@ class CollectionCoordinator:
         service_id: str,
         display_name: str,
         wheel_url: str,
+        release_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         runtime_root = Path(project_root) / "switchboard" / "runtime"
         venv_path = runtime_root / ".venv"
@@ -3265,6 +3432,10 @@ class CollectionCoordinator:
         )
         if scaffold_result.returncode != 0:
             return {"status": "partial", "message": (scaffold_result.stderr or scaffold_result.stdout).strip()}
+        self._persist_local_installed_release(
+            project_root,
+            self._release_install_metadata(release_metadata or {"asset_url": wheel_url}),
+        )
         return {"status": "ok", "message": "Installed latest GitHub release locally."}
 
     def _build_local_wheel(self) -> Path | None:
@@ -3288,11 +3459,12 @@ class CollectionCoordinator:
         service_id: str,
         display_name: str,
         wheel_url: str,
+        release_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         with self._open_ssh(server) as connection:
             if connection is None:
                 return {"status": "unreachable", "message": "SSH connection failed."}
-            ssh, _ = connection
+            ssh, sftp = connection
             runtime_root = posixpath.join(project_root, "switchboard", "runtime")
             venv_dir = posixpath.join(runtime_root, ".venv")
             venv_python = posixpath.join(venv_dir, "bin", "python")
@@ -3309,6 +3481,12 @@ class CollectionCoordinator:
             result = self._run_remote(ssh, command)
             if result["returncode"] != 0:
                 return {"status": "partial", "message": (result["stderr"] or result["stdout"]).strip()}
+            self._persist_remote_installed_release(
+                ssh,
+                sftp,
+                project_root,
+                self._release_install_metadata(release_metadata or {"asset_url": wheel_url}),
+            )
             return {"status": "ok", "message": "Installed latest GitHub release remotely."}
 
     def _upload_tree(self, sftp: Any, local_root: Path, remote_root: str, force: bool = False) -> None:

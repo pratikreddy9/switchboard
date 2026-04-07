@@ -371,7 +371,10 @@ class RuntimeAndNodeSyncTests(unittest.TestCase):
             self.assertTrue(any(entry["doc_id"] == "readme" for entry in pulled["service"]["managed_docs"]))
 
             stored_service = manifests.get_service("svc")
-            self.assertEqual(stored_service.docs_paths, [str(paths["manifest"])])
+            self.assertIn(str(paths["manifest"]), stored_service.docs_paths)
+            self.assertIn(str(project_root / "README.md"), stored_service.docs_paths)
+            self.assertIn(str(project_root / "API.md"), stored_service.docs_paths)
+            self.assertIn(str(project_root / "CHANGELOG.md"), stored_service.docs_paths)
             self.assertEqual(stored_service.exclude_globs, ["venv"])
             self.assertEqual(stored_service.allowed_git_pull_paths, [])
             sync_state = snapshots.get_service_runtime_state("svc")["node_sync"]

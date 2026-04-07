@@ -55,6 +55,9 @@ DependencyKind = Literal[
     "deployment_host",
     "saas",
     "shared_data",
+    "api",
+    "runtime",
+    "library",
 ]
 ExecutionMode = Literal["networked", "batch", "lambda", "docs_only"]
 ProjectEnvironmentKind = Literal["dev", "test", "staging", "qa", "prod", "custom"]
@@ -628,6 +631,12 @@ class NodeInspectResult(BaseModel):
     runtime_dir: str = ""
     log_file: str = ""
     last_error: str = ""
+    installed_release_version: str = ""
+    installed_release_asset_id: str = ""
+    installed_release_asset_name: str = ""
+    installed_release_published_at: str = ""
+    installed_release_url: str = ""
+    installed_release_commitish: str = ""
 
 
 class ProjectCreateRequest(BaseModel):

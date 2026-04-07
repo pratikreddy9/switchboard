@@ -129,7 +129,7 @@ export interface RuntimeService {
   owner?: string
 }
 
-export type DependencyKind = 'service' | 'database' | 'deployment_host' | 'saas' | 'shared_data'
+export type DependencyKind = 'service' | 'database' | 'deployment_host' | 'saas' | 'shared_data' | 'api' | 'runtime' | 'library'
 
 export interface DependencyNode {
   kind: DependencyKind
@@ -154,7 +154,7 @@ export interface TaskLedgerEntry {
   dependencies?: DependencyNode[]
   cross_dependencies?: DependencyNode[]
   diagram?: string
-  notes?: string
+  notes?: string[]
   scope_entries?: ScopeEntry[]
   runtime?: RuntimeConfig
   readme?: string
@@ -893,6 +893,12 @@ export interface NodeViewerEntry {
   runtime_dir: string
   log_file: string
   last_error?: string
+  installed_release_version?: string
+  installed_release_asset_id?: string
+  installed_release_asset_name?: string
+  installed_release_published_at?: string
+  installed_release_url?: string
+  installed_release_commitish?: string
 }
 
 export interface NodeActionResult {
@@ -913,6 +919,18 @@ export interface NodeReleaseCheck {
   asset_url?: string
   notes?: string
   message?: string
+  exact_match_known?: boolean
+  exact_match?: boolean
+  current_release_version?: string
+  current_release_asset_id?: string
+  current_release_asset_name?: string
+  current_release_published_at?: string
+  current_release_url?: string
+  current_release_commitish?: string
+  latest_release_asset_id?: string
+  latest_release_asset_name?: string
+  latest_release_asset_updated_at?: string
+  latest_release_commitish?: string
 }
 
 export interface PullBundleRecord {

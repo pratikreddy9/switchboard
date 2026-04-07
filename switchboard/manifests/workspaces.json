@@ -38,7 +38,8 @@
       "aichat_test",
       "ingest_service",
       "adminchat",
-      "rag"
+      "rag",
+      "aichat_ingestion"
     ],
     "notes": "Seed workspace for the first named PESU lanes only."
   },

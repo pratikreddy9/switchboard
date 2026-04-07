@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.12.2
+
+- changed the service detail page to treat root project docs as tracked project files even when framework writes are disabled for them
+- changed the project snapshot to prefer real project context over framework bootstrap/maintenance entries when both exist in the task ledger
+- clarified framework doc ownership in the UI so `managed_docs` only means write permission, not whether a project doc exists
+- changed node release checks and viewer metadata to compare exact GitHub release asset identity, not just the semver string
+- pulled project-facing root docs from node doc indexes into control-center scope suggestions while excluding Switchboard overhead paths
+
 ## 1.12.1
 
 - fixed self-conflicting control-center action locks that made `sync-from-node` and pull bundles report themselves as already running
