@@ -14,7 +14,7 @@ from .collectors import CollectionCoordinator
 from .config import ROOT_DIR, get_settings
 from .manifests import ManifestStore
 from .models import CollectRequest
-from .node import install_node, snapshot_node, upgrade_node
+from .node import install_node, snapshot_node, upgrade_node, verify_node_update
 from .node_api import create_node_app
 from .node_runtime import node_status, start_node_runtime, stop_node_runtime, runtime_paths
 from .storage import SnapshotStore
@@ -114,6 +114,16 @@ def node_snapshot(
 ) -> None:
     result = snapshot_node(project_root)
     typer.echo(json.dumps(result, indent=2))
+
+
+@node_app.command("verify-update")
+def node_verify_update(
+    project_root: str = typer.Option(..., "--project-root"),
+) -> None:
+    result = verify_node_update(project_root)
+    typer.echo(json.dumps(result, indent=2))
+    if result.get("status") != "ok":
+        raise typer.Exit(1)
 
 
 @node_app.command("serve")

@@ -5,7 +5,7 @@ from tempfile import TemporaryDirectory
 
 from fastapi.testclient import TestClient
 
-from switchboard.node import install_node, node_paths, snapshot_node
+from switchboard.node import install_node, node_paths, snapshot_node, verify_node_update
 from switchboard.node_api import create_node_app
 
 
@@ -25,13 +25,23 @@ class NodeModeTests(unittest.TestCase):
             self.assertTrue(paths["core_readme"].exists())
             self.assertTrue(paths["bootstrap_prompt"].exists())
             self.assertTrue(paths["runtime_prompt"].exists())
+            self.assertTrue(paths["agent_contract_md"].exists())
+            self.assertTrue(paths["agent_contract_json"].exists())
             self.assertTrue(paths["tasks_completed"].exists())
             self.assertTrue(paths["completed_tasks_json"].exists())
             self.assertTrue(paths["start_script"].exists())
             self.assertTrue(paths["run_script"].exists())
+            self.assertTrue((project_root / "AGENTS.md").exists())
+            self.assertTrue((project_root / "CLAUDE.md").exists())
+            self.assertTrue((project_root / "GEMINI.md").exists())
+            self.assertTrue((project_root / "QWEN.md").exists())
+            self.assertTrue((project_root / "opencode.json").exists())
+            self.assertTrue((project_root / ".opencode" / "agents" / "switchboard.md").exists())
             self.assertEqual(result["manifest"]["service_id"], "sample-service")
             top_level = sorted(path.name for path in project_root.iterdir())
-            self.assertEqual(top_level, ["README.md", "switchboard"])
+            self.assertIn("README.md", top_level)
+            self.assertIn("switchboard", top_level)
+            self.assertIn("AGENTS.md", top_level)
 
     def test_snapshot_splits_tasks_into_derived_docs_and_json(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -79,6 +89,47 @@ class NodeModeTests(unittest.TestCase):
             self.assertEqual(result["manifest"]["managed_docs"][0]["doc_id"], "readme")
             self.assertTrue(any(entry["doc_id"] == "doc_index_json" for entry in doc_index["docs"]))
             self.assertIn("Switchboard Playbook", paths["playbook"].read_text(encoding="utf-8"))
+
+    def test_verify_update_gate_requires_agent_contract_fields(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir) / "sample-project"
+            install_node(project_root, service_id="sample-service", display_name="Sample Service")
+            paths = node_paths(project_root)
+            paths["tasks_completed"].write_text(
+                "# Tasks Completed\n\n"
+                "## 2000-01-01T00:00:00+00:00 | Incomplete update\n"
+                "- Tags: task\n"
+                "- Summary: Missing gate fields.\n"
+                "- Changed Paths: switchboard/local/tasks-completed.md\n",
+                encoding="utf-8",
+            )
+
+            snapshot_node(project_root)
+            incomplete = verify_node_update(project_root)
+
+            self.assertEqual(incomplete["status"], "incomplete")
+            self.assertTrue((paths["update_gate"]).exists())
+            self.assertTrue(
+                any(check["check_id"] == "latest_task_required_fields" and check["status"] == "failed" for check in incomplete["checks"])
+            )
+
+            paths["tasks_completed"].write_text(
+                "# Tasks Completed\n\n"
+                "## 2000-01-01T00:00:00+00:00 | Complete update\n"
+                "- Tags: task\n"
+                "- Summary: Updated Switchboard canonically.\n"
+                "- Changed Paths: switchboard/local/tasks-completed.md\n"
+                "- Agent: Codex\n"
+                "- Tool: codex-cli\n"
+                "- Read Back: Restated the request before editing.\n"
+                "- Scope Check: Project shape did not change; existing scope remains valid.\n",
+                encoding="utf-8",
+            )
+
+            snapshot_node(project_root)
+            complete = verify_node_update(project_root)
+
+            self.assertEqual(complete["status"], "ok")
 
     def test_snapshot_only_rewrites_opted_in_root_docs(self) -> None:
         with TemporaryDirectory() as tmpdir:
