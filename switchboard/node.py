@@ -1237,6 +1237,17 @@ def snapshot_node(project_root: str | Path) -> dict[str, Any]:
         "version": AGENT_CONTRACT_VERSION,
         "files": agent_contract_files,
     }
+    evidence_paths = manifest.setdefault("evidence_paths", {})
+    evidence_paths.update(
+        {
+            "completed_tasks": str(paths["completed_tasks_json"].relative_to(project_root)),
+            "doc_index": str(paths["doc_index_json"].relative_to(project_root)),
+            "repo_safety_history": str(paths["repo_safety_history"].relative_to(project_root)),
+            "pull_bundle_history": str(paths["pull_bundle_history"].relative_to(project_root)),
+            "scope_snapshot": str(paths["scope_snapshot"].relative_to(project_root)),
+            "update_gate": str(paths["update_gate"].relative_to(project_root)),
+        }
+    )
     tasks = parse_tasks_completed(paths["tasks_completed"])
     tasks_json = {
         "generated": utc_now_iso(),
@@ -1415,10 +1426,14 @@ def _parse_iso_datetime(value: str) -> datetime | None:
 
 
 def _scope_path_is_suspicious(path: str) -> bool:
-    token = str(path).replace("\\", "/").lower()
+    token = str(path).replace("\\", "/").lower().rstrip("/")
+    parts = [part for part in token.split("/") if part]
+    basename = parts[-1] if parts else token
+    if basename == ".env":
+        return True
+    if basename.startswith(".env.") and basename not in {".env.example", ".env.sample", ".env.template"}:
+        return True
     suspicious_tokens = (
-        "/.env",
-        ".env.",
         "/venv",
         "/.venv",
         "node_modules",
@@ -1514,7 +1529,7 @@ def verify_node_update(project_root: str | Path, write: bool = True) -> dict[str
         for entry in scope_entries
         if isinstance(entry, dict)
         and entry.get("enabled", True)
-        and str(entry.get("kind", "")) != "exclude"
+        and str(entry.get("kind", "")) in {"repo", "doc"}
         and _scope_path_is_suspicious(str(entry.get("path", "")))
     ]
     add_check(

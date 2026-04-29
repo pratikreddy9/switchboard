@@ -24,3 +24,49 @@
   - - Node inspect and release-check payloads now carry GitHub release asset metadata so same-version installs can still be identified as exact-match or mismatch.
   - - Remote runtime checks now fall back to `unverified` firewall state when a mocked or partial SSH object cannot execute commands, keeping the check resilient during tests.
   - - Built the frontend bundle into `switchboard/static/app/` and produced the `dist/switchboard-1.12.2-py3-none-any.whl` package artifact.
+
+## 2026-04-29T08:57:34Z | Add Switchboard agent update gate
+- Tags: task, handoff, scope
+- Summary: Added the shared agent contract and verify-update gate so Switchboard updates require read-back, scope check, snapshot, and verification.
+- Changed Paths: switchboard/node.py, switchboard/cli.py, tests_backend/test_node_mode.py, documentation/switchboard-roadmap.md, switchboard/local/tasks-completed.md
+- Agent: Codex
+- Tool: codex-cli
+- Read Back: Confirmed this is the foundation normalization slice, not the full roadmap.
+- Scope Check: Normalized the local Switchboard pull scope so generated/cache/secret paths are excluded.
+- Notes:
+  - - Generated agent instructions cover Codex, Claude Code, Gemini CLI, Qwen Code, opencode, and generic agents.
+  - - Local build, wheel build, focused backend tests, commit, push, and service restart were completed.
+  - - The .47 server was not reachable over SSH from this machine, so remote normalization remains blocked on network/VPN access.
+- Scope Entries:
+  - repo | dir | /Users/p/Desktop/dashboard | true
+  - doc | dir | /Users/p/Desktop/dashboard/docs | true
+  - doc | dir | /Users/p/Desktop/dashboard/documentation | true
+  - doc | dir | /Users/p/Desktop/dashboard/scripts | true
+  - doc | dir | /Users/p/Desktop/dashboard/src | true
+  - doc | dir | /Users/p/Desktop/dashboard/switchboard | true
+  - doc | dir | /Users/p/Desktop/dashboard/tests | true
+  - doc | dir | /Users/p/Desktop/dashboard/tests_backend | true
+  - doc | file | /Users/p/Desktop/dashboard/README.md | true
+  - doc | file | /Users/p/Desktop/dashboard/CHANGELOG.md | true
+  - doc | file | /Users/p/Desktop/dashboard/MANIFEST.in | true
+  - doc | file | /Users/p/Desktop/dashboard/package-lock.json | true
+  - doc | file | /Users/p/Desktop/dashboard/package.json | true
+  - doc | file | /Users/p/Desktop/dashboard/pyproject.toml | true
+  - doc | file | /Users/p/Desktop/dashboard/tsconfig.json | true
+  - doc | file | /Users/p/Desktop/dashboard/tsconfig.test.json | true
+  - exclude | dir | /Users/p/Desktop/dashboard/.git | true
+  - exclude | dir | /Users/p/Desktop/dashboard/.venv | true
+  - exclude | dir | /Users/p/Desktop/dashboard/.claude | true
+  - exclude | dir | /Users/p/Desktop/dashboard/.npm-cache | true
+  - exclude | dir | /Users/p/Desktop/dashboard/.pytest_cache | true
+  - exclude | dir | /Users/p/Desktop/dashboard/build | true
+  - exclude | dir | /Users/p/Desktop/dashboard/dist | true
+  - exclude | dir | /Users/p/Desktop/dashboard/downloads | true
+  - exclude | dir | /Users/p/Desktop/dashboard/logs | true
+  - exclude | dir | /Users/p/Desktop/dashboard/node_modules | true
+  - exclude | dir | /Users/p/Desktop/dashboard/release | true
+  - exclude | dir | /Users/p/Desktop/dashboard/state | true
+  - exclude | dir | /Users/p/Desktop/dashboard/switchboard.egg-info | true
+  - exclude | file | /Users/p/Desktop/dashboard/.DS_Store | true
+  - exclude | file | /Users/p/Desktop/dashboard/.env | true
+  - exclude | file | /Users/p/Desktop/dashboard/.npmrc | true

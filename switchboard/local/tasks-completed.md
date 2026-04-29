@@ -62,3 +62,49 @@ Example format:
   - Node inspect and release-check payloads now carry GitHub release asset metadata so same-version installs can still be identified as exact-match or mismatch.
   - Remote runtime checks now fall back to `unverified` firewall state when a mocked or partial SSH object cannot execute commands, keeping the check resilient during tests.
   - Built the frontend bundle into `switchboard/static/app/` and produced the `dist/switchboard-1.12.2-py3-none-any.whl` package artifact.
+
+## 2026-04-29T08:57:34Z | Add Switchboard agent update gate
+- Tags: task, handoff, scope
+- Summary: Added the shared agent contract and verify-update gate so Switchboard updates require read-back, scope check, snapshot, and verification.
+- Changed Paths: switchboard/node.py, switchboard/cli.py, tests_backend/test_node_mode.py, documentation/switchboard-roadmap.md, switchboard/local/tasks-completed.md
+- Agent: Codex
+- Tool: codex-cli
+- Read Back: Confirmed this is the foundation normalization slice, not the full roadmap.
+- Scope Check: Normalized the local Switchboard pull scope so generated/cache/secret paths are excluded.
+- Scope Entries:
+  - repo | dir | /Users/p/Desktop/dashboard
+  - doc | dir | /Users/p/Desktop/dashboard/docs
+  - doc | dir | /Users/p/Desktop/dashboard/documentation
+  - doc | dir | /Users/p/Desktop/dashboard/scripts
+  - doc | dir | /Users/p/Desktop/dashboard/src
+  - doc | dir | /Users/p/Desktop/dashboard/switchboard
+  - doc | dir | /Users/p/Desktop/dashboard/tests
+  - doc | dir | /Users/p/Desktop/dashboard/tests_backend
+  - doc | file | /Users/p/Desktop/dashboard/README.md
+  - doc | file | /Users/p/Desktop/dashboard/CHANGELOG.md
+  - doc | file | /Users/p/Desktop/dashboard/MANIFEST.in
+  - doc | file | /Users/p/Desktop/dashboard/package-lock.json
+  - doc | file | /Users/p/Desktop/dashboard/package.json
+  - doc | file | /Users/p/Desktop/dashboard/pyproject.toml
+  - doc | file | /Users/p/Desktop/dashboard/tsconfig.json
+  - doc | file | /Users/p/Desktop/dashboard/tsconfig.test.json
+  - exclude | dir | /Users/p/Desktop/dashboard/.git
+  - exclude | dir | /Users/p/Desktop/dashboard/.venv
+  - exclude | dir | /Users/p/Desktop/dashboard/.claude
+  - exclude | dir | /Users/p/Desktop/dashboard/.npm-cache
+  - exclude | dir | /Users/p/Desktop/dashboard/.pytest_cache
+  - exclude | dir | /Users/p/Desktop/dashboard/build
+  - exclude | dir | /Users/p/Desktop/dashboard/dist
+  - exclude | dir | /Users/p/Desktop/dashboard/downloads
+  - exclude | dir | /Users/p/Desktop/dashboard/logs
+  - exclude | dir | /Users/p/Desktop/dashboard/node_modules
+  - exclude | dir | /Users/p/Desktop/dashboard/release
+  - exclude | dir | /Users/p/Desktop/dashboard/state
+  - exclude | dir | /Users/p/Desktop/dashboard/switchboard.egg-info
+  - exclude | file | /Users/p/Desktop/dashboard/.DS_Store
+  - exclude | file | /Users/p/Desktop/dashboard/.env
+  - exclude | file | /Users/p/Desktop/dashboard/.npmrc
+- Notes:
+  - Generated agent instructions cover Codex, Claude Code, Gemini CLI, Qwen Code, opencode, and generic agents.
+  - Local build, wheel build, focused backend tests, commit, push, and service restart were completed.
+  - The .47 server was not reachable over SSH from this machine, so remote normalization remains blocked on network/VPN access.

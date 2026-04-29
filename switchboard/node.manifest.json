@@ -1,25 +1,62 @@
 {
   "node_id": "dashboard-d5e528e36a",
-  "service_id": "dashboard",
-  "display_name": "Dashboard",
+  "service_id": "switch",
+  "display_name": "switchboard",
   "project_root": "/Users/p/Desktop/dashboard",
   "mode": "node",
-  "installed_version": "0.1.9",
+  "installed_version": "1.12.2",
+  "runtime_port": 8010,
   "repo_paths": [
     "/Users/p/Desktop/dashboard"
   ],
   "docs_paths": [
-    "/Users/p/Desktop/dashboard/switchboard/core",
-    "/Users/p/Desktop/dashboard/switchboard/local",
-    "/Users/p/Desktop/dashboard/switchboard/evidence"
+    "/Users/p/Desktop/dashboard/.claude",
+    "/Users/p/Desktop/dashboard/.npm-cache",
+    "/Users/p/Desktop/dashboard/.pytest_cache",
+    "/Users/p/Desktop/dashboard/docs",
+    "/Users/p/Desktop/dashboard/documentation",
+    "/Users/p/Desktop/dashboard/downloads",
+    "/Users/p/Desktop/dashboard/release",
+    "/Users/p/Desktop/dashboard/scripts",
+    "/Users/p/Desktop/dashboard/src",
+    "/Users/p/Desktop/dashboard/state",
+    "/Users/p/Desktop/dashboard/switchboard",
+    "/Users/p/Desktop/dashboard/switchboard.egg-info",
+    "/Users/p/Desktop/dashboard/tests",
+    "/Users/p/Desktop/dashboard/tests_backend",
+    "/Users/p/Desktop/dashboard/.DS_Store",
+    "/Users/p/Desktop/dashboard/.env",
+    "/Users/p/Desktop/dashboard/.env.example",
+    "/Users/p/Desktop/dashboard/.gitignore",
+    "/Users/p/Desktop/dashboard/.npmrc",
+    "/Users/p/Desktop/dashboard/CHANGELOG.md",
+    "/Users/p/Desktop/dashboard/index.html",
+    "/Users/p/Desktop/dashboard/MANIFEST.in",
+    "/Users/p/Desktop/dashboard/package-lock.json",
+    "/Users/p/Desktop/dashboard/package.json",
+    "/Users/p/Desktop/dashboard/pyproject.toml",
+    "/Users/p/Desktop/dashboard/README.md",
+    "/Users/p/Desktop/dashboard/tsconfig.json",
+    "/Users/p/Desktop/dashboard/tsconfig.test.json"
   ],
-  "log_paths": [],
-  "exclude_patterns": [],
+  "log_paths": [
+    "/Users/p/Desktop/dashboard/logs"
+  ],
+  "exclude_patterns": [
+    "/Users/p/Desktop/dashboard/.git",
+    "/Users/p/Desktop/dashboard/.venv",
+    "/Users/p/Desktop/dashboard/build",
+    "/Users/p/Desktop/dashboard/dist",
+    "/Users/p/Desktop/dashboard/node_modules"
+  ],
   "runtime": {
-    "expected_ports": [],
+    "expected_ports": [
+      8009,
+      5173
+    ],
     "healthcheck_command": "",
     "run_command_hint": "",
-    "monitoring_mode": "manual",
+    "monitoring_mode": "detect",
     "notes": ""
   },
   "managed_docs": [
@@ -49,35 +86,35 @@
       "path": "switchboard/local/control-center-handoff.md",
       "enabled": true,
       "generated_from": "switchboard/local/tasks-completed.md",
-      "last_generated_at": "2026-04-07T04:05:14+00:00"
+      "last_generated_at": "2026-04-29T08:59:33+00:00"
     },
     {
       "doc_id": "runbook",
       "path": "switchboard/local/runbook.md",
       "enabled": true,
       "generated_from": "switchboard/local/tasks-completed.md",
-      "last_generated_at": "2026-04-07T04:05:14+00:00"
+      "last_generated_at": "2026-04-29T08:59:33+00:00"
     },
     {
       "doc_id": "approach_history",
       "path": "switchboard/local/approach-history.md",
       "enabled": true,
       "generated_from": "switchboard/local/tasks-completed.md",
-      "last_generated_at": "2026-04-07T04:05:14+00:00"
+      "last_generated_at": "2026-04-29T08:59:33+00:00"
     },
     {
       "doc_id": "doc_index_md",
       "path": "switchboard/local/doc-index.md",
       "enabled": true,
       "generated_from": "switchboard/local/tasks-completed.md",
-      "last_generated_at": "2026-04-07T04:05:14+00:00"
+      "last_generated_at": "2026-04-29T08:59:33+00:00"
     },
     {
       "doc_id": "doc_index_json",
       "path": "switchboard/evidence/doc-index.json",
       "enabled": true,
       "generated_from": "switchboard/local/tasks-completed.md",
-      "last_generated_at": "2026-04-07T04:05:14+00:00"
+      "last_generated_at": "2026-04-29T08:59:33+00:00"
     }
   ],
   "bootstrap_version": "",
@@ -85,9 +122,22 @@
   "dependencies": [],
   "cross_dependencies": [],
   "diagram": "",
+  "installed_release": {
+    "version": "1.12.1",
+    "tag_name": "v1.12.1",
+    "release_id": "305715690",
+    "asset_id": "390123509",
+    "asset_name": "switchboard-1.12.1-py3-none-any.whl",
+    "asset_url": "https://github.com/pratikreddy9/switchboard/releases/download/v1.12.1/switchboard-1.12.1-py3-none-any.whl",
+    "release_url": "https://github.com/pratikreddy9/switchboard/releases/tag/v1.12.1",
+    "published_at": "2026-04-06T15:56:42Z",
+    "asset_updated_at": "2026-04-06T15:56:41Z",
+    "target_commitish": "codex/company-server-controls",
+    "installed_at": "2026-04-22T04:44:29+00:00"
+  },
   "doc_index": {
-    "generated": "2026-04-07T04:05:14+00:00",
-    "service_id": "dashboard",
+    "generated": "2026-04-29T08:59:33+00:00",
+    "service_id": "switch",
     "project_root": "/Users/p/Desktop/dashboard",
     "docs": [
       {
@@ -117,7 +167,8 @@
         "generated_from": "switchboard/local/tasks-completed.md",
         "contributor_timestamps": [
           "2026-04-06T15:30:38+00:00",
-          "2026-04-07T04:01:16Z"
+          "2026-04-07T04:01:16Z",
+          "2026-04-29T08:57:34Z"
         ]
       },
       {
@@ -125,11 +176,12 @@
         "label": "Control Center Handoff",
         "path": "switchboard/local/control-center-handoff.md",
         "enabled": true,
-        "generated_at": "2026-04-07T04:05:14+00:00",
+        "generated_at": "2026-04-29T08:59:33+00:00",
         "generated_from": "switchboard/local/tasks-completed.md",
         "contributor_timestamps": [
           "2026-04-06T15:30:38+00:00",
-          "2026-04-07T04:01:16Z"
+          "2026-04-07T04:01:16Z",
+          "2026-04-29T08:57:34Z"
         ]
       },
       {
@@ -137,7 +189,7 @@
         "label": "Runbook",
         "path": "switchboard/local/runbook.md",
         "enabled": true,
-        "generated_at": "2026-04-07T04:05:14+00:00",
+        "generated_at": "2026-04-29T08:59:33+00:00",
         "generated_from": "switchboard/local/tasks-completed.md",
         "contributor_timestamps": []
       },
@@ -146,7 +198,7 @@
         "label": "Approach History",
         "path": "switchboard/local/approach-history.md",
         "enabled": true,
-        "generated_at": "2026-04-07T04:05:14+00:00",
+        "generated_at": "2026-04-29T08:59:33+00:00",
         "generated_from": "switchboard/local/tasks-completed.md",
         "contributor_timestamps": []
       },
@@ -155,11 +207,12 @@
         "label": "Doc Index Markdown",
         "path": "switchboard/local/doc-index.md",
         "enabled": true,
-        "generated_at": "2026-04-07T04:05:14+00:00",
+        "generated_at": "2026-04-29T08:59:33+00:00",
         "generated_from": "switchboard/local/tasks-completed.md",
         "contributor_timestamps": [
           "2026-04-06T15:30:38+00:00",
-          "2026-04-07T04:01:16Z"
+          "2026-04-07T04:01:16Z",
+          "2026-04-29T08:57:34Z"
         ]
       },
       {
@@ -167,11 +220,12 @@
         "label": "Doc Index JSON",
         "path": "switchboard/evidence/doc-index.json",
         "enabled": true,
-        "generated_at": "2026-04-07T04:05:14+00:00",
+        "generated_at": "2026-04-29T08:59:33+00:00",
         "generated_from": "switchboard/local/tasks-completed.md",
         "contributor_timestamps": [
           "2026-04-06T15:30:38+00:00",
-          "2026-04-07T04:01:16Z"
+          "2026-04-07T04:01:16Z",
+          "2026-04-29T08:57:34Z"
         ]
       }
     ]
@@ -181,7 +235,23 @@
     "doc_index": "switchboard/evidence/doc-index.json",
     "repo_safety_history": "switchboard/evidence/repo-safety-history.json",
     "pull_bundle_history": "switchboard/evidence/pull-bundle-history.json",
-    "scope_snapshot": "switchboard/evidence/scope.snapshot.json"
+    "scope_snapshot": "switchboard/evidence/scope.snapshot.json",
+    "update_gate": "switchboard/evidence/update-gate.json"
   },
-  "updated_at": "2026-04-07T04:05:14+00:00"
+  "updated_at": "2026-04-29T08:59:33+00:00",
+  "agent_contract": {
+    "version": "2026-04-29",
+    "files": {
+      "agent_contract_md": "written",
+      "agent_contract_json": "written",
+      "AGENTS.md": "written",
+      "CLAUDE.md": "written",
+      "GEMINI.md": "written",
+      "QWEN.md": "written",
+      ".opencode/agents/switchboard.md": "written",
+      ".gemini/settings.json": "written",
+      ".qwen/settings.json": "written",
+      "opencode.json": "written"
+    }
+  }
 }

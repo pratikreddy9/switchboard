@@ -1,0 +1,11 @@
+{
+  "context": {
+    "fileName": [
+      "QWEN.md"
+    ],
+    "includeDirectories": [
+      "switchboard/core"
+    ],
+    "loadFromIncludeDirectories": true
+  }
+}

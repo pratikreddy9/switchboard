@@ -38,6 +38,7 @@ class NodeModeTests(unittest.TestCase):
             self.assertTrue((project_root / "opencode.json").exists())
             self.assertTrue((project_root / ".opencode" / "agents" / "switchboard.md").exists())
             self.assertEqual(result["manifest"]["service_id"], "sample-service")
+            self.assertEqual(result["manifest"]["evidence_paths"]["update_gate"], "switchboard/evidence/update-gate.json")
             top_level = sorted(path.name for path in project_root.iterdir())
             self.assertIn("README.md", top_level)
             self.assertIn("switchboard", top_level)
