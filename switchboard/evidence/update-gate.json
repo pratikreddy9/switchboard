@@ -1,11 +1,11 @@
 {
-  "generated": "2026-04-30T06:14:07+00:00",
+  "generated": "2026-04-30T09:04:40+00:00",
   "status": "ok",
   "service_id": "switch",
   "project_root": "/Users/p/Desktop/dashboard",
   "latest_task": {
-    "timestamp": "2026-04-30T06:13:45Z",
-    "title": "Add manager-node cutover foundation",
+    "timestamp": "2026-04-30T09:04:05Z",
+    "title": "Repair roadmap and project UX",
     "agent": "Codex",
     "tool": "codex-cli"
   },

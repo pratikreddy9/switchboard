@@ -8,6 +8,29 @@ interface Props {
   showServiceLabel?: boolean
 }
 
+const PROJECT_COLOR_STYLES = [
+  'border-emerald-800 bg-emerald-950/60 text-emerald-200',
+  'border-amber-800 bg-amber-950/60 text-amber-200',
+  'border-sky-800 bg-sky-950/60 text-sky-200',
+  'border-rose-800 bg-rose-950/60 text-rose-200',
+  'border-violet-800 bg-violet-950/60 text-violet-200',
+  'border-teal-800 bg-teal-950/60 text-teal-200',
+  'border-orange-800 bg-orange-950/60 text-orange-200',
+  'border-fuchsia-800 bg-fuchsia-950/60 text-fuchsia-200',
+]
+
+function stableColorIndex(value: string): number {
+  let hash = 0
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0
+  }
+  return hash % PROJECT_COLOR_STYLES.length
+}
+
+function projectColorClass(value: string): string {
+  return PROJECT_COLOR_STYLES[stableColorIndex(value || 'switchboard')]
+}
+
 export function TaskLedgerPanel({ tasks, title = 'Task Ledger', showServiceLabel = false }: Props) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
@@ -45,6 +68,7 @@ export function TaskLedgerPanel({ tasks, title = 'Task Ledger', showServiceLabel
         {tasks.map((task, idx) => {
           const rowId = task.task_id || `${task.timestamp}-${idx}`
           const isExpanded = expanded[rowId]
+          const projectLabel = task.service_name || task.node_id || ''
           return (
             <div key={rowId} className="rounded-xl border border-gray-800 bg-gray-900 overflow-hidden">
               <button
@@ -61,7 +85,7 @@ export function TaskLedgerPanel({ tasks, title = 'Task Ledger', showServiceLabel
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       {showServiceLabel && task.service_name && (
-                        <span className="rounded border border-indigo-900 bg-indigo-950/60 px-1.5 py-0.5 text-[10px] font-medium text-indigo-300">
+                        <span className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${projectColorClass(projectLabel)}`}>
                           {task.service_name}
                         </span>
                       )}

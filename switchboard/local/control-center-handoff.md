@@ -84,3 +84,16 @@
   - - Added manager API routes for root list, health, manifest, snapshot, and verify-update.
   - - Fixed node status to infer the real node port from process args or manifest instead of defaulting to 8010.
   - - Added machine-readable global and per-project design principle layers to node manifests and generated agent contracts.
+
+## 2026-04-30T09:04:05Z | Repair roadmap and project UX
+- Tags: task, handoff
+- Summary: Updated the roadmap/design principles to reflect real completion state, fixed Project Grouping service selection, and added deterministic task-ledger project colors.
+- Changed Paths: documentation/switchboard-roadmap.md, documentation/switchboard-design-principles.md, src/components/ProjectsPanel.tsx, src/components/TaskLedgerPanel.tsx, switchboard/local/tasks-completed.md
+- Agent: Codex
+- Tool: codex-cli
+- Read Back: Confirmed the next local builder lane is roadmap/design cleanup plus Project Grouping selection and task ledger colors, not .47 migration work.
+- Scope Check: No new project roots or pull-bundle scope entries were added; existing documentation and source scopes cover these changes.
+- Notes:
+  - - Roadmap now marks each original requirement as done, partial, or open.
+  - - Project Grouping now exposes an actual available-project selector instead of only a bulk add button.
+  - - Task ledger project labels now use stable hash-based color classes so the same project stays visually consistent.

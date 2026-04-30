@@ -213,13 +213,19 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
     })
   }
 
-  function assignUngroupedServices() {
+  function addProjectService(serviceId: string) {
+    if (!serviceId) return
     setProjectForm((current) => {
       const existing = new Set(parseCsv(current.service_ids))
-      const next = [...existing, ...selectableServices.map((service) => service.service_id)]
-      return { ...current, service_ids: Array.from(new Set(next)).join(', ') }
+      existing.add(serviceId)
+      return { ...current, service_ids: Array.from(existing).join(', ') }
     })
   }
+
+  const availableProjectServices = useMemo(
+    () => selectableServices.filter((service) => !projectServiceIds.includes(service.service_id)),
+    [projectServiceIds, selectableServices],
+  )
 
   function beginAddEnvironment(projectId: string) {
     resetProjectForm()
@@ -810,13 +816,21 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={assignUngroupedServices}
-                      className="rounded-lg border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:border-cyan-500 hover:text-white"
+                    <select
+                      value=""
+                      onChange={(event) => addProjectService(event.target.value)}
+                      className="max-w-56 rounded-lg border border-gray-700 bg-gray-950 px-2 py-1 text-xs text-gray-300 outline-none hover:border-cyan-500 focus:border-cyan-500 disabled:opacity-50"
+                      disabled={availableProjectServices.length === 0}
                     >
-                      Add available
-                    </button>
+                      <option value="">
+                        {availableProjectServices.length === 0 ? 'No available projects' : 'Add available project'}
+                      </option>
+                      {availableProjectServices.map((service) => (
+                        <option key={service.service_id} value={service.service_id}>
+                          {service.display_name}
+                        </option>
+                      ))}
+                    </select>
                     <button
                       type="button"
                       onClick={() => setProjectForm((current) => ({ ...current, service_ids: '' }))}
