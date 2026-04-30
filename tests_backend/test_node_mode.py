@@ -2,11 +2,13 @@ import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from switchboard.node import install_node, node_paths, snapshot_node, verify_node_update
-from switchboard.node_api import create_node_app
+from switchboard.node import init_manager_node, install_node, node_paths, register_manager_root, snapshot_node, verify_node_update
+from switchboard.node_api import create_manager_node_app, create_node_app
+from switchboard.node_runtime import node_status
 
 
 class NodeModeTests(unittest.TestCase):
@@ -39,6 +41,7 @@ class NodeModeTests(unittest.TestCase):
             self.assertTrue((project_root / ".opencode" / "agents" / "switchboard.md").exists())
             self.assertEqual(result["manifest"]["service_id"], "sample-service")
             self.assertEqual(result["manifest"]["evidence_paths"]["update_gate"], "switchboard/evidence/update-gate.json")
+            self.assertIn("Read back Pratik's request before acting.", result["manifest"]["design_principles"]["global"])
             top_level = sorted(path.name for path in project_root.iterdir())
             self.assertIn("README.md", top_level)
             self.assertIn("switchboard", top_level)
@@ -185,6 +188,50 @@ class NodeModeTests(unittest.TestCase):
             self.assertIn("runtime", info.json())
             self.assertIn("last_snapshot_at", info.json())
             self.assertEqual(info.json()["runtime"]["monitoring_mode"], "manual")
+
+    def test_manager_node_registers_roots_and_exposes_api(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            manager_root = root / "manager"
+            project_root = root / "sample-project"
+            install_node(project_root, service_id="sample-service", display_name="Sample Service")
+
+            init_result = init_manager_node(manager_root, runtime_port=8711)
+            register_result = register_manager_root(manager_root, project_root, snapshot=True)
+            client = TestClient(create_manager_node_app(manager_root))
+
+            health = client.get("/api/health")
+            roots = client.get("/api/manager/roots")
+            root_health = client.get("/api/manager/roots/sample-service/health")
+            root_manifest = client.get("/api/manager/roots/sample-service/manifest")
+
+            self.assertEqual(init_result["manifest"]["mode"], "manager")
+            self.assertEqual(register_result["record"]["root_id"], "sample-service")
+            self.assertEqual(health.status_code, 200)
+            self.assertEqual(health.json()["mode"], "manager")
+            self.assertEqual(health.json()["root_count"], 1)
+            self.assertEqual(roots.json()["roots"][0]["project_root"], str(project_root.resolve()))
+            self.assertEqual(root_health.json()["service_id"], "sample-service")
+            self.assertEqual(root_manifest.json()["manifest"]["service_id"], "sample-service")
+
+    def test_node_status_detects_real_port_from_process_args(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir) / "sample-project"
+            install_node(project_root, service_id="sample-service", display_name="Sample Service")
+            output = (
+                "12345 /venv/bin/python -m switchboard.cli node serve "
+                f"--project-root {project_root.resolve()} --host 127.0.0.1 --port 8703\n"
+            )
+            with mock.patch("switchboard.node_runtime.subprocess.run") as run:
+                run.return_value.stdout = output
+                with mock.patch("switchboard.node_runtime._pid_running", side_effect=lambda pid: bool(pid)):
+                    with mock.patch("switchboard.node_runtime._port_listener_pid", return_value=12345):
+                        status = node_status(project_root)
+
+            self.assertEqual(status["port"], 8703)
+            self.assertEqual(status["pid"], 12345)
+            self.assertEqual(status["detected_process_port"], 8703)
+            self.assertEqual(status["status"], "running")
 
 
 if __name__ == "__main__":

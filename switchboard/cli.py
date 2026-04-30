@@ -14,8 +14,8 @@ from .collectors import CollectionCoordinator
 from .config import ROOT_DIR, get_settings
 from .manifests import ManifestStore
 from .models import CollectRequest
-from .node import install_node, snapshot_node, upgrade_node, verify_node_update
-from .node_api import create_node_app
+from .node import init_manager_node, install_node, list_manager_roots, register_manager_root, snapshot_node, upgrade_node, verify_node_update
+from .node_api import create_manager_node_app, create_node_app
 from .node_runtime import node_status, start_node_runtime, stop_node_runtime, runtime_paths
 from .storage import SnapshotStore
 
@@ -138,6 +138,49 @@ def node_serve(
     uvicorn.run(app_instance, host=host, port=port)
 
 
+@node_app.command("manager-init")
+def node_manager_init(
+    manager_root: str = typer.Option(..., "--manager-root"),
+    project_root: list[str] = typer.Option(None, "--project-root"),
+    port: int = typer.Option(8711, "--port"),
+    snapshot: bool = typer.Option(False, "--snapshot/--no-snapshot"),
+) -> None:
+    result = init_manager_node(manager_root, project_roots=project_root or [], runtime_port=port, snapshot=snapshot)
+    typer.echo(json.dumps(result, indent=2))
+
+
+@node_app.command("manager-register")
+def node_manager_register(
+    manager_root: str = typer.Option(..., "--manager-root"),
+    project_root: str = typer.Option(..., "--project-root"),
+    root_id: str | None = typer.Option(None, "--root-id"),
+    role: str = typer.Option("minion", "--role"),
+    snapshot: bool = typer.Option(True, "--snapshot/--no-snapshot"),
+) -> None:
+    result = register_manager_root(manager_root, project_root, root_id=root_id, role=role, snapshot=snapshot)
+    typer.echo(json.dumps(result, indent=2))
+
+
+@node_app.command("manager-list")
+def node_manager_list(
+    manager_root: str = typer.Option(..., "--manager-root"),
+) -> None:
+    result = list_manager_roots(manager_root)
+    typer.echo(json.dumps(result, indent=2))
+
+
+@node_app.command("manager-serve")
+def node_manager_serve(
+    manager_root: str = typer.Option(..., "--manager-root"),
+    host: str = typer.Option("127.0.0.1", "--host"),
+    port: int = typer.Option(8711, "--port"),
+) -> None:
+    import uvicorn
+
+    app_instance = create_manager_node_app(manager_root)
+    uvicorn.run(app_instance, host=host, port=port)
+
+
 @node_app.command("start")
 def node_start(
     project_root: str = typer.Option(..., "--project-root"),
@@ -160,7 +203,7 @@ def node_stop(
 @node_app.command("status")
 def node_runtime_status(
     project_root: str = typer.Option(..., "--project-root"),
-    port: int = typer.Option(8010, "--port"),
+    port: int | None = typer.Option(None, "--port"),
 ) -> None:
     result = node_status(project_root, port=port)
     typer.echo(json.dumps(result, indent=2))

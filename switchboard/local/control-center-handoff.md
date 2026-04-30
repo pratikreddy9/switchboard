@@ -70,3 +70,17 @@
   - exclude | file | /Users/p/Desktop/dashboard/.DS_Store | true
   - exclude | file | /Users/p/Desktop/dashboard/.env | true
   - exclude | file | /Users/p/Desktop/dashboard/.npmrc | true
+
+## 2026-04-30T06:13:45Z | Add manager-node cutover foundation
+- Tags: task, handoff
+- Summary: Added backend manager-node support so one Switchboard process can register, inspect, snapshot, and verify many project roots.
+- Changed Paths: switchboard/node.py, switchboard/node_api.py, switchboard/node_runtime.py, switchboard/cli.py, tests_backend/test_node_mode.py, switchboard/local/tasks-completed.md
+- Agent: Codex
+- Tool: codex-cli
+- Read Back: Confirmed the next completion step is a clean .47 manager-node cutover, not UI polish or GitHub backup.
+- Scope Check: Project shape did not add new pull roots; existing Switchboard source and tests scope remains valid.
+- Notes:
+  - - Added manager manifest support with one manager root and many minion project roots.
+  - - Added manager API routes for root list, health, manifest, snapshot, and verify-update.
+  - - Fixed node status to infer the real node port from process args or manifest instead of defaulting to 8010.
+  - - Added machine-readable global and per-project design principle layers to node manifests and generated agent contracts.

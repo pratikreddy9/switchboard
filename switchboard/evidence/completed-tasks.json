@@ -1,5 +1,5 @@
 {
-  "generated": "2026-04-29T08:59:33+00:00",
+  "generated": "2026-04-30T06:14:02+00:00",
   "service_id": "switch",
   "project_root": "/Users/p/Desktop/dashboard",
   "tasks": [
@@ -367,6 +367,51 @@
           "source": "tasks_completed"
         }
       ],
+      "runtime": {
+        "expected_ports": [],
+        "healthcheck_command": "",
+        "run_command_hint": "",
+        "monitoring_mode": "manual",
+        "notes": ""
+      },
+      "runtime_services": [],
+      "dependencies": [],
+      "cross_dependencies": [],
+      "diagram": "",
+      "readme": "",
+      "api": "",
+      "changelog": ""
+    },
+    {
+      "timestamp": "2026-04-30T06:13:45Z",
+      "title": "Add manager-node cutover foundation",
+      "tags": [
+        "task",
+        "handoff"
+      ],
+      "version": "",
+      "summary": "Added backend manager-node support so one Switchboard process can register, inspect, snapshot, and verify many project roots.",
+      "changed_paths": [
+        "switchboard/node.py",
+        "switchboard/node_api.py",
+        "switchboard/node_runtime.py",
+        "switchboard/cli.py",
+        "tests_backend/test_node_mode.py",
+        "switchboard/local/tasks-completed.md"
+      ],
+      "task_id": null,
+      "agent": "Codex",
+      "tool": "codex-cli",
+      "read_back": "Confirmed the next completion step is a clean .47 manager-node cutover, not UI polish or GitHub backup.",
+      "scope_check": "Project shape did not add new pull roots; existing Switchboard source and tests scope remains valid.",
+      "bootstrap_version": "",
+      "notes": [
+        "- Added manager manifest support with one manager root and many minion project roots.",
+        "- Added manager API routes for root list, health, manifest, snapshot, and verify-update.",
+        "- Fixed node status to infer the real node port from process args or manifest instead of defaulting to 8010.",
+        "- Added machine-readable global and per-project design principle layers to node manifests and generated agent contracts."
+      ],
+      "scope_entries": [],
       "runtime": {
         "expected_ports": [],
         "healthcheck_command": "",

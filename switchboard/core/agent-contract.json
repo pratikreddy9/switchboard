@@ -20,6 +20,29 @@
     "Never delete for cleanup; move or zip instead.",
     "Verify with observable checks."
   ],
+  "principle_layers": {
+    "global": [
+      "Read back Pratik's request before acting.",
+      "Ask in simple English when intent is unclear.",
+      "Make the smallest useful change.",
+      "Touch only files required by the request.",
+      "Do not invent future features.",
+      "Keep output short and avoid ceremony.",
+      "Never delete for cleanup; move or zip instead.",
+      "Verify with observable checks."
+    ],
+    "project": [],
+    "effective": [
+      "Read back Pratik's request before acting.",
+      "Ask in simple English when intent is unclear.",
+      "Make the smallest useful change.",
+      "Touch only files required by the request.",
+      "Do not invent future features.",
+      "Keep output short and avoid ceremony.",
+      "Never delete for cleanup; move or zip instead.",
+      "Verify with observable checks."
+    ]
+  },
   "canonical_update_gate": [
     "Record one entry in switchboard/local/tasks-completed.md.",
     "Include Agent, Tool, Read Back, and Scope Check.",

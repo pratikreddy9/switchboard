@@ -20,6 +20,17 @@ EVIDENCE_DIR_NAME = "evidence"
 ROUTING_TAGS = ("task", "handoff", "runbook", "decision", "scope")
 AGENT_CONTRACT_VERSION = "2026-04-29"
 AGENT_CONTRACT_MARKER = "switchboard-managed-agent-contract"
+MANAGER_MANIFEST_NAME = "manager.manifest.json"
+GLOBAL_DESIGN_PRINCIPLES = [
+    "Read back Pratik's request before acting.",
+    "Ask in simple English when intent is unclear.",
+    "Make the smallest useful change.",
+    "Touch only files required by the request.",
+    "Do not invent future features.",
+    "Keep output short and avoid ceremony.",
+    "Never delete for cleanup; move or zip instead.",
+    "Verify with observable checks.",
+]
 MANAGED_DOC_DEFAULTS: tuple[tuple[str, str, bool], ...] = (
     ("readme", "README.md", False),
     ("api", "API.md", False),
@@ -50,6 +61,7 @@ def node_paths(project_root: Path) -> dict[str, Path]:
         "local": root / LOCAL_DIR_NAME,
         "evidence": root / EVIDENCE_DIR_NAME,
         "manifest": root / "node.manifest.json",
+        "manager_manifest": root / MANAGER_MANIFEST_NAME,
         "core_readme": root / CORE_DIR_NAME / "README.md",
         "playbook": root / CORE_DIR_NAME / "playbook.md",
         "design_principles": root / CORE_DIR_NAME / "design-principles.md",
@@ -116,6 +128,13 @@ def load_node_manifest(project_root: str | Path) -> dict[str, Any]:
     if not paths["manifest"].exists():
         raise FileNotFoundError(f"Node manifest not found: {paths['manifest']}")
     return _read_json(paths["manifest"], {})
+
+
+def load_manager_manifest(manager_root: str | Path) -> dict[str, Any]:
+    paths = node_paths(Path(manager_root).resolve())
+    if not paths["manager_manifest"].exists():
+        raise FileNotFoundError(f"Manager manifest not found: {paths['manager_manifest']}")
+    return _read_json(paths["manager_manifest"], {})
 
 
 def _default_display_name(service_id: str) -> str:
@@ -321,7 +340,34 @@ def _core_templates(service_id: str, display_name: str) -> dict[str, str]:
     }
 
 
-def _agent_contract_payload(service_id: str, display_name: str) -> dict[str, Any]:
+def _normalize_principles(value: Any) -> list[str]:
+    if isinstance(value, dict):
+        value = value.get("project", [])
+    if not isinstance(value, list):
+        return []
+    normalized: list[str] = []
+    for item in value:
+        text = str(item).strip()
+        if text and text not in normalized:
+            normalized.append(text)
+    return normalized
+
+
+def _effective_principles(project_principles: list[str] | None = None) -> dict[str, list[str]]:
+    project = _normalize_principles(project_principles or [])
+    effective = [*GLOBAL_DESIGN_PRINCIPLES]
+    for item in project:
+        if item not in effective:
+            effective.append(item)
+    return {
+        "global": list(GLOBAL_DESIGN_PRINCIPLES),
+        "project": project,
+        "effective": effective,
+    }
+
+
+def _agent_contract_payload(service_id: str, display_name: str, project_principles: list[str] | None = None) -> dict[str, Any]:
+    principles = _effective_principles(project_principles)
     return {
         "version": AGENT_CONTRACT_VERSION,
         "service_id": service_id,
@@ -334,16 +380,8 @@ def _agent_contract_payload(service_id: str, display_name: str) -> dict[str, Any
             "opencode",
             "generic",
         ],
-        "principles": [
-            "Read back Pratik's request before acting.",
-            "Ask in simple English when intent is unclear.",
-            "Make the smallest useful change.",
-            "Touch only files required by the request.",
-            "Do not invent future features.",
-            "Keep output short and avoid ceremony.",
-            "Never delete for cleanup; move or zip instead.",
-            "Verify with observable checks.",
-        ],
+        "principles": principles["effective"],
+        "principle_layers": principles,
         "canonical_update_gate": [
             "Record one entry in switchboard/local/tasks-completed.md.",
             "Include Agent, Tool, Read Back, and Scope Check.",
@@ -497,9 +535,9 @@ def _merge_opencode_config(path: Path) -> str:
     return "written"
 
 
-def _write_agent_contract_files(project_root: Path, service_id: str, display_name: str) -> dict[str, str]:
+def _write_agent_contract_files(project_root: Path, service_id: str, display_name: str, project_principles: list[str] | None = None) -> dict[str, str]:
     paths = node_paths(project_root)
-    payload = _agent_contract_payload(service_id, display_name)
+    payload = _agent_contract_payload(service_id, display_name, project_principles)
     results = {
         "agent_contract_md": _write_managed_text(paths["agent_contract_md"], _agent_contract_markdown(payload)),
         "agent_contract_json": "written",
@@ -646,6 +684,150 @@ def load_pull_bundle_history(project_root: str | Path) -> dict[str, Any]:
     return _read_json(paths["pull_bundle_history"], {"generated": "", "bundles": []})
 
 
+def _manager_id(manager_root: Path) -> str:
+    digest = hashlib.sha1(str(manager_root).encode("utf-8")).hexdigest()[:10]
+    return f"manager-{digest}"
+
+
+def _manager_base_manifest(manager_root: Path, existing: dict[str, Any] | None = None, runtime_port: int = 8711) -> dict[str, Any]:
+    existing = existing or {}
+    return {
+        "mode": "manager",
+        "manager_id": existing.get("manager_id", _manager_id(manager_root)),
+        "manager_root": str(manager_root),
+        "runtime_port": int(existing.get("runtime_port", runtime_port) or runtime_port),
+        "managed_roots": existing.get("managed_roots", []),
+        "design_principles": _effective_principles(_normalize_principles(existing.get("design_principles", {}))),
+        "updated_at": utc_now_iso(),
+    }
+
+
+def _read_update_gate_status(project_root: Path) -> str:
+    paths = node_paths(project_root)
+    payload = _read_json(paths["update_gate"], {}) if paths["update_gate"].exists() else {}
+    return str(payload.get("status", "not_run") or "not_run")
+
+
+def _manager_root_record(project_root: Path, root_id: str | None = None, role: str = "minion", snapshot: bool = False) -> dict[str, Any]:
+    project_root = project_root.resolve()
+    if snapshot:
+        snapshot_node(project_root)
+    manifest = load_node_manifest(project_root)
+    service_id = str(manifest.get("service_id") or slugify(project_root.name))
+    return {
+        "root_id": root_id or service_id,
+        "project_root": str(project_root),
+        "service_id": service_id,
+        "display_name": str(manifest.get("display_name") or _default_display_name(service_id)),
+        "role": role,
+        "enabled": True,
+        "last_seen_version": str(manifest.get("installed_version", "")),
+        "manifest_updated_at": str(manifest.get("updated_at", "")),
+        "verify_status": _read_update_gate_status(project_root),
+        "design_principles": manifest.get("design_principles", _effective_principles()),
+        "registered_at": utc_now_iso(),
+    }
+
+
+def _unique_root_id(existing_roots: list[dict[str, Any]], requested_root_id: str, project_root: Path) -> str:
+    used = {str(item.get("root_id", "")) for item in existing_roots}
+    if requested_root_id not in used:
+        return requested_root_id
+    for item in existing_roots:
+        if str(item.get("root_id", "")) == requested_root_id and Path(str(item.get("project_root", ""))).resolve() == project_root.resolve():
+            return requested_root_id
+    digest = hashlib.sha1(str(project_root.resolve()).encode("utf-8")).hexdigest()[:8]
+    return f"{requested_root_id}-{digest}"
+
+
+def init_manager_node(manager_root: str | Path, project_roots: list[str | Path] | None = None, runtime_port: int = 8711, snapshot: bool = False) -> dict[str, Any]:
+    manager_root = Path(manager_root).resolve()
+    manager_root.mkdir(parents=True, exist_ok=True)
+    paths = node_paths(manager_root)
+    paths["node_root"].mkdir(parents=True, exist_ok=True)
+    existing = _read_json(paths["manager_manifest"], {}) if paths["manager_manifest"].exists() else {}
+    manifest = _manager_base_manifest(manager_root, existing, runtime_port=runtime_port)
+    _write_json(paths["manager_manifest"], manifest)
+    for root in project_roots or []:
+        manifest = register_manager_root(manager_root, root, snapshot=snapshot)["manifest"]
+    return {"manager_root": str(manager_root), "manifest_path": str(paths["manager_manifest"]), "manifest": manifest}
+
+
+def register_manager_root(
+    manager_root: str | Path,
+    project_root: str | Path,
+    root_id: str | None = None,
+    role: str = "minion",
+    snapshot: bool = True,
+) -> dict[str, Any]:
+    manager_root = Path(manager_root).resolve()
+    project_root = Path(project_root).resolve()
+    paths = node_paths(manager_root)
+    if not paths["manager_manifest"].exists():
+        init_manager_node(manager_root)
+    manifest = load_manager_manifest(manager_root)
+    roots = [dict(item) for item in manifest.get("managed_roots", []) if isinstance(item, dict)]
+    record = _manager_root_record(project_root, root_id=root_id, role=role, snapshot=snapshot)
+    record["root_id"] = _unique_root_id(roots, str(record["root_id"]), project_root)
+    roots = [item for item in roots if Path(str(item.get("project_root", ""))).resolve() != project_root]
+    roots.append(record)
+    roots.sort(key=lambda item: str(item.get("root_id", "")))
+    manifest["managed_roots"] = roots
+    manifest["updated_at"] = utc_now_iso()
+    _write_json(paths["manager_manifest"], manifest)
+    return {"status": "ok", "record": record, "manifest": manifest}
+
+
+def list_manager_roots(manager_root: str | Path) -> dict[str, Any]:
+    manifest = load_manager_manifest(manager_root)
+    return {"manager": manifest, "roots": manifest.get("managed_roots", [])}
+
+
+def _manager_record_by_id(manager_root: str | Path, root_id: str) -> dict[str, Any]:
+    manifest = load_manager_manifest(manager_root)
+    for record in manifest.get("managed_roots", []):
+        if isinstance(record, dict) and str(record.get("root_id", "")) == root_id:
+            return record
+    raise KeyError(f"Manager root not found: {root_id}")
+
+
+def manager_root_manifest(manager_root: str | Path, root_id: str) -> dict[str, Any]:
+    record = _manager_record_by_id(manager_root, root_id)
+    project_root = Path(str(record["project_root"])).resolve()
+    return {"root": record, "manifest": load_node_manifest(project_root)}
+
+
+def manager_root_snapshot(manager_root: str | Path, root_id: str) -> dict[str, Any]:
+    record = _manager_record_by_id(manager_root, root_id)
+    project_root = Path(str(record["project_root"])).resolve()
+    snapshot = snapshot_node(project_root)
+    register_manager_root(manager_root, project_root, root_id=root_id, role=str(record.get("role", "minion")), snapshot=False)
+    return {"root": _manager_record_by_id(manager_root, root_id), "snapshot": snapshot}
+
+
+def manager_root_verify_update(manager_root: str | Path, root_id: str) -> dict[str, Any]:
+    record = _manager_record_by_id(manager_root, root_id)
+    project_root = Path(str(record["project_root"])).resolve()
+    result = verify_node_update(project_root)
+    register_manager_root(manager_root, project_root, root_id=root_id, role=str(record.get("role", "minion")), snapshot=False)
+    return {"root": _manager_record_by_id(manager_root, root_id), "verify_update": result}
+
+
+def manager_root_health(manager_root: str | Path, root_id: str) -> dict[str, Any]:
+    record = _manager_record_by_id(manager_root, root_id)
+    project_root = Path(str(record["project_root"])).resolve()
+    manifest = load_node_manifest(project_root)
+    return {
+        "status": "ok",
+        "mode": "manager-root",
+        "root_id": root_id,
+        "service_id": manifest.get("service_id", ""),
+        "project_root": str(project_root),
+        "version": __version__,
+        "verify_status": _read_update_gate_status(project_root),
+    }
+
+
 def _manifest_payload(project_root: Path, service_id: str, display_name: str, existing: dict[str, Any] | None = None) -> dict[str, Any]:
     existing = existing or {}
     paths = node_paths(project_root)
@@ -685,6 +867,7 @@ def _manifest_payload(project_root: Path, service_id: str, display_name: str, ex
         "dependencies": existing.get("dependencies", []),
         "cross_dependencies": existing.get("cross_dependencies", []),
         "diagram": existing.get("diagram", ""),
+        "design_principles": _effective_principles(_normalize_principles(existing.get("design_principles", {}))),
         "installed_release": existing.get("installed_release", {}),
         "doc_index": existing.get("doc_index", {"generated": "", "docs": []}),
         "evidence_paths": {
@@ -1181,7 +1364,8 @@ def install_node(project_root: str | Path, service_id: str | None = None, displa
 
     for filename, content in _core_templates(service_id, display_name).items():
         _write_text(paths["core"] / filename, content)
-    agent_contract_files = _write_agent_contract_files(project_root, service_id, display_name)
+    principle_layers = manifest.get("design_principles", _effective_principles())
+    agent_contract_files = _write_agent_contract_files(project_root, service_id, display_name, principle_layers.get("project", []))
     manifest["agent_contract"] = {
         "version": AGENT_CONTRACT_VERSION,
         "files": agent_contract_files,
@@ -1232,7 +1416,9 @@ def snapshot_node(project_root: str | Path) -> dict[str, Any]:
     manifest = load_node_manifest(project_root)
     service_id = str(manifest.get("service_id") or slugify(project_root.name))
     display_name = str(manifest.get("display_name") or _default_display_name(service_id))
-    agent_contract_files = _write_agent_contract_files(project_root, service_id, display_name)
+    principle_layers = _effective_principles(_normalize_principles(manifest.get("design_principles", {})))
+    manifest["design_principles"] = principle_layers
+    agent_contract_files = _write_agent_contract_files(project_root, service_id, display_name, principle_layers.get("project", []))
     manifest["agent_contract"] = {
         "version": AGENT_CONTRACT_VERSION,
         "files": agent_contract_files,

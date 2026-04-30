@@ -6,12 +6,24 @@ import html
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
-from .node import list_node_files, load_node_manifest, load_pull_bundle_history, resolve_static_app_dir, snapshot_node
+from .node import (
+    list_manager_roots,
+    list_node_files,
+    load_manager_manifest,
+    load_node_manifest,
+    load_pull_bundle_history,
+    manager_root_health,
+    manager_root_manifest,
+    manager_root_snapshot,
+    manager_root_verify_update,
+    resolve_static_app_dir,
+    snapshot_node,
+)
 
 
 def create_node_app(project_root: str | Path | None = None) -> FastAPI:
@@ -215,5 +227,114 @@ def create_node_app(project_root: str | Path | None = None) -> FastAPI:
             if candidate.exists() and candidate.is_file():
                 return FileResponse(candidate)
             return JSONResponse({"detail": "Not Found"}, status_code=404)
+
+    return app
+
+
+def create_manager_node_app(manager_root: str | Path) -> FastAPI:
+    manager_root = Path(manager_root).resolve()
+    app = FastAPI(title="Switchboard Manager Node", version=__version__)
+
+    def _not_found(error: Exception) -> HTTPException:
+        return HTTPException(status_code=404, detail=str(error))
+
+    @app.get("/api/health")
+    def health() -> dict[str, object]:
+        manifest = load_manager_manifest(manager_root)
+        roots = manifest.get("managed_roots", [])
+        enabled_roots = [root for root in roots if isinstance(root, dict) and root.get("enabled", True)]
+        return {
+            "status": "ok",
+            "mode": "manager",
+            "version": __version__,
+            "manager_id": manifest.get("manager_id", ""),
+            "manager_root": str(manager_root),
+            "runtime_port": manifest.get("runtime_port", 8711),
+            "root_count": len(enabled_roots),
+        }
+
+    @app.get("/api/manager")
+    def manager_info() -> dict[str, object]:
+        return list_manager_roots(manager_root)
+
+    @app.get("/api/manager/roots")
+    def manager_roots() -> dict[str, object]:
+        return {"roots": list_manager_roots(manager_root)["roots"]}
+
+    @app.get("/api/manager/roots/{root_id}/health")
+    def root_health(root_id: str) -> dict[str, object]:
+        try:
+            return manager_root_health(manager_root, root_id)
+        except (FileNotFoundError, KeyError) as error:
+            raise _not_found(error) from error
+
+    @app.get("/api/manager/roots/{root_id}/manifest")
+    def root_manifest(root_id: str) -> dict[str, object]:
+        try:
+            return manager_root_manifest(manager_root, root_id)
+        except (FileNotFoundError, KeyError) as error:
+            raise _not_found(error) from error
+
+    @app.post("/api/manager/roots/{root_id}/snapshot")
+    def root_snapshot(root_id: str) -> dict[str, object]:
+        try:
+            return manager_root_snapshot(manager_root, root_id)
+        except (FileNotFoundError, KeyError) as error:
+            raise _not_found(error) from error
+
+    @app.post("/api/manager/roots/{root_id}/verify-update")
+    def root_verify_update(root_id: str) -> dict[str, object]:
+        try:
+            return manager_root_verify_update(manager_root, root_id)
+        except (FileNotFoundError, KeyError) as error:
+            raise _not_found(error) from error
+
+    @app.get("/", include_in_schema=False)
+    def root() -> HTMLResponse:
+        manifest = load_manager_manifest(manager_root)
+        roots = manifest.get("managed_roots", [])
+        root_rows = "".join(
+            "<tr>"
+            f"<td><code>{html.escape(str(item.get('root_id', '')))}</code></td>"
+            f"<td>{html.escape(str(item.get('display_name', '')))}</td>"
+            f"<td><code>{html.escape(str(item.get('project_root', '')))}</code></td>"
+            f"<td>{html.escape(str(item.get('verify_status', 'not_run')))}</td>"
+            "</tr>"
+            for item in roots
+            if isinstance(item, dict)
+        )
+        page = f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Switchboard Manager Node</title>
+    <style>
+      body {{ font-family: ui-sans-serif, system-ui, sans-serif; background: #020617; color: #e5e7eb; margin: 0; }}
+      .wrap {{ max-width: 1080px; margin: 0 auto; padding: 24px; }}
+      .hero, table {{ border: 1px solid #1f2937; background: #0f172a; border-radius: 12px; }}
+      .hero {{ padding: 20px; }}
+      table {{ width: 100%; border-collapse: collapse; margin-top: 16px; overflow: hidden; }}
+      th, td {{ border-bottom: 1px solid #1f2937; padding: 10px; text-align: left; }}
+      code {{ color: #93c5fd; }}
+      .muted {{ color: #94a3b8; }}
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <section class="hero">
+        <div class="muted">Switchboard Manager Node</div>
+        <h1>{html.escape(str(manifest.get("manager_id", "manager")))}</h1>
+        <p><strong>Manager root:</strong> <code>{html.escape(str(manager_root))}</code></p>
+        <p><strong>Runtime port:</strong> <code>{html.escape(str(manifest.get("runtime_port", 8711)))}</code></p>
+      </section>
+      <table>
+        <thead><tr><th>Root ID</th><th>Project</th><th>Root</th><th>Verify</th></tr></thead>
+        <tbody>{root_rows or "<tr><td colspan='4'>No managed roots registered.</td></tr>"}</tbody>
+      </table>
+    </div>
+  </body>
+</html>"""
+        return HTMLResponse(page)
 
     return app
