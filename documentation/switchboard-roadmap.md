@@ -22,37 +22,32 @@ Done:
 
 Partial:
 
-- One-node-per-machine works as a foundation, but install, update, release, and cleanup are not fully manager-managed yet.
-- Dependency and cross-dependency data exists, but composition and model usage are not presented as one view yet.
-- Pull bundle history exists, but authority source is not clear enough yet.
+- GitHub backup pushes only repos that are clean, allowlisted, and already credentialed; credential storage is intentionally out of tracked scaffolding.
 
 Open:
 
-- Add dependency composition: Python %, AI %, LLM %, embedding %, and model names.
-- Add pull-bundle authority fields and display.
-- Add safe scoped command runner with preflight and postflight reports.
-- Add manager-managed install, update, release, and archive flows.
-- Add GitHub backup readiness and dry-run before one-click backup.
+- Add a richer manager release UI around the manager-owned CLI/API.
+- Add credential-handling UX for GitHub only after Pratik approves the credential model.
 
 ## Requirement Status
 
 | # | Requirement | State |
 |---:|---|---|
 | 1 | Future plan, roadmap, design principles | Done |
-| 2 | Dependencies, cross-dependencies, composition, model usage | Partial |
-| 3 | Sink pull authority clarity | Open |
+| 2 | Dependencies, cross-dependencies, composition, model usage | Done |
+| 3 | Sink pull authority clarity | Done |
 | 4 | Project Grouping Add Available selection | Done |
-| 5 | One node per machine, one port, manager/minion | Partial |
-| 6 | Manager-managed install, release, update | Open |
-| 7 | Safe scoped commands, move/zip only | Open |
+| 5 | One node per machine, one port, manager/minion | Done |
+| 6 | Manager-managed install, release, update | Done |
+| 7 | Safe scoped commands, move/zip only | Done |
 | 8 | Agent files for Codex, Claude, Gemini, Qwen, opencode | Done |
 | 9 | Task ledger project colors | Done |
 | 10 | Agent habit discovery and token diet | Done, ongoing |
 | 11 | Read-back and low-ceremony principles | Done, ongoing |
-| 12 | Global and per-project design principles | Partial |
-| 13 | One canonical agent-edit file | Partial |
-| 14 | One node as multiple logical services | Partial |
-| 15 | GitHub backup north star | Open |
+| 12 | Global and per-project design principles | Done |
+| 13 | One canonical agent-edit file | Done |
+| 14 | One node as multiple logical services | Done |
+| 15 | GitHub backup north star | Done for eligible repos |
 
 ## Execution Phases
 
@@ -69,17 +64,17 @@ Open:
 3. Pull And Dependency Intelligence
    - Show pull authority source: manager, node-local, or control center.
    - Present direct dependencies, cross-dependencies, composition, and model usage together.
-   - Start with evidence-based detection and declared project data.
+   - Use evidence-based detection and declared project data.
 
 4. Manager Operations
-   - Make the manager the entrypoint for node install, update, release, snapshot, verify, and archive.
-   - Add safe scoped commands with explicit allowlists.
-   - Cleanup must move or zip, never delete.
+   - Manager is the entrypoint for install, upgrade/release-update, snapshot, verify, status, and old-scaffold archive.
+   - Safe scoped commands use an explicit allowlist.
+   - Cleanup moves old scaffolding into manager archives; it does not delete.
 
 5. GitHub Backup
-   - Add repo readiness checks.
-   - Add backup dry-run.
-   - Add one-click backup only after credentials and safety checks are explicit.
+   - Repo readiness checks are visible.
+   - Dry-run is recorded.
+   - Push eligible repos in one action when existing git credentials work.
 
 ## Operating Rules
 

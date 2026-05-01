@@ -135,3 +135,18 @@ Example format:
   - Roadmap now marks each original requirement as done, partial, or open.
   - Project Grouping now exposes an actual available-project selector instead of only a bulk add button.
   - Task ledger project labels now use stable hash-based color classes so the same project stays visually consistent.
+
+## 2026-05-01T05:57:30Z | Close April 29 Switchboard gaps
+- Tags: task, handoff
+- Summary: Added pull authority, dependency composition, manager-safe scoped actions, GitHub backup readiness/run support, and an April 29 gap audit.
+- Changed Paths: switchboard/collectors.py, switchboard/api.py, switchboard/node.py, switchboard/node_api.py, switchboard/cli.py, switchboard/models.py, switchboard/storage.py, src/api/client.ts, src/components/GitHubBackupPanel.tsx, src/components/PullBundlePanel.tsx, src/components/ProjectsPanel.tsx, src/pages/ControlCenterPage.tsx, src/pages/EnvironmentApiLabPage.tsx, src/types/switchboard.ts, documentation/switchboard-roadmap.md, documentation/switchboard-april29-gap-audit.md, tests_backend/test_backend_regressions.py, tests_backend/test_node_mode.py, switchboard/local/tasks-completed.md
+- Agent: Codex
+- Tool: codex-cli
+- Read Back: Restated that Pratik wants all April 29 requirements closed, with design principles echoed through plan, build, and test.
+- Scope Check: Project shape added one UI component and one audit doc; existing source and documentation pull scopes cover them, with no new roots needed.
+- Notes:
+  - Pull bundles now record whether authority came from node-local sync or the Control Center.
+  - Dependency views now show language mix, AI %, LLM %, embedding %, and model names from bundle/task evidence.
+  - Manager actions are allowlisted for install, upgrade/release-update, status, snapshot, verify-update, and old-scaffold archive; cleanup moves files instead of deleting.
+  - GitHub backup now has readiness, recorded dry-run, and push-eligible flow for repos with existing credentials.
+  - Verified with frontend tests, frontend build, and backend unittest discovery.

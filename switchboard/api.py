@@ -17,6 +17,7 @@ from .models import (
     DiscoveryTreeRequest,
     DownloadRequest,
     EnvironmentRuntimeSnapshotRequest,
+    GitHubBackupRequest,
     GitPullRequest,
     GitPushRequest,
     NodeActionRequest,
@@ -310,6 +311,25 @@ def git_push(service_id: str, request: GitPushRequest) -> dict[str, object]:
         result = coordinator.git_push(service_id, request)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _raise_for_action_result(result)
+    return result
+
+
+@app.get("/api/github-backup/readiness")
+def github_backup_readiness(workspace_id: str | None = None) -> dict[str, object]:
+    return coordinator.github_backup_readiness(GitHubBackupRequest(workspace_id=workspace_id, dry_run=True))
+
+
+@app.post("/api/github-backup/dry-run")
+def github_backup_dry_run(request: GitHubBackupRequest) -> dict[str, object]:
+    request = request.model_copy(update={"dry_run": True})
+    return coordinator.github_backup_run(request)
+
+
+@app.post("/api/github-backup/run")
+def github_backup_run(request: GitHubBackupRequest) -> dict[str, object]:
+    request = request.model_copy(update={"dry_run": False})
+    result = coordinator.github_backup_run(request)
     _raise_for_action_result(result)
     return result
 

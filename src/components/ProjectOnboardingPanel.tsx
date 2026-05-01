@@ -159,6 +159,7 @@ function TreeRow({
           disabled={disabled}
         >
           <option value="repo">Repo</option>
+          <option value="code">Code</option>
           <option value="doc">Doc</option>
           <option value="log">Log</option>
           <option value="exclude">Exclude</option>

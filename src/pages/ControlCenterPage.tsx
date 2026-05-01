@@ -4,6 +4,7 @@ import type { Workspace, WorkspaceLatest, ServerRecord } from '../types/switchbo
 import { StatusBadge } from '../components/StatusBadge'
 import { ServerCRUDPanel } from '../components/ServerCRUDPanel'
 import { CompaniesPanel } from '../components/CompaniesPanel'
+import { GitHubBackupPanel } from '../components/GitHubBackupPanel'
 import { TECH_STACK_LINES, HOW_TO_USE_LINES } from '../App'
 import { listServers } from '../api/client'
 
@@ -100,6 +101,8 @@ export function ControlCenterPage({
       <CompaniesPanel companies={workspaces} offline={!online} onReload={onReloadCompanies} />
 
       <ServerCRUDPanel servers={servers} companies={workspaces} offline={!online} onReload={loadServers} />
+
+      <GitHubBackupPanel disabled={!online} />
 
       <section className="grid gap-4 md:grid-cols-2">
         {workspaces.map((workspace) => {

@@ -6,7 +6,18 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from switchboard.node import init_manager_node, install_node, node_paths, register_manager_root, snapshot_node, verify_node_update
+from switchboard.node import (
+    init_manager_node,
+    install_node,
+    manager_install_root,
+    manager_archive_old_scaffolding,
+    manager_safe_action,
+    manager_upgrade_root,
+    node_paths,
+    register_manager_root,
+    snapshot_node,
+    verify_node_update,
+)
 from switchboard.node_api import create_manager_node_app, create_node_app
 from switchboard.node_runtime import node_status
 
@@ -213,6 +224,66 @@ class NodeModeTests(unittest.TestCase):
             self.assertEqual(roots.json()["roots"][0]["project_root"], str(project_root.resolve()))
             self.assertEqual(root_health.json()["service_id"], "sample-service")
             self.assertEqual(root_manifest.json()["manifest"]["service_id"], "sample-service")
+
+    def test_manager_safe_action_archives_only_old_scaffolding(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            manager_root = root / "manager"
+            project_root = root / "sample-project"
+            install_node(project_root, service_id="sample-service", display_name="Sample Service")
+            init_manager_node(manager_root)
+            register_manager_root(manager_root, project_root, snapshot=True)
+            paths = node_paths(project_root)
+
+            unsafe = manager_safe_action(manager_root, "delete-everything")
+            archived = manager_archive_old_scaffolding(manager_root, root_id="sample-service")
+
+            self.assertEqual(unsafe["status"], "permission_limited")
+            self.assertFalse(paths["runtime"].exists())
+            self.assertFalse(paths["start_script"].exists())
+            self.assertFalse(paths["run_script"].exists())
+            self.assertTrue(paths["core"].exists())
+            self.assertTrue(paths["local"].exists())
+            self.assertTrue(paths["evidence"].exists())
+            self.assertTrue(paths["manifest"].exists())
+            self.assertTrue(Path(archived["archive_root"]).exists())
+            self.assertTrue(any(item["status"] == "moved" for item in archived["moved"]))
+
+    def test_manager_install_and_upgrade_are_manager_owned_entrypoints(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            manager_root = root / "manager"
+            project_root = root / "sample-project"
+            init_manager_node(manager_root)
+
+            installed = manager_install_root(manager_root, project_root, service_id="sample-service", display_name="Sample Service")
+            upgraded = manager_upgrade_root(manager_root, "sample-service")
+
+            self.assertEqual(installed["status"], "ok")
+            self.assertEqual(installed["registered"]["root_id"], "sample-service")
+            self.assertEqual(upgraded["status"], "ok")
+            self.assertEqual(upgraded["registered"]["root_id"], "sample-service")
+            self.assertTrue(node_paths(project_root)["manifest"].exists())
+
+    def test_manager_api_exposes_all_root_safe_actions(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            manager_root = root / "manager"
+            project_root = root / "sample-project"
+            install_node(project_root, service_id="sample-service", display_name="Sample Service")
+            init_manager_node(manager_root)
+            register_manager_root(manager_root, project_root, snapshot=True)
+            client = TestClient(create_manager_node_app(manager_root))
+
+            status = client.post("/api/manager/actions/status")
+            upgrade = client.post("/api/manager/roots/sample-service/upgrade")
+            denied = client.post("/api/manager/actions/delete")
+
+            self.assertEqual(status.status_code, 200)
+            self.assertEqual(status.json()["status"], "ok")
+            self.assertEqual(upgrade.status_code, 200)
+            self.assertEqual(upgrade.json()["status"], "ok")
+            self.assertEqual(denied.status_code, 403)
 
     def test_node_status_detects_real_port_from_process_args(self) -> None:
         with TemporaryDirectory() as tmpdir:

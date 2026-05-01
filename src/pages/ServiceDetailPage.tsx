@@ -448,7 +448,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
   )
 
   const scopeSummary = useMemo(() => {
-    const counts = { repo: 0, doc: 0, log: 0, exclude: 0 }
+    const counts = { repo: 0, code: 0, doc: 0, log: 0, exclude: 0 }
     for (const entry of scopeEntries) {
       if (!entry.enabled) continue
       counts[entry.kind] += 1
@@ -2112,7 +2112,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         icon={<FolderTree className="h-4 w-4 text-cyan-400" />}
         open={Boolean(panelOpen.scope)}
         onToggle={() => togglePanel('scope')}
-        summary={`${projectDocEntries.length} project docs · ${scopeSummary.repo} repo · ${scopeSummary.doc} doc · ${scopeSummary.log} log`}
+        summary={`${projectDocEntries.length} project docs · ${scopeSummary.repo} repo · ${scopeSummary.code} code · ${scopeSummary.doc} doc · ${scopeSummary.log} log`}
       >
         <div className="mb-3 flex items-center justify-between gap-3">
           <div className="text-xs text-gray-500">Project docs, quick previews, managed-doc controls, and saved scope live in one compact place. Root project docs stay in scope; framework local/evidence overhead stays out.</div>
@@ -2345,6 +2345,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                         className="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-xs text-white outline-none focus:border-cyan-500"
                       >
                         <option value="repo">Repo</option>
+                        <option value="code">Code</option>
                         <option value="doc">Doc</option>
                         <option value="log">Log</option>
                         <option value="exclude">Exclude</option>
@@ -2431,6 +2432,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                 className="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500"
               >
                 <option value="repo">Repo</option>
+                <option value="code">Code</option>
                 <option value="doc">Doc</option>
                 <option value="log">Log</option>
                 <option value="exclude">Exclude</option>

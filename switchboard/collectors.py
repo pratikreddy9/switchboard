@@ -37,6 +37,7 @@ from .models import (
     DiscoveryTreeRequest,
     DownloadRequest,
     EnvironmentRuntimeSnapshotRequest,
+    GitHubBackupRequest,
     GitPushRequest,
     GitPullRequest,
     NodeActionRequest,
@@ -69,6 +70,10 @@ EXPOSURE_LINE_PATTERNS = [
 ]
 GITHUB_REPO = "pratikreddy9/switchboard"
 GITHUB_LATEST_RELEASE_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+VALID_SCOPE_SOURCES = {"seeded", "user_added", "node_manifest", "tasks_completed"}
+LEGACY_SCOPE_SOURCE_MAP = {
+    "manual_codex_handoff": "tasks_completed",
+}
 
 
 class CollectionCoordinator:
@@ -509,6 +514,93 @@ class CollectionCoordinator:
             "stderr": result["stderr"],
             "output": (result["stdout"] or result["stderr"]).strip(),
         }
+
+    def github_backup_readiness(self, request: GitHubBackupRequest | None = None) -> dict[str, Any]:
+        request = request or GitHubBackupRequest()
+        services = self._backup_services(request.workspace_id, request.service_ids)
+        repositories: list[dict[str, Any]] = []
+        for service in services:
+            for repo_path in service.repo_paths:
+                server_id = self._resolve_server_id_for_repo(service, repo_path, None)
+                if server_id is None:
+                    repositories.append(
+                        self._backup_repo_record(service, repo_path, "", {"status": "path_missing"}, None, ["No server mapping for repo path."])
+                    )
+                    continue
+                server = self.manifests.resolve_server(server_id, request.runtime_passwords)
+                repo_state = self._repo_status(server, repo_path)
+                policy = self.manifests.get_repo_policy(service.service_id, repo_path)
+                reasons: list[str] = []
+                if repo_state.get("status") != "ok":
+                    reasons.append(str(repo_state.get("status") or "Repo status is not ok."))
+                if repo_state.get("dirty"):
+                    reasons.append("Repo has uncommitted changes.")
+                if not policy or policy.push_mode != "allowed":
+                    reasons.append("Repo push policy is not allowed.")
+                if not repo_state.get("remotes"):
+                    reasons.append("Repo has no git remotes.")
+                repositories.append(self._backup_repo_record(service, repo_path, server_id, repo_state, policy, reasons))
+        eligible_count = len([item for item in repositories if item["eligible"]])
+        return {
+            "status": "ok" if eligible_count or not repositories else "partial",
+            "generated": utc_now_iso(),
+            "workspace_id": request.workspace_id or "",
+            "service_ids": request.service_ids,
+            "repository_count": len(repositories),
+            "eligible_count": eligible_count,
+            "blocked_count": len(repositories) - eligible_count,
+            "repositories": repositories,
+            "credential_note": "Uses existing git credentials or runtime passwords for remote server access; Switchboard does not store GitHub passwords.",
+        }
+
+    def github_backup_run(self, request: GitHubBackupRequest) -> dict[str, Any]:
+        readiness = self.github_backup_readiness(request)
+        if request.dry_run:
+            record = {
+                **readiness,
+                "action": "dry_run",
+                "pushed_count": 0,
+                "push_results": [],
+            }
+            self.snapshots.append_github_backup(record)
+            return record
+
+        push_results: list[dict[str, Any]] = []
+        for repo in readiness["repositories"]:
+            if not repo.get("eligible"):
+                push_results.append(
+                    {
+                        "status": "skipped",
+                        "service_id": repo.get("service_id", ""),
+                        "repo_path": repo.get("repo_path", ""),
+                        "message": "; ".join(repo.get("blocking_reasons", [])),
+                    }
+                )
+                continue
+            service_id = str(repo.get("service_id", ""))
+            server_id = str(repo.get("server_id", ""))
+            runtime_password = request.runtime_passwords.get(server_id)
+            push_results.append(
+                self.git_push(
+                    service_id,
+                    GitPushRequest(
+                        repo_path=str(repo.get("repo_path", "")),
+                        server_id=server_id,
+                        runtime_password=runtime_password,
+                        remote=request.remote,
+                    ),
+                )
+            )
+        pushed_count = len([item for item in push_results if item.get("status") == "ok"])
+        record = {
+            **readiness,
+            "action": "run",
+            "pushed_count": pushed_count,
+            "push_results": push_results,
+            "status": "ok" if pushed_count == readiness["eligible_count"] else "partial",
+        }
+        self.snapshots.append_github_backup(record)
+        return record
 
     def runtime_check(self, service_id: str, request: RuntimeActionRequest) -> dict[str, Any]:
         service = self.manifests.get_service(service_id)
@@ -1134,7 +1226,11 @@ class CollectionCoordinator:
                     )
                 )
             )
-            scope_entries = scope_snapshot["scope_entries"] if should_import_scope else current_scope_entries
+            scope_entries = (
+                self._normalize_imported_scope_entries(scope_snapshot["scope_entries"])
+                if should_import_scope
+                else current_scope_entries
+            )
             scope_entries = self._merge_project_doc_scope_entries(
                 scope_entries,
                 location.root,
@@ -1320,7 +1416,8 @@ class CollectionCoordinator:
             previous_bundle = next((bundle for bundle in self.snapshots.list_pull_bundles(service_id) if bundle.get("server_id") == server_id), None)
             diff_summary, diff_entries = self._bundle_diff(previous_bundle, copied_files)
             exposure_findings = self._bundle_exposure_findings(bundle_root / "source_tree", copied_files)
-            dependency_context = self._bundle_dependency_context(service)
+            dependency_context = self._bundle_dependency_context(service, copied_files)
+            authority = self._bundle_authority_context(service, location, server)
             manifest = {
                 "bundle_id": bundle_id,
                 "created_at": utc_now_iso(),
@@ -1337,6 +1434,7 @@ class CollectionCoordinator:
                 "diff_entries": diff_entries,
                 "exposure_findings": exposure_findings,
                 "dependency_context": dependency_context,
+                "authority": authority,
                 "repo_metadata": repo_metadata,
                 "files": copied_files,
                 "skipped_entries": skipped_entries,
@@ -1363,6 +1461,7 @@ class CollectionCoordinator:
                 "diff_entries": diff_entries,
                 "exposure_findings": exposure_findings,
                 "dependency_context": dependency_context,
+                "authority": authority,
                 "skipped_entry_count": len(skipped_entries),
                 "skipped_entries": skipped_entries,
                 "files": copied_files,
@@ -1393,6 +1492,7 @@ class CollectionCoordinator:
         service_summaries: list[dict[str, Any]] = []
         dependencies: list[dict[str, Any]] = []
         cross_dependencies: list[dict[str, Any]] = []
+        compositions: list[dict[str, Any]] = []
         snapshot = self.snapshots.get_environment_runtime_snapshot(environment.environment_id)
         snapshot_locations = {
             str(location.get("location_id", "")): location
@@ -1422,6 +1522,10 @@ class CollectionCoordinator:
             cross_dependencies = self._merge_dependency_entries(cross_dependencies, deployment_cross_dependencies)
 
             matched_bundle = self._latest_bundle_for_deployment(bundles, deployment)
+            if matched_bundle:
+                composition = matched_bundle.get("dependency_context", {}).get("composition", {})
+                if isinstance(composition, dict):
+                    compositions.append(composition)
             summary = matched_bundle.get("diff_summary", {}) if matched_bundle else {}
             added_count += int(summary.get("added_count", 0) or 0)
             removed_count += int(summary.get("removed_count", 0) or 0)
@@ -1509,6 +1613,7 @@ class CollectionCoordinator:
             "dependency_summary": {
                 "dependencies": dependencies,
                 "cross_dependencies": cross_dependencies,
+                "composition": self._merge_dependency_compositions(compositions, dependencies, cross_dependencies),
             },
             "service_summaries": service_summaries,
             "runtime_snapshot": snapshot,
@@ -1544,6 +1649,41 @@ class CollectionCoordinator:
             seen.add(key)
             merged.append(entry)
         return merged
+
+    def _backup_services(self, workspace_id: str | None, service_ids: list[str]) -> list[ServiceManifest]:
+        services = self.manifests.load_services()
+        if workspace_id:
+            services = [service for service in services if service.workspace_id == workspace_id]
+        if service_ids:
+            wanted = set(service_ids)
+            services = [service for service in services if service.service_id in wanted]
+        return services
+
+    def _backup_repo_record(
+        self,
+        service: ServiceManifest,
+        repo_path: str,
+        server_id: str,
+        repo_state: dict[str, Any],
+        policy: Any,
+        reasons: list[str],
+    ) -> dict[str, Any]:
+        remotes = repo_state.get("remotes", [])
+        return {
+            "workspace_id": service.workspace_id,
+            "service_id": service.service_id,
+            "repo_path": repo_path,
+            "server_id": server_id,
+            "status": repo_state.get("status", "unverified"),
+            "branch": repo_state.get("branch", ""),
+            "dirty": bool(repo_state.get("dirty")),
+            "last_commit": repo_state.get("last_commit", ""),
+            "remote_count": len(remotes) if isinstance(remotes, list) else 0,
+            "github_remote": any("github.com" in str(remote).lower() for remote in remotes) if isinstance(remotes, list) else False,
+            "push_mode": policy.push_mode if policy else "blocked",
+            "eligible": len(reasons) == 0,
+            "blocking_reasons": reasons,
+        }
 
     def _latest_bundle_for_deployment(
         self,
@@ -1817,6 +1957,16 @@ class CollectionCoordinator:
             "log_paths": log_paths,
             "exclude_globs": exclude_globs,
         }
+
+    def _normalize_imported_scope_entries(self, scope_entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        normalized: list[dict[str, Any]] = []
+        for entry in scope_entries:
+            item = dict(entry)
+            source = str(item.get("source") or "")
+            if source and source not in VALID_SCOPE_SOURCES:
+                item["source"] = LEGACY_SCOPE_SOURCE_MAP.get(source, "tasks_completed")
+            normalized.append(item)
+        return normalized
 
     def _should_import_project_doc(self, path: str, doc_id: str = "") -> bool:
         normalized = str(path or "").strip().lstrip("./")
@@ -3064,15 +3214,229 @@ class CollectionCoordinator:
             unique.append(item)
         return unique
 
-    def _bundle_dependency_context(self, service: ServiceManifest) -> dict[str, Any]:
+    def _bundle_authority_context(self, service: ServiceManifest, location: Any, server: ResolvedServer) -> dict[str, Any]:
+        runtime_state = self.snapshots.get_service_runtime_state(service.service_id)
+        node_sync = [
+            entry for entry in runtime_state.get("node_sync", [])
+            if not location.location_id or entry.get("location_id") == location.location_id
+        ]
+        latest_sync = node_sync[0] if node_sync else {}
+        direction = str(latest_sync.get("direction", "") or "")
+        if direction == "from_node":
+            authority_source = "node-local"
+            note = "Using the latest synced node-local manifest/scope as the bundle authority."
+        elif direction == "to_node":
+            authority_source = "control-center"
+            note = "Using the Control Center manifest/scope last pushed to the node."
+        else:
+            authority_source = "control-center"
+            note = "No node sync record exists; using the Control Center saved manifest/scope."
+        manifest_path = (
+            self._remote_node_manifest_path(location.root)
+            if server.connection_type == "ssh"
+            else str(self._local_node_manifest_path(location.root))
+        )
+        return {
+            "source": authority_source,
+            "direction": direction or "none",
+            "location_id": location.location_id,
+            "server_id": location.server_id,
+            "root": location.root,
+            "manifest_path": manifest_path,
+            "updated_at": latest_sync.get("timestamp", ""),
+            "note": note,
+        }
+
+    def _bundle_dependency_context(self, service: ServiceManifest, copied_files: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         ledger = self.snapshots.get_service_task_ledger(service.service_id)
         latest_task = ledger.get("tasks", [{}])[0] if ledger.get("tasks") else {}
+        dependencies = latest_task.get("dependencies", [])
+        cross_dependencies = latest_task.get("cross_dependencies", [])
+        notes = latest_task.get("notes", [])
         return {
-            "dependencies": latest_task.get("dependencies", []),
-            "cross_dependencies": latest_task.get("cross_dependencies", []),
-            "notes": latest_task.get("notes", []),
+            "dependencies": dependencies,
+            "cross_dependencies": cross_dependencies,
+            "notes": notes,
             "diagram": latest_task.get("diagram", ""),
+            "composition": self._dependency_composition(copied_files or [], dependencies, cross_dependencies, notes),
         }
+
+    def _dependency_composition(
+        self,
+        copied_files: list[dict[str, Any]],
+        dependencies: list[dict[str, Any]],
+        cross_dependencies: list[dict[str, Any]],
+        notes: list[str] | None = None,
+    ) -> dict[str, Any]:
+        language_counts: dict[str, int] = {}
+        ai_signal_count = 0
+        llm_signal_count = 0
+        embedding_signal_count = 0
+        model_usage: list[dict[str, Any]] = []
+
+        for file_record in copied_files:
+            relative = str(file_record.get("relative_path", ""))
+            language = self._language_for_path(relative)
+            language_counts[language] = language_counts.get(language, 0) + 1
+            text = relative.lower()
+            if self._is_ai_text(text):
+                ai_signal_count += 1
+            if self._is_llm_text(text):
+                llm_signal_count += 1
+            if self._is_embedding_text(text):
+                embedding_signal_count += 1
+
+        for entry in [*dependencies, *cross_dependencies]:
+            name = str(entry.get("name", ""))
+            kind = str(entry.get("kind", ""))
+            text = " ".join(str(entry.get(key, "")) for key in ("kind", "name", "host", "notes")).lower()
+            if self._is_ai_text(text):
+                ai_signal_count += 1
+            if self._is_llm_text(text):
+                llm_signal_count += 1
+            if self._is_embedding_text(text):
+                embedding_signal_count += 1
+            for model_name, category in self._model_mentions(f"{kind} {name} {text}"):
+                model_usage.append({"name": model_name, "category": category, "source": "dependency"})
+
+        for note in notes or []:
+            text = str(note).lower()
+            if self._is_ai_text(text):
+                ai_signal_count += 1
+            if self._is_llm_text(text):
+                llm_signal_count += 1
+            if self._is_embedding_text(text):
+                embedding_signal_count += 1
+            for model_name, category in self._model_mentions(str(note)):
+                model_usage.append({"name": model_name, "category": category, "source": "note"})
+
+        total_files = sum(language_counts.values())
+        language_percentages = [
+            {
+                "name": name,
+                "percentage": round(count * 100 / total_files, 1) if total_files else 0,
+                "file_count": count,
+            }
+            for name, count in sorted(language_counts.items(), key=lambda item: (-item[1], item[0]))
+        ]
+        ai_total = max(ai_signal_count, llm_signal_count + embedding_signal_count)
+        llm_percentage = round(llm_signal_count * 100 / ai_total, 1) if ai_total else 0
+        embedding_percentage = round(embedding_signal_count * 100 / ai_total, 1) if ai_total else 0
+        if ai_total and llm_signal_count == 0 and embedding_signal_count == 0:
+            llm_percentage = 100
+        return {
+            "basis": "bundle_files_and_latest_task_dependencies",
+            "language_percentages": language_percentages,
+            "ai_percentage": round(ai_signal_count * 100 / max(1, total_files + len(dependencies) + len(cross_dependencies)), 1),
+            "llm_percentage": llm_percentage,
+            "embedding_percentage": embedding_percentage,
+            "models": self._dedupe_model_usage(model_usage),
+        }
+
+    def _merge_dependency_compositions(
+        self,
+        compositions: list[dict[str, Any]],
+        dependencies: list[dict[str, Any]],
+        cross_dependencies: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        if not compositions:
+            return self._dependency_composition([], dependencies, cross_dependencies, [])
+        language_counts: dict[str, int] = {}
+        ai_values: list[float] = []
+        llm_values: list[float] = []
+        embedding_values: list[float] = []
+        models: list[dict[str, Any]] = []
+        for composition in compositions:
+            for item in composition.get("language_percentages", []):
+                name = str(item.get("name", "Unknown"))
+                count = int(item.get("file_count", 0) or 0)
+                language_counts[name] = language_counts.get(name, 0) + count
+            ai_values.append(float(composition.get("ai_percentage", 0) or 0))
+            llm_values.append(float(composition.get("llm_percentage", 0) or 0))
+            embedding_values.append(float(composition.get("embedding_percentage", 0) or 0))
+            models.extend(item for item in composition.get("models", []) if isinstance(item, dict))
+        total_files = sum(language_counts.values())
+        language_percentages = [
+            {
+                "name": name,
+                "percentage": round(count * 100 / total_files, 1) if total_files else 0,
+                "file_count": count,
+            }
+            for name, count in sorted(language_counts.items(), key=lambda item: (-item[1], item[0]))
+        ]
+        return {
+            "basis": "latest_pull_bundles",
+            "language_percentages": language_percentages,
+            "ai_percentage": round(sum(ai_values) / len(ai_values), 1) if ai_values else 0,
+            "llm_percentage": round(sum(llm_values) / len(llm_values), 1) if llm_values else 0,
+            "embedding_percentage": round(sum(embedding_values) / len(embedding_values), 1) if embedding_values else 0,
+            "models": self._dedupe_model_usage(models),
+        }
+
+    def _language_for_path(self, path: str) -> str:
+        suffix = Path(path).suffix.lower()
+        return {
+            ".py": "Python",
+            ".ipynb": "Python",
+            ".ts": "TypeScript",
+            ".tsx": "TypeScript",
+            ".js": "JavaScript",
+            ".jsx": "JavaScript",
+            ".json": "JSON",
+            ".md": "Docs",
+            ".yaml": "Config",
+            ".yml": "Config",
+            ".toml": "Config",
+            ".css": "CSS",
+            ".html": "HTML",
+            ".sh": "Shell",
+            ".sql": "SQL",
+        }.get(suffix, "Other")
+
+    def _is_ai_text(self, text: str) -> bool:
+        return any(token in text for token in ("llm", "embedding", "openai", "anthropic", "claude", "gemini", "qwen", "ollama", "vector", "rag"))
+
+    def _is_llm_text(self, text: str) -> bool:
+        return any(token in text for token in ("llm", "openai", "anthropic", "claude", "gemini", "qwen", "gpt", "ollama", "llama", "mistral"))
+
+    def _is_embedding_text(self, text: str) -> bool:
+        return any(token in text for token in ("embedding", "embed", "vector", "bge", "minilm"))
+
+    def _model_mentions(self, text: str) -> list[tuple[str, str]]:
+        pattern = re.compile(
+            r"\b("
+            r"gpt-[\w.-]+|claude-[\w.-]+|gemini-[\w.-]+|qwen[\w.-]*|"
+            r"text-embedding-[\w.-]+|llama[\w.-]*|mistral[\w.-]*|bge-[\w.-]+|all-minilm-[\w.-]+"
+            r")\b",
+            re.IGNORECASE,
+        )
+        mentions: list[tuple[str, str]] = []
+        for match in pattern.finditer(text):
+            name = match.group(1)
+            lowered = name.lower()
+            category = "embedding" if any(token in lowered for token in ("embedding", "bge", "minilm")) else "llm"
+            mentions.append((name, category))
+        return mentions
+
+    def _dedupe_model_usage(self, models: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        deduped: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for model in models:
+            name = str(model.get("name", "")).strip()
+            if not name:
+                continue
+            key = name.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(
+                {
+                    "name": name,
+                    "category": str(model.get("category") or "unknown"),
+                    "source": str(model.get("source") or "unknown"),
+                }
+            )
+        return deduped[:20]
 
     def _normalize_port(self, value: Any, default: int = 8010) -> int:
         try:

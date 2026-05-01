@@ -513,6 +513,7 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
     const pull = environment.pull_summary
     const depCount = environment.dependency_summary?.dependencies.length ?? 0
     const crossDepCount = environment.dependency_summary?.cross_dependencies.length ?? 0
+    const composition = environment.dependency_summary?.composition
     return (
       <div key={environment.environment_id} className="rounded-xl border border-gray-800 bg-gray-950/70">
         <button
@@ -551,6 +552,24 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
                 <div className="mt-2 text-xs text-gray-300">
                   Direct: {depCount} · Cross: {crossDepCount}
                 </div>
+                {composition && (
+                  <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                    {composition.language_percentages.slice(0, 3).map((item) => (
+                      <span key={item.name} className="rounded-full border border-gray-800 px-2 py-1 text-gray-300">
+                        {item.name} {item.percentage}%
+                      </span>
+                    ))}
+                    <span className="rounded-full border border-cyan-900/40 bg-cyan-950/20 px-2 py-1 text-cyan-200">
+                      AI {composition.ai_percentage}%
+                    </span>
+                    <span className="rounded-full border border-gray-800 px-2 py-1 text-gray-300">
+                      LLM {composition.llm_percentage}%
+                    </span>
+                    <span className="rounded-full border border-gray-800 px-2 py-1 text-gray-300">
+                      Embedding {composition.embedding_percentage}%
+                    </span>
+                  </div>
+                )}
                 <div className="mt-2 space-y-1">
                   {(environment.dependency_summary?.dependencies ?? []).slice(0, 6).map((dependency, index) => (
                     <div key={`${environment.environment_id}:dep:${index}`} className="text-xs text-gray-400">

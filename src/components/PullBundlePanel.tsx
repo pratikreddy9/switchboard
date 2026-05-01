@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Archive, ChevronDown, ChevronRight, Download, LoaderCircle, PackagePlus } from 'lucide-react'
 import { createPullBundle, getActionLocks, listPullBundles } from '../api/client'
-import type { PullBundleRecord, ScopeEntry, Service } from '../types/switchboard'
+import type { DependencyComposition, PullBundleRecord, ScopeEntry, Service } from '../types/switchboard'
 import { isApiError } from '../types/switchboard'
 import { StatusBadge } from './StatusBadge'
 import { ConfirmationModal, ACTION_EXPLAIN } from './ConfirmationModal'
@@ -27,7 +27,7 @@ export function PullBundlePanel({ service, disabled }: Props) {
   const [history, setHistory] = useState<PullBundleRecord[]>([])
   const [bundleResult, setBundleResult] = useState<PullBundleRecord | null>(null)
   const [includePath, setIncludePath] = useState('')
-  const [includeKind, setIncludeKind] = useState<'doc' | 'log'>('doc')
+  const [includeKind, setIncludeKind] = useState<'code' | 'doc' | 'log'>('doc')
   const [includePathType, setIncludePathType] = useState<'file' | 'dir' | 'glob'>('file')
   const [extraIncludes, setExtraIncludes] = useState<ScopeEntry[]>([])
   const [extraExcludes, setExtraExcludes] = useState('')
@@ -96,9 +96,9 @@ export function PullBundlePanel({ service, disabled }: Props) {
     [service.scope_entries],
   )
   const savedScopeSummary = useMemo(() => {
-    const counts = { repo: 0, doc: 0, log: 0 }
+    const counts = { repo: 0, code: 0, doc: 0, log: 0 }
     for (const entry of savedScope) {
-      if (entry.kind === 'repo' || entry.kind === 'doc' || entry.kind === 'log') counts[entry.kind] += 1
+      if (entry.kind === 'repo' || entry.kind === 'code' || entry.kind === 'doc' || entry.kind === 'log') counts[entry.kind] += 1
     }
     return counts
   }, [savedScope])
@@ -159,6 +159,42 @@ export function PullBundlePanel({ service, disabled }: Props) {
     }
   }
 
+  function renderComposition(composition?: DependencyComposition) {
+    if (!composition) return null
+    const topLanguages = composition.language_percentages.slice(0, 4)
+    const models = composition.models ?? []
+    return (
+      <div className="mt-3 rounded-lg border border-gray-800 bg-black/20 p-3">
+        <div className="text-[11px] uppercase tracking-[0.16em] text-gray-500">Composition</div>
+        <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+          {topLanguages.length === 0 ? (
+            <span className="text-gray-600">No file mix yet</span>
+          ) : (
+            topLanguages.map((item) => (
+              <span key={item.name} className="rounded-full border border-gray-800 px-2 py-1 text-gray-300">
+                {item.name} {item.percentage}%
+              </span>
+            ))
+          )}
+          <span className="rounded-full border border-cyan-900/40 bg-cyan-950/20 px-2 py-1 text-cyan-200">
+            AI {composition.ai_percentage}%
+          </span>
+          <span className="rounded-full border border-gray-800 px-2 py-1 text-gray-300">
+            LLM {composition.llm_percentage}%
+          </span>
+          <span className="rounded-full border border-gray-800 px-2 py-1 text-gray-300">
+            Embedding {composition.embedding_percentage}%
+          </span>
+        </div>
+        {models.length > 0 && (
+          <div className="mt-2 text-xs text-gray-400">
+            Models: {models.map((model) => `${model.name} (${model.category})`).join(', ')}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5">
       <AccordionSection
@@ -187,10 +223,14 @@ export function PullBundlePanel({ service, disabled }: Props) {
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <div className="rounded-xl border border-gray-800 bg-gray-900 p-3">
             <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Saved scope summary</div>
-            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <div className="mt-3 grid gap-3 sm:grid-cols-4">
               <div className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-3 text-sm text-gray-300">
                 <div className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Repo</div>
                 <div className="mt-1 text-lg font-medium text-white">{savedScopeSummary.repo}</div>
+              </div>
+              <div className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-3 text-sm text-gray-300">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Code</div>
+                <div className="mt-1 text-lg font-medium text-white">{savedScopeSummary.code}</div>
               </div>
               <div className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-3 text-sm text-gray-300">
                 <div className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Doc</div>
@@ -218,10 +258,11 @@ export function PullBundlePanel({ service, disabled }: Props) {
               />
               <select
                 value={includeKind}
-                onChange={(event) => setIncludeKind(event.target.value as 'doc' | 'log')}
+                onChange={(event) => setIncludeKind(event.target.value as 'code' | 'doc' | 'log')}
                 className="rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500"
                 disabled={disabled}
               >
+                <option value="code">Code</option>
                 <option value="doc">Doc</option>
                 <option value="log">Log</option>
               </select>
@@ -315,6 +356,12 @@ export function PullBundlePanel({ service, disabled }: Props) {
                 {bundleResult.note}
               </div>
             )}
+            {bundleResult.authority && (
+              <div className="mt-3 rounded-lg border border-cyan-900/40 bg-cyan-950/20 px-3 py-2 text-xs text-cyan-100">
+                Authority: {bundleResult.authority.source} · {bundleResult.authority.root}
+              </div>
+            )}
+            {renderComposition(bundleResult.dependency_context?.composition)}
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               <div className="rounded-lg border border-green-900/40 bg-black/20 p-3">
                 <div className="text-xs uppercase tracking-[0.16em] text-green-300/80">Pulled files</div>
@@ -407,10 +454,16 @@ export function PullBundlePanel({ service, disabled }: Props) {
                 </div>
                 {expandedHistory[bundle.bundle_id] && (
                   <div className="mt-3 space-y-3">
-                    {(bundle.note || bundle.dependency_context || (bundle.exposure_findings?.length ?? 0) > 0) && (
+                    {(bundle.note || bundle.authority || bundle.dependency_context || (bundle.exposure_findings?.length ?? 0) > 0) && (
                       <div className="rounded-lg border border-gray-800 bg-gray-950 p-3">
                         <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Bundle Notes</div>
                         {bundle.note && <div className="mt-2 text-sm text-gray-300">{bundle.note}</div>}
+                        {bundle.authority && (
+                          <div className="mt-2 rounded-lg border border-cyan-900/40 bg-cyan-950/20 px-3 py-2 text-xs text-cyan-100">
+                            Authority: {bundle.authority.source} · {bundle.authority.root}
+                            {bundle.authority.updated_at ? ` · synced ${new Date(bundle.authority.updated_at).toLocaleString()}` : ''}
+                          </div>
+                        )}
                         {bundle.dependency_context && (
                           <div className="mt-3 grid gap-3 md:grid-cols-2">
                             <div>
@@ -443,6 +496,7 @@ export function PullBundlePanel({ service, disabled }: Props) {
                             </div>
                           </div>
                         )}
+                        {renderComposition(bundle.dependency_context?.composition)}
                         {(bundle.exposure_findings?.length ?? 0) > 0 && (
                           <div className="mt-3">
                             <div className="text-[11px] uppercase tracking-[0.16em] text-yellow-300">Exposure Notes</div>

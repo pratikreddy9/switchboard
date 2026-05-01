@@ -17,10 +17,18 @@ from .node import (
     load_manager_manifest,
     load_node_manifest,
     load_pull_bundle_history,
+    manager_all_root_health,
+    manager_all_root_snapshot,
+    manager_all_root_upgrade,
+    manager_all_root_verify_update,
+    manager_archive_old_scaffolding,
+    manager_install_root,
     manager_root_health,
     manager_root_manifest,
     manager_root_snapshot,
     manager_root_verify_update,
+    manager_safe_action,
+    manager_upgrade_root,
     resolve_static_app_dir,
     snapshot_node,
 )
@@ -261,6 +269,47 @@ def create_manager_node_app(manager_root: str | Path) -> FastAPI:
     def manager_roots() -> dict[str, object]:
         return {"roots": list_manager_roots(manager_root)["roots"]}
 
+    @app.post("/api/manager/actions/status")
+    def manager_status() -> dict[str, object]:
+        return manager_all_root_health(manager_root)
+
+    @app.post("/api/manager/actions/snapshot")
+    def manager_snapshot() -> dict[str, object]:
+        return manager_all_root_snapshot(manager_root)
+
+    @app.post("/api/manager/actions/install")
+    def manager_install(payload: dict[str, object]) -> dict[str, object]:
+        project_root = str(payload.get("project_root", "")).strip()
+        if not project_root:
+            raise HTTPException(status_code=422, detail="project_root is required")
+        return manager_install_root(
+            manager_root,
+            project_root,
+            root_id=str(payload.get("root_id") or "") or None,
+            role=str(payload.get("role") or "minion"),
+            service_id=str(payload.get("service_id") or "") or None,
+            display_name=str(payload.get("display_name") or "") or None,
+        )
+
+    @app.post("/api/manager/actions/upgrade")
+    def manager_upgrade() -> dict[str, object]:
+        return manager_all_root_upgrade(manager_root)
+
+    @app.post("/api/manager/actions/verify-update")
+    def manager_verify_update() -> dict[str, object]:
+        return manager_all_root_verify_update(manager_root)
+
+    @app.post("/api/manager/actions/archive-old-scaffolding")
+    def manager_archive() -> dict[str, object]:
+        return manager_archive_old_scaffolding(manager_root)
+
+    @app.post("/api/manager/actions/{action}")
+    def manager_action(action: str) -> dict[str, object]:
+        result = manager_safe_action(manager_root, action)
+        if result.get("status") == "permission_limited":
+            raise HTTPException(status_code=403, detail=result)
+        return result
+
     @app.get("/api/manager/roots/{root_id}/health")
     def root_health(root_id: str) -> dict[str, object]:
         try:
@@ -286,6 +335,20 @@ def create_manager_node_app(manager_root: str | Path) -> FastAPI:
     def root_verify_update(root_id: str) -> dict[str, object]:
         try:
             return manager_root_verify_update(manager_root, root_id)
+        except (FileNotFoundError, KeyError) as error:
+            raise _not_found(error) from error
+
+    @app.post("/api/manager/roots/{root_id}/upgrade")
+    def root_upgrade(root_id: str) -> dict[str, object]:
+        try:
+            return manager_upgrade_root(manager_root, root_id)
+        except (FileNotFoundError, KeyError) as error:
+            raise _not_found(error) from error
+
+    @app.post("/api/manager/roots/{root_id}/archive-old-scaffolding")
+    def root_archive_old_scaffolding(root_id: str) -> dict[str, object]:
+        try:
+            return manager_archive_old_scaffolding(manager_root, root_id=root_id)
         except (FileNotFoundError, KeyError) as error:
             raise _not_found(error) from error
 

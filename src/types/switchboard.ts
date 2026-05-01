@@ -68,7 +68,7 @@ export interface ServiceLocationDraft {
 
 export interface ScopeEntry {
   entry_id?: string
-  kind: 'repo' | 'doc' | 'log' | 'exclude'
+  kind: 'repo' | 'code' | 'doc' | 'log' | 'exclude'
   path: string
   path_type: 'file' | 'dir' | 'glob'
   source: 'seeded' | 'user_added' | 'node_manifest' | 'tasks_completed'
@@ -222,6 +222,26 @@ export interface ProjectPullSummary {
 export interface EnvironmentDependencySummary {
   dependencies: DependencyNode[]
   cross_dependencies: DependencyNode[]
+  composition?: DependencyComposition
+}
+
+export interface DependencyComposition {
+  basis: string
+  language_percentages: Array<{
+    name: string
+    percentage: number
+    file_count: number
+  }>
+  ai_percentage: number
+  llm_percentage: number
+  embedding_percentage: number
+  models: ModelUsage[]
+}
+
+export interface ModelUsage {
+  name: string
+  category: 'llm' | 'embedding' | 'unknown'
+  source: string
 }
 
 export interface ProjectEnvironmentServiceSummary {
@@ -713,6 +733,45 @@ export interface GitPullResult {
   stderr?: string
 }
 
+export interface GitHubBackupRequest {
+  workspace_id?: string
+  service_ids?: string[]
+  runtime_passwords?: Record<string, string>
+  remote?: string
+  dry_run?: boolean
+}
+
+export interface GitHubBackupRepo {
+  workspace_id: string
+  service_id: string
+  repo_path: string
+  server_id: string
+  status: CollectStatus
+  branch: string
+  dirty: boolean
+  last_commit: string
+  remote_count: number
+  github_remote: boolean
+  push_mode: 'allowed' | 'blocked'
+  eligible: boolean
+  blocking_reasons: string[]
+}
+
+export interface GitHubBackupResult {
+  status: CollectStatus
+  generated: string
+  workspace_id: string
+  service_ids: string[]
+  repository_count: number
+  eligible_count: number
+  blocked_count: number
+  credential_note: string
+  repositories: GitHubBackupRepo[]
+  action?: 'dry_run' | 'run'
+  pushed_count?: number
+  push_results?: Array<Record<string, unknown>>
+}
+
 export interface RepoStateResult extends RepoSummary {
   repo_path: string
 }
@@ -729,7 +788,7 @@ export interface ScanEntry {
   name: string
   entry_type: 'file' | 'dir'
   depth: number
-  suggested_kind: 'repo' | 'doc' | 'log' | 'exclude'
+  suggested_kind: 'repo' | 'code' | 'doc' | 'log' | 'exclude'
 }
 
 export interface TreeNodeEntry {
@@ -739,7 +798,7 @@ export interface TreeNodeEntry {
   entry_type?: 'file' | 'dir'
   has_children: boolean
   children_loaded: boolean
-  suggested_kind: 'repo' | 'doc' | 'log' | 'exclude'
+  suggested_kind: 'repo' | 'code' | 'doc' | 'log' | 'exclude'
   default_selected: boolean
 }
 
@@ -861,7 +920,7 @@ export interface PullBundleDiffSummary {
 export interface PullBundleDiffEntry {
   change: 'added' | 'removed' | 'changed'
   relative_path: string
-  kind: 'repo' | 'doc' | 'log'
+  kind: 'repo' | 'code' | 'doc' | 'log'
 }
 
 export interface DependencyContext {
@@ -869,6 +928,18 @@ export interface DependencyContext {
   cross_dependencies: DependencyNode[]
   notes: string[]
   diagram: string
+  composition?: DependencyComposition
+}
+
+export interface PullBundleAuthority {
+  source: 'node-local' | 'control-center' | string
+  direction: string
+  location_id: string
+  server_id: string
+  root: string
+  manifest_path: string
+  updated_at: string
+  note: string
 }
 
 export interface NodeViewerEntry {
@@ -952,15 +1023,16 @@ export interface PullBundleRecord {
   diff_entries?: PullBundleDiffEntry[]
   exposure_findings?: ExposureFinding[]
   dependency_context?: DependencyContext
+  authority?: PullBundleAuthority
   skipped_entry_count?: number
   skipped_entries?: Array<{
     path: string
-    kind: 'doc' | 'log' | 'repo' | 'exclude'
+    kind: 'doc' | 'log' | 'repo' | 'code' | 'exclude'
     path_type: 'file' | 'dir' | 'glob'
     reason: string
   }>
   files?: Array<{
-    kind: 'doc' | 'log' | 'repo'
+    kind: 'doc' | 'log' | 'repo' | 'code'
     source_path: string
     target_path: string
     relative_path: string

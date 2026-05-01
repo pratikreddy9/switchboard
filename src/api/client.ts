@@ -29,6 +29,8 @@ import type {
   DiscoveryTreeRequest,
   DiscoveryTreeResult,
   DownloadRequest,
+  GitHubBackupRequest,
+  GitHubBackupResult,
   GitPushRequest,
   GitPullRequest,
   GitPullResult,
@@ -778,6 +780,29 @@ export const triggerGitPush = (
   apiFetch<GitPullResult>(`/services/${id}/actions/git-push`, {
     method: 'POST',
     body: JSON.stringify(req),
+  })
+
+export const getGithubBackupReadiness = (
+  workspaceId?: string,
+): Promise<ApiResult<GitHubBackupResult>> => {
+  const query = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : ''
+  return apiFetch<GitHubBackupResult>(`/github-backup/readiness${query}`)
+}
+
+export const runGithubBackupDryRun = (
+  req: GitHubBackupRequest,
+): Promise<ApiResult<GitHubBackupResult>> =>
+  apiFetch<GitHubBackupResult>('/github-backup/dry-run', {
+    method: 'POST',
+    body: JSON.stringify({ ...req, dry_run: true }),
+  })
+
+export const runGithubBackup = (
+  req: GitHubBackupRequest,
+): Promise<ApiResult<GitHubBackupResult>> =>
+  apiFetch<GitHubBackupResult>('/github-backup/run', {
+    method: 'POST',
+    body: JSON.stringify({ ...req, dry_run: false }),
   })
 
 // Returns count only — never expose actual paths in the dashboard

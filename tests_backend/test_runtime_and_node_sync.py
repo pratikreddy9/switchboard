@@ -355,6 +355,20 @@ class RuntimeAndNodeSyncTests(unittest.TestCase):
                                 "enabled": True,
                                 "source": "tasks_completed",
                             },
+                            {
+                                "kind": "doc",
+                                "path_type": "file",
+                                "path": str(project_root / "legacy-handoff.md"),
+                                "enabled": True,
+                                "source": "manual_codex_handoff",
+                            },
+                            {
+                                "kind": "code",
+                                "path_type": "file",
+                                "path": str(project_root / "app.py"),
+                                "enabled": True,
+                                "source": "tasks_completed",
+                            },
                         ],
                         "scope_updates": [],
                     },
@@ -375,6 +389,18 @@ class RuntimeAndNodeSyncTests(unittest.TestCase):
             self.assertIn(str(project_root / "README.md"), stored_service.docs_paths)
             self.assertIn(str(project_root / "API.md"), stored_service.docs_paths)
             self.assertIn(str(project_root / "CHANGELOG.md"), stored_service.docs_paths)
+            self.assertTrue(
+                any(
+                    entry.path == str(project_root / "legacy-handoff.md") and entry.source == "tasks_completed"
+                    for entry in stored_service.scope_entries
+                )
+            )
+            self.assertTrue(
+                any(
+                    entry.path == str(project_root / "app.py") and entry.kind == "code"
+                    for entry in stored_service.scope_entries
+                )
+            )
             self.assertEqual(stored_service.exclude_globs, ["venv"])
             self.assertEqual(stored_service.allowed_git_pull_paths, [])
             sync_state = snapshots.get_service_runtime_state("svc")["node_sync"]

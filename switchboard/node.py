@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -825,6 +826,164 @@ def manager_root_health(manager_root: str | Path, root_id: str) -> dict[str, Any
         "project_root": str(project_root),
         "version": __version__,
         "verify_status": _read_update_gate_status(project_root),
+    }
+
+
+def manager_all_root_health(manager_root: str | Path) -> dict[str, Any]:
+    roots = list_manager_roots(manager_root)["roots"]
+    results = []
+    for record in roots:
+        if not isinstance(record, dict) or not record.get("enabled", True):
+            continue
+        root_id = str(record.get("root_id", ""))
+        try:
+            results.append(manager_root_health(manager_root, root_id))
+        except Exception as exc:
+            results.append({"root_id": root_id, "status": "partial", "message": str(exc)})
+    return {"status": "ok" if all(item.get("status") == "ok" for item in results) else "partial", "roots": results}
+
+
+def manager_all_root_snapshot(manager_root: str | Path) -> dict[str, Any]:
+    roots = list_manager_roots(manager_root)["roots"]
+    results = []
+    for record in roots:
+        if not isinstance(record, dict) or not record.get("enabled", True):
+            continue
+        root_id = str(record.get("root_id", ""))
+        try:
+            results.append(manager_root_snapshot(manager_root, root_id))
+        except Exception as exc:
+            results.append({"root": record, "status": "partial", "message": str(exc)})
+    return {"status": "ok" if all(item.get("snapshot", {}).get("manifest") for item in results) else "partial", "roots": results}
+
+
+def manager_install_root(
+    manager_root: str | Path,
+    project_root: str | Path,
+    root_id: str | None = None,
+    role: str = "minion",
+    service_id: str | None = None,
+    display_name: str | None = None,
+) -> dict[str, Any]:
+    installed = install_node(project_root, service_id=service_id, display_name=display_name)
+    registered = register_manager_root(manager_root, project_root, root_id=root_id, role=role, snapshot=False)
+    return {"status": "ok", "installed": installed, "registered": registered["record"]}
+
+
+def manager_upgrade_root(manager_root: str | Path, root_id: str) -> dict[str, Any]:
+    record = _manager_record_by_id(manager_root, root_id)
+    project_root = Path(str(record["project_root"])).resolve()
+    upgraded = upgrade_node(project_root)
+    registered = register_manager_root(manager_root, project_root, root_id=root_id, role=str(record.get("role", "minion")), snapshot=False)
+    return {"status": "ok", "upgraded": upgraded, "registered": registered["record"]}
+
+
+def manager_all_root_upgrade(manager_root: str | Path) -> dict[str, Any]:
+    roots = list_manager_roots(manager_root)["roots"]
+    results = []
+    for record in roots:
+        if not isinstance(record, dict) or not record.get("enabled", True):
+            continue
+        root_id = str(record.get("root_id", ""))
+        try:
+            results.append(manager_upgrade_root(manager_root, root_id))
+        except Exception as exc:
+            results.append({"status": "partial", "root_id": root_id, "message": str(exc)})
+    return {"status": "ok" if all(item.get("status") == "ok" for item in results) else "partial", "roots": results}
+
+
+def manager_all_root_verify_update(manager_root: str | Path) -> dict[str, Any]:
+    roots = list_manager_roots(manager_root)["roots"]
+    results = []
+    for record in roots:
+        if not isinstance(record, dict) or not record.get("enabled", True):
+            continue
+        root_id = str(record.get("root_id", ""))
+        try:
+            results.append(manager_root_verify_update(manager_root, root_id))
+        except Exception as exc:
+            results.append({"root": record, "verify_update": {"status": "partial", "message": str(exc)}})
+    ok = all(item.get("verify_update", {}).get("status") == "ok" for item in results)
+    return {"status": "ok" if ok else "partial", "roots": results}
+
+
+def manager_archive_old_scaffolding(manager_root: str | Path, root_id: str | None = None) -> dict[str, Any]:
+    manager_root = Path(manager_root).resolve()
+    archive_root = manager_root / NODE_DIR_NAME / "manager" / "archives" / f"{utc_now_iso().replace(':', '-')}--old-node-scaffolding"
+    roots = list_manager_roots(manager_root)["roots"]
+    selected = [
+        record for record in roots
+        if isinstance(record, dict)
+        and record.get("enabled", True)
+        and (root_id is None or str(record.get("root_id", "")) == root_id)
+    ]
+    if root_id is not None and not selected:
+        raise KeyError(f"Manager root not found: {root_id}")
+    moved: list[dict[str, Any]] = []
+    for record in selected:
+        project_root = Path(str(record["project_root"])).resolve()
+        paths = node_paths(project_root)
+        per_root_archive = archive_root / str(record.get("root_id", "root"))
+        for key in ("runtime", "start_script", "run_script"):
+            source = paths[key]
+            if not source.exists():
+                moved.append({"root_id": record.get("root_id", ""), "source": str(source), "status": "missing"})
+                continue
+            target = per_root_archive / source.relative_to(project_root)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(source), str(target))
+            moved.append({"root_id": record.get("root_id", ""), "source": str(source), "target": str(target), "status": "moved"})
+    report = {
+        "status": "ok",
+        "generated": utc_now_iso(),
+        "manager_root": str(manager_root),
+        "archive_root": str(archive_root),
+        "root_id": root_id or "",
+        "moved": moved,
+        "preserved": [
+            "switchboard/core",
+            "switchboard/local",
+            "switchboard/evidence",
+            "switchboard/node.manifest.json",
+            "root-level agent contract files",
+        ],
+    }
+    _write_json(archive_root / "archive-report.json", report)
+    (archive_root / "archive-report.md").write_text(
+        "# Switchboard Old Node Scaffolding Archive\n\n"
+        f"- Generated: {report['generated']}\n"
+        f"- Manager root: `{report['manager_root']}`\n"
+        f"- Archive root: `{report['archive_root']}`\n"
+        f"- Moved entries: {len([item for item in moved if item['status'] == 'moved'])}\n"
+        "- Preserved canonical files: core, local, evidence, manifest, and agent files.\n",
+        encoding="utf-8",
+    )
+    return report
+
+
+def manager_safe_action(manager_root: str | Path, action: str, root_id: str | None = None) -> dict[str, Any]:
+    if action == "status":
+        if root_id:
+            return manager_root_health(manager_root, root_id)
+        return manager_all_root_health(manager_root)
+    if action == "snapshot":
+        if root_id:
+            return manager_root_snapshot(manager_root, root_id)
+        return manager_all_root_snapshot(manager_root)
+    if action in {"upgrade", "release-update"}:
+        if root_id:
+            return manager_upgrade_root(manager_root, root_id)
+        return manager_all_root_upgrade(manager_root)
+    if action == "verify-update":
+        if root_id:
+            return manager_root_verify_update(manager_root, root_id)
+        return manager_all_root_verify_update(manager_root)
+    if action == "archive-old-scaffolding":
+        return manager_archive_old_scaffolding(manager_root, root_id=root_id)
+    return {
+        "status": "permission_limited",
+        "message": "Only status, snapshot, upgrade, release-update, verify-update, and archive-old-scaffolding are allowed.",
+        "action": action,
     }
 
 

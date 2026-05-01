@@ -89,6 +89,7 @@ class SnapshotStore:
         run_history = {"generated": generated, "runs": []}
         pull_bundle_history = {"generated": generated, "bundles": []}
         repo_safety_history = {"generated": generated, "checks": []}
+        github_backup_history = {"generated": generated, "runs": []}
         secret_index = {"generated": generated, "entries": []}
 
         write_json(self.settings.evidence_dir / "workspace-registry.json", workspace_registry)
@@ -100,6 +101,7 @@ class SnapshotStore:
         write_json(self.settings.evidence_dir / "run-history.json", run_history)
         write_json(self.settings.evidence_dir / "pull-bundle-history.json", pull_bundle_history)
         write_json(self.settings.evidence_dir / "repo-safety-history.json", repo_safety_history)
+        write_json(self.settings.evidence_dir / "github-backup-history.json", github_backup_history)
         write_json(self.settings.private_state_dir / "secret-path-index.json", secret_index)
         write_json(self.settings.private_state_dir / "repo-safety-findings.json", {"generated": generated, "checks": []})
         write_json(
@@ -461,6 +463,15 @@ class SnapshotStore:
     def list_all_pull_bundles(self) -> list[dict[str, Any]]:
         data = read_json(self.settings.evidence_dir / "pull-bundle-history.json", {"bundles": []})
         return list(data.get("bundles", []))
+
+    def append_github_backup(self, record: dict[str, Any]) -> dict[str, Any]:
+        path = self.settings.evidence_dir / "github-backup-history.json"
+        generated = str(record.get("generated") or utc_now_iso())
+        history = read_json(path, {"generated": generated, "runs": []})
+        history["generated"] = generated
+        history["runs"].insert(0, record)
+        write_json(path, history)
+        return record
 
     def append_repo_safety_check(self, summary: dict[str, Any], findings: list[dict[str, Any]]) -> dict[str, Any]:
         public_path = self.settings.evidence_dir / "repo-safety-history.json"

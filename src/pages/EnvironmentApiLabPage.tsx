@@ -880,7 +880,31 @@ export function EnvironmentApiLabPage({ environmentId, offline, onBack, onSelect
         onToggle={() => updateSection('dependencies')}
         summary="Rolled up from task ledger and environment deployments"
       >
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
+            <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Composition</div>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              {(lab.environment.dependency_summary?.composition?.language_percentages ?? []).slice(0, 4).map((item) => (
+                <span key={item.name} className="rounded-full border border-gray-800 px-2 py-1 text-gray-300">
+                  {item.name} {item.percentage}%
+                </span>
+              ))}
+              <span className="rounded-full border border-cyan-900/40 bg-cyan-950/20 px-2 py-1 text-cyan-200">
+                AI {lab.environment.dependency_summary?.composition?.ai_percentage ?? 0}%
+              </span>
+              <span className="rounded-full border border-gray-800 px-2 py-1 text-gray-300">
+                LLM {lab.environment.dependency_summary?.composition?.llm_percentage ?? 0}%
+              </span>
+              <span className="rounded-full border border-gray-800 px-2 py-1 text-gray-300">
+                Embedding {lab.environment.dependency_summary?.composition?.embedding_percentage ?? 0}%
+              </span>
+            </div>
+            {(lab.environment.dependency_summary?.composition?.models?.length ?? 0) > 0 && (
+              <div className="mt-3 text-xs text-gray-400">
+                Models: {lab.environment.dependency_summary?.composition?.models?.map((model) => model.name).join(', ')}
+              </div>
+            )}
+          </div>
           <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
             <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Direct Dependencies</div>
             <div className="mt-3 space-y-2">

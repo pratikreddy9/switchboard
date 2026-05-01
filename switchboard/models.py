@@ -11,7 +11,7 @@ FavoriteTier = Literal["primary", "secondary", "none"]
 OwnershipTier = Literal["owned", "shared", "infra"]
 ConnectionType = Literal["local", "ssh"]
 DeploymentMode = Literal["native_agent", "local_bundle_only"]
-ScopeKind = Literal["repo", "doc", "log", "exclude"]
+ScopeKind = Literal["repo", "code", "doc", "log", "exclude"]
 ScopePathType = Literal["file", "dir", "glob"]
 ScopeSource = Literal["seeded", "user_added", "node_manifest", "tasks_completed"]
 PushMode = Literal["allowed", "blocked"]
@@ -517,6 +517,14 @@ class GitPushRequest(RepoActionRequest):
     branch: str | None = None
 
 
+class GitHubBackupRequest(BaseModel):
+    workspace_id: str | None = None
+    service_ids: list[str] = Field(default_factory=list)
+    runtime_passwords: dict[str, str] = Field(default_factory=dict)
+    remote: str = "origin"
+    dry_run: bool = True
+
+
 class ScanRootRequest(BaseModel):
     server_id: str
     root: str
@@ -590,7 +598,7 @@ class ActionLockRequest(BaseModel):
 class PullBundleDiffEntry(BaseModel):
     change: Literal["added", "removed", "changed"]
     relative_path: str
-    kind: Literal["repo", "doc", "log"]
+    kind: Literal["repo", "code", "doc", "log"]
 
 
 class PullBundleDiffSummary(BaseModel):
