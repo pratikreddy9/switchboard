@@ -150,3 +150,16 @@ Example format:
   - Manager actions are allowlisted for install, upgrade/release-update, status, snapshot, verify-update, and old-scaffold archive; cleanup moves files instead of deleting.
   - GitHub backup now has readiness, recorded dry-run, and push-eligible flow for repos with existing credentials.
   - Verified with frontend tests, frontend build, and backend unittest discovery.
+
+## 2026-05-03T04:10:18Z | Normalize local Mac manager node
+- Tags: task, handoff
+- Summary: Added manager runtime lifecycle commands and normalized this Mac to one Switchboard manager on port 8010 with six registered roots.
+- Changed Paths: .gitignore, switchboard/cli.py, switchboard/node_runtime.py, tests_backend/test_runtime_and_node_sync.py, switchboard/manager.manifest.json, switchboard/manager/reports/20260503-040843-local-mac-cutover/preflight.md, switchboard/manager/reports/20260503-040843-local-mac-cutover/postflight.md, switchboard/manager/reports/20260503-040843-local-mac-cutover/critic.md, switchboard/local/tasks-completed.md
+- Agent: Codex
+- Tool: codex-cli
+- Read Back: Confirmed Pratik wants the local Mac cutover too, not only the .47 server, with adaptivelearning registered safely.
+- Scope Check: Project shape stayed within the existing Switchboard source and local metadata scope; no new pull-bundle root was added to dashboard.
+- Notes:
+  - Registered dashboard_core, finance, unionbank_service, lambdalogger, lambdascripts, and adaptive_learning under the local manager.
+  - Manager runtime uses switchboard/manager/runtime so old per-project switchboard/runtime folders can be archived without touching the active manager.
+  - Preflight, postflight, and critic reports are stored under switchboard/manager/reports/20260503-040843-local-mac-cutover.

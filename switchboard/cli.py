@@ -31,7 +31,16 @@ from .node import (
     verify_node_update,
 )
 from .node_api import create_manager_node_app, create_node_app
-from .node_runtime import node_status, start_node_runtime, stop_node_runtime, runtime_paths
+from .node_runtime import (
+    manager_runtime_paths,
+    manager_status,
+    node_status,
+    runtime_paths,
+    start_manager_runtime,
+    start_node_runtime,
+    stop_manager_runtime,
+    stop_node_runtime,
+)
 from .storage import SnapshotStore
 
 
@@ -293,6 +302,34 @@ def node_manager_serve(
     uvicorn.run(app_instance, host=host, port=port)
 
 
+@node_app.command("manager-start")
+def node_manager_start(
+    manager_root: str = typer.Option(..., "--manager-root"),
+    host: str = typer.Option("127.0.0.1", "--host"),
+    port: int = typer.Option(8711, "--port"),
+) -> None:
+    result = start_manager_runtime(manager_root, host=host, port=port)
+    typer.echo(json.dumps(result, indent=2))
+
+
+@node_app.command("manager-stop")
+def node_manager_stop(
+    manager_root: str = typer.Option(..., "--manager-root"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    result = stop_manager_runtime(manager_root, port=port)
+    typer.echo(json.dumps(result, indent=2))
+
+
+@node_app.command("manager-status")
+def node_manager_status(
+    manager_root: str = typer.Option(..., "--manager-root"),
+    port: int | None = typer.Option(None, "--port"),
+) -> None:
+    result = manager_status(manager_root, port=port)
+    typer.echo(json.dumps(result, indent=2))
+
+
 @node_app.command("start")
 def node_start(
     project_root: str = typer.Option(..., "--project-root"),
@@ -327,6 +364,20 @@ def node_logs(
     lines: int = typer.Option(40, "--lines"),
 ) -> None:
     log_file = runtime_paths(project_root)["log"]
+    if not log_file.exists():
+        typer.echo("")
+        return
+    text = log_file.read_text(encoding="utf-8", errors="replace").splitlines()
+    tail = "\n".join(text[-lines:])
+    typer.echo(tail)
+
+
+@node_app.command("manager-logs")
+def node_manager_logs(
+    manager_root: str = typer.Option(..., "--manager-root"),
+    lines: int = typer.Option(40, "--lines"),
+) -> None:
+    log_file = manager_runtime_paths(manager_root)["log"]
     if not log_file.exists():
         typer.echo("")
         return

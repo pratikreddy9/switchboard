@@ -1,11 +1,11 @@
 {
-  "generated": "2026-05-01T06:09:46+00:00",
+  "generated": "2026-05-03T04:15:30+00:00",
   "status": "ok",
   "service_id": "switch",
   "project_root": "/Users/p/Desktop/dashboard",
   "latest_task": {
-    "timestamp": "2026-05-01T05:57:30Z",
-    "title": "Close April 29 Switchboard gaps",
+    "timestamp": "2026-05-03T04:10:18Z",
+    "title": "Normalize local Mac manager node",
     "agent": "Codex",
     "tool": "codex-cli"
   },
