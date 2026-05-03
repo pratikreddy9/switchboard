@@ -20,3 +20,5 @@ AGENT_PLAYBOOK.md
 release/
 *.pyc
 switchboard/static/app/
+switchboard/manager/runtime/
+switchboard/manager/archives/

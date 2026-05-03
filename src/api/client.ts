@@ -1,6 +1,22 @@
 import type {
   ActionLock,
+  ApiFlowCreateRequest,
+  ApiFlowManifest,
+  ApiFlowPatchRequest,
+  ApiFlowRunRecord,
+  CompanyCreateRequest,
+  CompanyPatchRequest,
+  EnvironmentLabView,
+  EnvironmentRuntimeSnapshot,
+  EnvironmentRuntimeSnapshotRequest,
+  OperatorCommand,
+  PortExposureFinding,
+  ProcessFinding,
+  ProjectEnvironmentCreateRequest,
+  ProjectEnvironmentPatchRequest,
+  ProjectEnvironmentView,
   ProjectManifest,
+  ProjectPullSummary,
   ProjectCreateRequest,
   ProjectPatchRequest,
   ServerCreateRequest,
@@ -13,6 +29,8 @@ import type {
   DiscoveryTreeRequest,
   DiscoveryTreeResult,
   DownloadRequest,
+  GitHubBackupRequest,
+  GitHubBackupResult,
   GitPushRequest,
   GitPullRequest,
   GitPullResult,
@@ -36,6 +54,9 @@ import type {
   ServerRecord,
   ScopeEntry,
   ManagedDocConfig,
+  NodeActionResult,
+  NodeReleaseCheck,
+  NodeViewerEntry,
   Workspace,
   WorkspaceLatest,
 } from '../types/switchboard'
@@ -55,6 +76,7 @@ function normalizeService(service: any) {
     workspace_id: service.workspace_id,
     display_name: service.display_name,
     kind: service.kind ?? 'service',
+    execution_mode: service.execution_mode ?? 'networked',
     tags: service.tags ?? [],
     favorite_tier: favoriteRank(service.favorite_tier),
     locations: (service.locations ?? []).map((location: any) => ({
@@ -80,6 +102,7 @@ function normalizeService(service: any) {
     runtime_checks: (service.runtime_checks ?? []).map(normalizeRuntimeCheck),
     node_sync: (service.node_sync ?? []).map(normalizeNodeSync),
     task_ledger: (service.task_ledger ?? []).map(normalizeTaskLedgerEntry),
+    node_viewer: (service.node_viewer ?? []).map(normalizeNodeViewer),
   } satisfies Service
 }
 
@@ -152,9 +175,12 @@ function normalizeWorkspace(workspace: any, services: any[] = []): Workspace {
   const workspaceServerIds = workspace.server_ids ?? workspace.servers ?? []
   return {
     workspace_id: workspace.workspace_id,
+    company_id: workspace.company_id ?? workspace.workspace_id,
     display_name: workspace.display_name ?? workspace.name ?? workspace.workspace_id,
     services: services.map(normalizeService),
     server_ids: workspaceServerIds,
+    tags: workspace.tags ?? [],
+    notes: workspace.notes ?? '',
     service_count:
       typeof workspace.service_count === 'number'
         ? workspace.service_count
@@ -211,6 +237,7 @@ function normalizeRuntimeCheck(result: any): RuntimeCheckResult {
     root: result.root ?? '',
     status: result.status ?? 'unverified',
     checked_at: result.checked_at ?? '',
+    execution_mode: result.execution_mode ?? 'networked',
     configured_ports: Array.isArray(result.configured_ports)
       ? result.configured_ports.map((port: unknown) => Number(port)).filter((port: number) => Number.isFinite(port))
       : [],
@@ -227,6 +254,173 @@ function normalizeRuntimeCheck(result: any): RuntimeCheckResult {
     notes: result.notes ?? '',
     node_present: Boolean(result.node_present),
     source: result.source,
+    firewall_status: result.firewall_status ?? 'unverified',
+    unexpected_ports: Array.isArray(result.unexpected_ports) ? result.unexpected_ports.map((port: unknown) => Number(port)).filter((port: number) => Number.isFinite(port)) : [],
+    process_findings: (result.process_findings ?? []).map(normalizeProcessFinding),
+    exposed_ports: (result.exposed_ports ?? []).map(normalizePortExposureFinding),
+    operator_commands: (result.operator_commands ?? []).map(normalizeOperatorCommand),
+  }
+}
+
+function normalizeProcessFinding(result: any): ProcessFinding {
+  return {
+    port: typeof result?.port === 'number' ? result.port : result?.port ? Number(result.port) : undefined,
+    bind_address: result?.bind_address ?? '',
+    process_name: result?.process_name ?? '',
+    pid: typeof result?.pid === 'number' ? result.pid : result?.pid ? Number(result.pid) : undefined,
+    state: result?.state ?? '',
+    raw: result?.raw ?? '',
+    owner_service_id: result?.owner_service_id ?? '',
+    owner_display_name: result?.owner_display_name ?? '',
+    owner_location_id: result?.owner_location_id ?? '',
+    owner_root: result?.owner_root ?? '',
+  }
+}
+
+function normalizePortExposureFinding(result: any): PortExposureFinding {
+  return {
+    host: result?.host ?? '',
+    port: Number(result?.port ?? 0),
+    bind_address: result?.bind_address ?? '',
+    process_name: result?.process_name ?? '',
+    expected: Boolean(result?.expected),
+    exposure: result?.exposure ?? 'unknown',
+    notes: result?.notes ?? '',
+  }
+}
+
+function normalizeOperatorCommand(result: any): OperatorCommand {
+  return {
+    category: result?.category ?? 'inspect_only',
+    label: result?.label ?? '',
+    command: result?.command ?? '',
+    notes: result?.notes ?? '',
+  }
+}
+
+function normalizeNodeReleaseCheck(result: any): NodeReleaseCheck {
+  return {
+    status: result?.status ?? 'unverified',
+    current_version: result?.current_version ?? '',
+    latest_version: result?.latest_version ?? '',
+    update_available: Boolean(result?.update_available),
+    published_at: result?.published_at ?? '',
+    release_url: result?.release_url ?? '',
+    asset_url: result?.asset_url ?? '',
+    notes: result?.notes ?? '',
+    message: result?.message ?? '',
+    exact_match_known: Boolean(result?.exact_match_known),
+    exact_match: Boolean(result?.exact_match),
+    current_release_version: result?.current_release_version ?? '',
+    current_release_asset_id: result?.current_release_asset_id ?? '',
+    current_release_asset_name: result?.current_release_asset_name ?? '',
+    current_release_published_at: result?.current_release_published_at ?? '',
+    current_release_url: result?.current_release_url ?? '',
+    current_release_commitish: result?.current_release_commitish ?? '',
+    latest_release_asset_id: result?.latest_release_asset_id ?? '',
+    latest_release_asset_name: result?.latest_release_asset_name ?? '',
+    latest_release_asset_updated_at: result?.latest_release_asset_updated_at ?? '',
+    latest_release_commitish: result?.latest_release_commitish ?? '',
+  }
+}
+
+function normalizeEnvironmentRuntimeSnapshot(result: any): EnvironmentRuntimeSnapshot {
+  return {
+    environment_id: result?.environment_id ?? '',
+    captured_at: result?.captured_at ?? '',
+    locations: (result?.locations ?? []).map((location: any) => ({
+      service_id: location?.service_id ?? '',
+      service_name: location?.service_name ?? '',
+      execution_mode: location?.execution_mode ?? 'networked',
+      location_id: location?.location_id ?? '',
+      server_id: location?.server_id ?? '',
+      root: location?.root ?? '',
+      host: location?.host ?? '',
+      firewall_status: location?.firewall_status ?? 'unverified',
+      node_status: location?.node_status ?? 'missing',
+      expected_ports: location?.expected_ports ?? [],
+      open_ports: location?.open_ports ?? [],
+      unexpected_ports: location?.unexpected_ports ?? [],
+      exposed_ports: (location?.exposed_ports ?? []).map(normalizePortExposureFinding),
+      process_findings: (location?.process_findings ?? []).map(normalizeProcessFinding),
+      operator_commands: (location?.operator_commands ?? []).map(normalizeOperatorCommand),
+      runtime_hint: location?.runtime_hint ?? '',
+      healthcheck_command: location?.healthcheck_command ?? '',
+      healthcheck_status: location?.healthcheck_status ?? 'skipped',
+      healthcheck_output: location?.healthcheck_output ?? '',
+    })),
+    open_ports: result?.open_ports ?? [],
+    expected_ports: result?.expected_ports ?? [],
+    unexpected_ports: result?.unexpected_ports ?? [],
+    exposed_ports: (result?.exposed_ports ?? []).map(normalizePortExposureFinding),
+    firewall_status: result?.firewall_status ?? 'unverified',
+    process_findings: (result?.process_findings ?? []).map(normalizeProcessFinding),
+    node_findings: result?.node_findings ?? [],
+    operator_commands: (result?.operator_commands ?? []).map(normalizeOperatorCommand),
+  }
+}
+
+function normalizeApiFlowStep(step: any) {
+  return {
+    step_id: step?.step_id ?? '',
+    order: step?.order ?? 0,
+    display_name: step?.display_name ?? '',
+    method: step?.method ?? 'GET',
+    path: step?.path ?? '',
+    query: step?.query ?? {},
+    headers: step?.headers ?? {},
+    body: step?.body ?? '',
+    expected_status: step?.expected_status ?? 200,
+    continue_on_failure: step?.continue_on_failure ?? false,
+    timeout_seconds: step?.timeout_seconds ?? 15,
+    notes: step?.notes ?? '',
+    captures: (step?.captures ?? []).map((capture: any) => ({
+      variable_name: capture?.variable_name ?? '',
+      source: capture?.source ?? 'json',
+      selector: capture?.selector ?? '',
+    })),
+  }
+}
+
+function normalizeApiFlow(result: any): ApiFlowManifest {
+  return {
+    flow_id: result?.flow_id ?? '',
+    environment_id: result?.environment_id ?? '',
+    service_id: result?.service_id ?? '',
+    display_name: result?.display_name ?? '',
+    target_kind: result?.target_kind ?? 'service',
+    target_name: result?.target_name ?? '',
+    base_url: result?.base_url ?? '',
+    execution_mode: result?.execution_mode ?? 'http',
+    enabled: result?.enabled ?? true,
+    tags: result?.tags ?? [],
+    notes: result?.notes ?? '',
+    steps: (result?.steps ?? []).map(normalizeApiFlowStep),
+  }
+}
+
+function normalizeApiFlowRun(result: any): ApiFlowRunRecord {
+  return {
+    run_id: result?.run_id ?? '',
+    flow_id: result?.flow_id ?? '',
+    environment_id: result?.environment_id ?? '',
+    started_at: result?.started_at ?? '',
+    finished_at: result?.finished_at ?? '',
+    status: result?.status ?? 'failed',
+    summary: result?.summary ?? '',
+    step_results: (result?.step_results ?? []).map((step: any) => ({
+      step_id: step?.step_id ?? '',
+      status: step?.status ?? 'failed',
+      resolved_url: step?.resolved_url ?? '',
+      duration_ms: step?.duration_ms ?? 0,
+      request_preview: step?.request_preview ?? { method: '', url: '', headers: {}, body_preview: '' },
+      response_status: step?.response_status ?? 0,
+      response_headers: step?.response_headers ?? {},
+      response_body_preview: step?.response_body_preview ?? '',
+      extracted_variables: step?.extracted_variables ?? {},
+      generated_curl: step?.generated_curl ?? '',
+      error: step?.error ?? '',
+    })),
   }
 }
 
@@ -243,6 +437,38 @@ function normalizeNodeSync(result: any): NodeSyncResult {
     include_runtime_config: result.include_runtime_config ?? true,
     managed_docs: (result.managed_docs ?? []).map(normalizeManagedDoc),
     doc_index: result.doc_index ? normalizeDocIndex(result.doc_index) : undefined,
+  }
+}
+
+function normalizeNodeViewer(result: any): NodeViewerEntry {
+  return {
+    service_id: result.service_id ?? '',
+    location_id: result.location_id ?? '',
+    server_id: result.server_id ?? '',
+    root: result.root ?? '',
+    node_present: Boolean(result.node_present),
+    bootstrap_ready: Boolean(result.bootstrap_ready),
+    runtime_ready: Boolean(result.runtime_ready),
+    installed_version: result.installed_version ?? '',
+    bootstrap_version: result.bootstrap_version ?? '',
+    manifest_updated_at: result.manifest_updated_at ?? '',
+    runtime_status: result.runtime_status ?? 'missing',
+    runtime_pid: typeof result.runtime_pid === 'number' ? result.runtime_pid : undefined,
+    runtime_port: result.runtime_port ?? 8010,
+    needs_install: Boolean(result.needs_install),
+    needs_upgrade: Boolean(result.needs_upgrade),
+    needs_bootstrap: Boolean(result.needs_bootstrap),
+    attention_reason: result.attention_reason ?? '',
+    manifest_path: result.manifest_path ?? '',
+    runtime_dir: result.runtime_dir ?? '',
+    log_file: result.log_file ?? '',
+    last_error: result.last_error ?? '',
+    installed_release_version: result.installed_release_version ?? '',
+    installed_release_asset_id: result.installed_release_asset_id ?? '',
+    installed_release_asset_name: result.installed_release_asset_name ?? '',
+    installed_release_published_at: result.installed_release_published_at ?? '',
+    installed_release_url: result.installed_release_url ?? '',
+    installed_release_commitish: result.installed_release_commitish ?? '',
   }
 }
 
@@ -366,12 +592,16 @@ export const listServers = (): Promise<ApiResult<ServerRecord[]>> =>
     }
     return res.servers.map((server: any) => ({
       server_id: server.server_id,
+      company_id: server.company_id ?? '',
       name: server.name,
       connection_type: server.connection_type,
       host: server.host,
       username: server.username,
       port: server.port ?? 22,
+      deployment_mode: server.deployment_mode ?? 'native_agent',
+      vpn_required: Boolean(server.vpn_required),
       tags: server.tags ?? [],
+      notes: server.notes ?? '',
     }))
   })
 
@@ -383,6 +613,9 @@ export const listWorkspaces = (): Promise<ApiResult<Workspace[]>> =>
     }
     return res.workspaces.map((workspace) => normalizeWorkspace(workspace))
   })
+
+export const listCompanies = (): Promise<ApiResult<Workspace[]>> =>
+  listWorkspaces()
 
 export const getWorkspace = (id: string): Promise<ApiResult<Workspace>> =>
   apiFetch<WorkspaceResponse>(`/workspaces/${id}`).then((res) => {
@@ -549,6 +782,29 @@ export const triggerGitPush = (
     body: JSON.stringify(req),
   })
 
+export const getGithubBackupReadiness = (
+  workspaceId?: string,
+): Promise<ApiResult<GitHubBackupResult>> => {
+  const query = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : ''
+  return apiFetch<GitHubBackupResult>(`/github-backup/readiness${query}`)
+}
+
+export const runGithubBackupDryRun = (
+  req: GitHubBackupRequest,
+): Promise<ApiResult<GitHubBackupResult>> =>
+  apiFetch<GitHubBackupResult>('/github-backup/dry-run', {
+    method: 'POST',
+    body: JSON.stringify({ ...req, dry_run: true }),
+  })
+
+export const runGithubBackup = (
+  req: GitHubBackupRequest,
+): Promise<ApiResult<GitHubBackupResult>> =>
+  apiFetch<GitHubBackupResult>('/github-backup/run', {
+    method: 'POST',
+    body: JSON.stringify({ ...req, dry_run: false }),
+  })
+
 // Returns count only — never expose actual paths in the dashboard
 export const getSecretPathCount = (
   id: string,
@@ -593,6 +849,94 @@ export const syncToNode = (
       node_manifest_path: res.node_manifest_path,
     }
   })
+
+export const getNodeViewer = (
+  id: string,
+): Promise<ApiResult<{ locations: NodeViewerEntry[] }>> =>
+  apiFetch<any>(`/services/${id}/node-viewer`).then((res) => {
+    if (isApiError(res)) return res
+    return { locations: (res.locations ?? []).map(normalizeNodeViewer) }
+  })
+
+export const inspectNode = (
+  id: string,
+  locationId?: string,
+): Promise<ApiResult<NodeActionResult>> =>
+  apiFetch<any>(`/services/${id}/actions/node-inspect`, {
+    method: 'POST',
+    body: JSON.stringify({ location_id: locationId }),
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return {
+      node: normalizeNodeViewer(res.node),
+      before: res.before ? normalizeNodeViewer(res.before) : undefined,
+      after: res.after ? normalizeNodeViewer(res.after) : undefined,
+      message: res.message,
+    }
+  })
+
+export const deployNode = (
+  id: string,
+  locationId?: string,
+): Promise<ApiResult<NodeActionResult>> =>
+  apiFetch<any>(`/services/${id}/actions/node-deploy`, {
+    method: 'POST',
+    body: JSON.stringify({ location_id: locationId }),
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return {
+      node: normalizeNodeViewer(res.node),
+      before: res.before ? normalizeNodeViewer(res.before) : undefined,
+      after: res.after ? normalizeNodeViewer(res.after) : undefined,
+      message: res.message,
+      release: res.release ? normalizeNodeReleaseCheck(res.release) : undefined,
+    }
+  })
+
+export const upgradeNode = (
+  id: string,
+  locationId?: string,
+): Promise<ApiResult<NodeActionResult>> =>
+  apiFetch<any>(`/services/${id}/actions/node-upgrade`, {
+    method: 'POST',
+    body: JSON.stringify({ location_id: locationId }),
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return {
+      node: normalizeNodeViewer(res.node),
+      before: res.before ? normalizeNodeViewer(res.before) : undefined,
+      after: res.after ? normalizeNodeViewer(res.after) : undefined,
+      message: res.message,
+      release: res.release ? normalizeNodeReleaseCheck(res.release) : undefined,
+    }
+  })
+
+export const restartNode = (
+  id: string,
+  locationId?: string,
+): Promise<ApiResult<NodeActionResult>> =>
+  apiFetch<any>(`/services/${id}/actions/node-restart`, {
+    method: 'POST',
+    body: JSON.stringify({ location_id: locationId }),
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return {
+      node: normalizeNodeViewer(res.node),
+      before: res.before ? normalizeNodeViewer(res.before) : undefined,
+      after: res.after ? normalizeNodeViewer(res.after) : undefined,
+      message: res.message,
+      release: res.release ? normalizeNodeReleaseCheck(res.release) : undefined,
+    }
+  })
+
+export const getNodeReleaseCheck = (
+  id: string,
+  locationId?: string,
+): Promise<ApiResult<NodeReleaseCheck>> =>
+  apiFetch<any>(`/services/${id}/actions/node-release-check`, {
+    method: 'POST',
+    body: JSON.stringify({ location_id: locationId }),
+  }).then((res) => (isApiError(res) ? res : normalizeNodeReleaseCheck(res)))
 
 export const createPullBundle = (
   id: string,
@@ -689,10 +1033,102 @@ export const workspaceHealthCheck = (workspaceId: string, runtimePasswords: Reco
     return { results: res.results.map(normalizeRuntimeCheck) }
   })
 
-export const listProjects = (workspaceId: string): Promise<ApiResult<{ projects: ProjectManifest[] }>> =>
-  apiFetch<{ projects: any[] }>(`/workspaces/${workspaceId}/projects`).then((res) => {
+export const listProjects = (
+  workspaceId: string,
+): Promise<ApiResult<{ projects: ProjectManifest[]; environments: ProjectEnvironmentView[]; rollups: ProjectPullSummary[] }>> =>
+  apiFetch<{ projects: any[]; environments?: any[]; rollups?: any[] }>(`/workspaces/${workspaceId}/projects`).then((res) => {
     if (isApiError(res)) return res
-    return { projects: res.projects }
+    return {
+      projects: res.projects,
+      environments: (res.environments ?? []) as ProjectEnvironmentView[],
+      rollups: (res.rollups ?? []) as ProjectPullSummary[],
+    }
+  })
+
+export const getEnvironmentLab = (
+  environmentId: string,
+): Promise<ApiResult<EnvironmentLabView>> =>
+  apiFetch<any>(`/project-environments/${environmentId}/lab`).then((res) => {
+    if (isApiError(res)) return res
+    return {
+      project: res.project,
+      environment: res.environment as ProjectEnvironmentView,
+      runtime_snapshot: res.runtime_snapshot ? normalizeEnvironmentRuntimeSnapshot(res.runtime_snapshot) : undefined,
+      api_flows: (res.api_flows ?? []).map(normalizeApiFlow),
+      api_runs: Object.fromEntries(
+        Object.entries(res.api_runs ?? {}).map(([flowId, runs]) => [flowId, (runs as any[]).map(normalizeApiFlowRun)]),
+      ),
+    }
+  })
+
+export const refreshEnvironmentRuntimeSnapshot = (
+  environmentId: string,
+  req: EnvironmentRuntimeSnapshotRequest = {},
+): Promise<ApiResult<EnvironmentRuntimeSnapshot>> =>
+  apiFetch<any>(`/project-environments/${environmentId}/runtime-snapshot`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  }).then((res) => (isApiError(res) ? res : normalizeEnvironmentRuntimeSnapshot(res)))
+
+export const listApiFlows = (
+  environmentId: string,
+): Promise<ApiResult<ApiFlowManifest[]>> =>
+  apiFetch<any>(`/project-environments/${environmentId}/api-flows`).then((res) => {
+    if (isApiError(res)) return res
+    return (res.flows ?? []).map(normalizeApiFlow)
+  })
+
+export const createApiFlow = (
+  environmentId: string,
+  req: ApiFlowCreateRequest,
+): Promise<ApiResult<ApiFlowManifest>> =>
+  apiFetch<any>(`/project-environments/${environmentId}/api-flows`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  }).then((res) => (isApiError(res) ? res : normalizeApiFlow(res.flow)))
+
+export const updateApiFlow = (
+  environmentId: string,
+  flowId: string,
+  req: ApiFlowPatchRequest,
+): Promise<ApiResult<ApiFlowManifest>> =>
+  apiFetch<any>(`/project-environments/${environmentId}/api-flows/${flowId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(req),
+  }).then((res) => (isApiError(res) ? res : normalizeApiFlow(res.flow)))
+
+export const deleteApiFlow = (
+  environmentId: string,
+  flowId: string,
+): Promise<ApiResult<ApiFlowManifest>> =>
+  apiFetch<any>(`/project-environments/${environmentId}/api-flows/${flowId}`, {
+    method: 'DELETE',
+  }).then((res) => (isApiError(res) ? res : normalizeApiFlow(res.flow)))
+
+export const runApiFlow = (
+  environmentId: string,
+  flowId: string,
+): Promise<ApiResult<ApiFlowRunRecord>> =>
+  apiFetch<any>(`/project-environments/${environmentId}/api-flows/${flowId}/run`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  }).then((res) => (isApiError(res) ? res : normalizeApiFlowRun(res.run)))
+
+export const getApiFlowRuns = (
+  environmentId: string,
+  flowId: string,
+): Promise<ApiResult<ApiFlowRunRecord[]>> =>
+  apiFetch<any>(`/project-environments/${environmentId}/api-flows/${flowId}/runs`).then((res) => {
+    if (isApiError(res)) return res
+    return (res.runs ?? []).map(normalizeApiFlowRun)
+  })
+
+export const getEnvironmentPullRollup = (
+  environmentId: string,
+): Promise<ApiResult<ProjectPullSummary>> =>
+  apiFetch<any>(`/project-environments/${environmentId}/pull-rollup`).then((res) => {
+    if (isApiError(res)) return res
+    return res.pull_rollup as ProjectPullSummary
   })
 
 export const createProject = (workspaceId: string, req: ProjectCreateRequest): Promise<ApiResult<{ project: ProjectManifest }>> =>
@@ -719,6 +1155,66 @@ export const deleteProject = (projectId: string): Promise<ApiResult<{ project: P
   }).then((res) => {
     if (isApiError(res)) return res
     return { project: res.project }
+  })
+
+export const createProjectEnvironment = (
+  projectId: string,
+  req: ProjectEnvironmentCreateRequest,
+): Promise<ApiResult<{ environment: ProjectEnvironmentView }>> =>
+  apiFetch<{ environment: any }>(`/projects/${projectId}/environments`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return { environment: res.environment as ProjectEnvironmentView }
+  })
+
+export const updateProjectEnvironment = (
+  environmentId: string,
+  req: ProjectEnvironmentPatchRequest,
+): Promise<ApiResult<{ environment: ProjectEnvironmentView }>> =>
+  apiFetch<{ environment: any }>(`/project-environments/${environmentId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(req),
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return { environment: res.environment as ProjectEnvironmentView }
+  })
+
+export const deleteProjectEnvironment = (
+  environmentId: string,
+): Promise<ApiResult<{ environment: ProjectEnvironmentView }>> =>
+  apiFetch<{ environment: any }>(`/project-environments/${environmentId}`, {
+    method: 'DELETE',
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return { environment: res.environment as ProjectEnvironmentView }
+  })
+
+export const createCompany = (req: CompanyCreateRequest): Promise<ApiResult<{ company: Workspace }>> =>
+  apiFetch<{ company: any }>('/companies', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return { company: normalizeWorkspace(res.company, []) }
+  })
+
+export const updateCompany = (companyId: string, req: CompanyPatchRequest): Promise<ApiResult<{ company: Workspace }>> =>
+  apiFetch<{ company: any }>(`/companies/${companyId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(req),
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return { company: normalizeWorkspace(res.company, []) }
+  })
+
+export const deleteCompany = (companyId: string): Promise<ApiResult<{ company: Workspace }>> =>
+  apiFetch<{ company: any }>(`/companies/${companyId}`, {
+    method: 'DELETE',
+  }).then((res) => {
+    if (isApiError(res)) return res
+    return { company: normalizeWorkspace(res.company, []) }
   })
 
 export const createServer = (req: ServerCreateRequest): Promise<ApiResult<{ server: any }>> =>

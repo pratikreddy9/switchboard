@@ -15,7 +15,8 @@ from switchboard.collectors import CollectionCoordinator
 from switchboard.config import Settings
 from switchboard.manifests import ManifestStore, save_json
 from switchboard.models import CollectRequest, NodeSyncRequest, RuntimeActionRequest, RuntimeConfig
-from switchboard.node import install_node, node_paths
+from switchboard.node import init_manager_node, install_node, node_paths
+from switchboard.node_runtime import manager_runtime_paths, manager_status, node_status, start_manager_runtime, stop_manager_runtime
 from switchboard.storage import SnapshotStore
 
 
@@ -182,6 +183,41 @@ class RuntimeAndNodeSyncTests(unittest.TestCase):
             finally:
                 server.terminate()
                 server.wait(timeout=5)
+
+    def test_manager_runtime_start_status_and_stop_use_manager_runtime_files(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            manager_root = root / "manager"
+            port = _free_port()
+            init_manager_node(manager_root, runtime_port=port)
+            runtime = manager_runtime_paths(manager_root)
+
+            started = start_manager_runtime(manager_root, port=port)
+            try:
+                _wait_for_port(port)
+                status = manager_status(manager_root, port=port)
+
+                self.assertEqual(started["status"], "running")
+                self.assertEqual(status["status"], "running")
+                self.assertEqual(Path(status["pid_file"]), runtime["pid"])
+                self.assertEqual(Path(status["log_file"]), runtime["log"])
+            finally:
+                stopped = stop_manager_runtime(manager_root, port=port)
+
+            self.assertIn(started["pid"], stopped["stopped_pids"])
+
+    def test_node_status_marks_manager_owned_port_separately(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir) / "project"
+            install_node(project_root, service_id="svc", display_name="Svc")
+
+            with (
+                mock.patch("switchboard.node_runtime._port_listener_pid", return_value=12345),
+                mock.patch("switchboard.node_runtime._process_command", return_value="python -m switchboard.cli node manager-serve --port 8010"),
+            ):
+                status = node_status(project_root, port=8010)
+
+            self.assertEqual(status["status"], "stopped_manager_owned")
 
     def test_runtime_check_remote_mocked_ssh_uses_manual_hint_when_detection_missing(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -355,6 +391,20 @@ class RuntimeAndNodeSyncTests(unittest.TestCase):
                                 "enabled": True,
                                 "source": "tasks_completed",
                             },
+                            {
+                                "kind": "doc",
+                                "path_type": "file",
+                                "path": str(project_root / "legacy-handoff.md"),
+                                "enabled": True,
+                                "source": "manual_codex_handoff",
+                            },
+                            {
+                                "kind": "code",
+                                "path_type": "file",
+                                "path": str(project_root / "app.py"),
+                                "enabled": True,
+                                "source": "tasks_completed",
+                            },
                         ],
                         "scope_updates": [],
                     },
@@ -371,7 +421,22 @@ class RuntimeAndNodeSyncTests(unittest.TestCase):
             self.assertTrue(any(entry["doc_id"] == "readme" for entry in pulled["service"]["managed_docs"]))
 
             stored_service = manifests.get_service("svc")
-            self.assertEqual(stored_service.docs_paths, [str(paths["manifest"])])
+            self.assertIn(str(paths["manifest"]), stored_service.docs_paths)
+            self.assertIn(str(project_root / "README.md"), stored_service.docs_paths)
+            self.assertIn(str(project_root / "API.md"), stored_service.docs_paths)
+            self.assertIn(str(project_root / "CHANGELOG.md"), stored_service.docs_paths)
+            self.assertTrue(
+                any(
+                    entry.path == str(project_root / "legacy-handoff.md") and entry.source == "tasks_completed"
+                    for entry in stored_service.scope_entries
+                )
+            )
+            self.assertTrue(
+                any(
+                    entry.path == str(project_root / "app.py") and entry.kind == "code"
+                    for entry in stored_service.scope_entries
+                )
+            )
             self.assertEqual(stored_service.exclude_globs, ["venv"])
             self.assertEqual(stored_service.allowed_git_pull_paths, [])
             sync_state = snapshots.get_service_runtime_state("svc")["node_sync"]

@@ -10,13 +10,21 @@ from .config import get_settings
 from .manifests import ManifestStore
 from .models import (
     ActionLockRequest,
+    ApiFlowCreateRequest,
+    ApiFlowPatchRequest,
+    ApiFlowRunRequest,
     CollectRequest,
     DiscoveryTreeRequest,
     DownloadRequest,
+    EnvironmentRuntimeSnapshotRequest,
+    GitHubBackupRequest,
     GitPullRequest,
     GitPushRequest,
+    NodeActionRequest,
     NodeSyncRequest,
     ProjectCreateRequest,
+    ProjectEnvironmentCreateRequest,
+    ProjectEnvironmentPatchRequest,
     ProjectPatchRequest,
     PullBundleRequest,
     RepoActionRequest,
@@ -26,6 +34,8 @@ from .models import (
     ServerPatchRequest,
     ServiceCreateRequest,
     ServicePatchRequest,
+    WorkspaceCreateRequest,
+    WorkspacePatchRequest,
 )
 from .storage import SnapshotStore
 
@@ -61,7 +71,7 @@ def _enrich_service_payload(payload: dict[str, object]) -> dict[str, object]:
     runtime_state = snapshot_store.get_service_runtime_state(service_id)
     enriched["runtime_checks"] = runtime_state["runtime_checks"]
     enriched["node_sync"] = runtime_state["node_sync"]
-    
+    enriched["node_viewer"] = snapshot_store.get_service_node_viewer(service_id)
     task_ledger = snapshot_store.get_service_task_ledger(service_id)
     enriched["task_ledger"] = task_ledger.get("tasks", [])
     return enriched
@@ -82,6 +92,8 @@ def _enrich_latest_snapshot(snapshot: dict[str, object]) -> dict[str, object]:
 def _raise_for_action_result(result: dict[str, object]) -> None:
     status = result.get("status")
     message = str(result.get("message") or result.get("output") or "Request failed.")
+    if status == "action_in_progress":
+        raise HTTPException(status_code=409, detail={"status": status, "message": message})
     if status == "permission_limited":
         raise HTTPException(status_code=403, detail={"status": status, "message": message})
     if status == "path_missing":
@@ -107,6 +119,8 @@ def list_workspaces() -> dict[str, object]:
         "workspaces": [
             {
                 **workspace.model_dump(mode="json"),
+                "company_id": workspace.workspace_id,
+                "company_name": workspace.name,
                 "server_count": len(workspace.servers),
                 "service_count": len([service for service in services if service.workspace_id == workspace.workspace_id]),
             }
@@ -128,7 +142,11 @@ def get_workspace(workspace_id: str) -> dict[str, object]:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     services = manifest_store.get_workspace_services(workspace_id)
     return {
-        "workspace": workspace.model_dump(mode="json"),
+        "workspace": {
+            **workspace.model_dump(mode="json"),
+            "company_id": workspace.workspace_id,
+            "company_name": workspace.name,
+        },
         "services": [_enrich_service_payload(service.model_dump(mode="json")) for service in services],
     }
 
@@ -149,6 +167,11 @@ def get_workspace_latest(workspace_id: str) -> dict[str, object]:
         return {
             "generated": None,
             "workspace": workspace.model_dump(mode="json"),
+            "company": {
+                **workspace.model_dump(mode="json"),
+                "company_id": workspace.workspace_id,
+                "company_name": workspace.name,
+            },
             "servers": [
                 {
                     **server,
@@ -292,6 +315,25 @@ def git_push(service_id: str, request: GitPushRequest) -> dict[str, object]:
     return result
 
 
+@app.get("/api/github-backup/readiness")
+def github_backup_readiness(workspace_id: str | None = None) -> dict[str, object]:
+    return coordinator.github_backup_readiness(GitHubBackupRequest(workspace_id=workspace_id, dry_run=True))
+
+
+@app.post("/api/github-backup/dry-run")
+def github_backup_dry_run(request: GitHubBackupRequest) -> dict[str, object]:
+    request = request.model_copy(update={"dry_run": True})
+    return coordinator.github_backup_run(request)
+
+
+@app.post("/api/github-backup/run")
+def github_backup_run(request: GitHubBackupRequest) -> dict[str, object]:
+    request = request.model_copy(update={"dry_run": False})
+    result = coordinator.github_backup_run(request)
+    _raise_for_action_result(result)
+    return result
+
+
 @app.post("/api/services/{service_id}/actions/runtime-check")
 def runtime_check(service_id: str, request: RuntimeActionRequest) -> dict[str, object]:
     try:
@@ -300,6 +342,87 @@ def runtime_check(service_id: str, request: RuntimeActionRequest) -> dict[str, o
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     _raise_for_action_result(result)
     return result
+
+
+@app.get("/api/project-environments/{environment_id}/lab")
+def get_environment_lab(environment_id: str) -> dict[str, object]:
+    try:
+        return coordinator.get_environment_lab(environment_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/project-environments/{environment_id}/runtime-snapshot")
+def refresh_environment_runtime_snapshot(
+    environment_id: str,
+    request: EnvironmentRuntimeSnapshotRequest,
+) -> dict[str, object]:
+    try:
+        return coordinator.environment_runtime_snapshot(environment_id, request)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/project-environments/{environment_id}/api-flows")
+def list_api_flows(environment_id: str) -> dict[str, object]:
+    try:
+        return coordinator.list_api_flows(environment_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/project-environments/{environment_id}/api-flows")
+def create_api_flow(environment_id: str, request: ApiFlowCreateRequest) -> dict[str, object]:
+    try:
+        return coordinator.create_api_flow(environment_id, request)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.patch("/api/project-environments/{environment_id}/api-flows/{flow_id}")
+def patch_api_flow(environment_id: str, flow_id: str, request: ApiFlowPatchRequest) -> dict[str, object]:
+    try:
+        return coordinator.patch_api_flow(environment_id, flow_id, request)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.delete("/api/project-environments/{environment_id}/api-flows/{flow_id}")
+def delete_api_flow(environment_id: str, flow_id: str) -> dict[str, object]:
+    try:
+        return coordinator.delete_api_flow(environment_id, flow_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/project-environments/{environment_id}/api-flows/{flow_id}/run")
+def run_api_flow(environment_id: str, flow_id: str, request: ApiFlowRunRequest) -> dict[str, object]:
+    try:
+        result = coordinator.run_api_flow(environment_id, flow_id, request)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _raise_for_action_result(result)
+    return result
+
+
+@app.get("/api/project-environments/{environment_id}/api-flows/{flow_id}/runs")
+def get_api_flow_runs(environment_id: str, flow_id: str) -> dict[str, object]:
+    try:
+        return coordinator.get_api_flow_runs(environment_id, flow_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/project-environments/{environment_id}/pull-rollup")
+def get_environment_pull_rollup(environment_id: str) -> dict[str, object]:
+    try:
+        return coordinator.get_environment_pull_rollup(environment_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.post("/api/services/{service_id}/actions/sync-from-node")
@@ -320,6 +443,46 @@ def sync_to_node(service_id: str, request: NodeSyncRequest) -> dict[str, object]
         result = coordinator.sync_to_node(service_id, request)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _raise_for_action_result(result)
+    return result
+
+
+@app.get("/api/services/{service_id}/node-viewer")
+def get_node_viewer(service_id: str) -> dict[str, object]:
+    return coordinator.get_node_viewer(service_id)
+
+
+@app.post("/api/services/{service_id}/actions/node-inspect")
+def node_inspect(service_id: str, request: NodeActionRequest) -> dict[str, object]:
+    result = coordinator.node_inspect(service_id, request)
+    _raise_for_action_result(result)
+    return result
+
+
+@app.post("/api/services/{service_id}/actions/node-release-check")
+def node_release_check(service_id: str, request: NodeActionRequest) -> dict[str, object]:
+    result = coordinator.node_release_check(service_id, request)
+    _raise_for_action_result(result)
+    return result
+
+
+@app.post("/api/services/{service_id}/actions/node-deploy")
+def node_deploy(service_id: str, request: NodeActionRequest) -> dict[str, object]:
+    result = coordinator.node_deploy(service_id, request)
+    _raise_for_action_result(result)
+    return result
+
+
+@app.post("/api/services/{service_id}/actions/node-upgrade")
+def node_upgrade(service_id: str, request: NodeActionRequest) -> dict[str, object]:
+    result = coordinator.node_upgrade(service_id, request)
+    _raise_for_action_result(result)
+    return result
+
+
+@app.post("/api/services/{service_id}/actions/node-restart")
+def node_restart(service_id: str, request: NodeActionRequest) -> dict[str, object]:
+    result = coordinator.node_restart(service_id, request)
     _raise_for_action_result(result)
     return result
 
@@ -390,8 +553,10 @@ def workspace_health_check(workspace_id: str, runtime_passwords: dict[str, str] 
 
 @app.get("/api/workspaces/{workspace_id}/projects")
 def list_workspace_projects(workspace_id: str) -> dict[str, object]:
-    projects = manifest_store.get_workspace_projects(workspace_id)
-    return {"projects": [p.model_dump(mode="json") for p in projects]}
+    try:
+        return coordinator.list_workspace_project_context(workspace_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.post("/api/workspaces/{workspace_id}/projects")
@@ -403,6 +568,51 @@ def create_project(workspace_id: str, request: ProjectCreateRequest) -> dict[str
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
+@app.post("/api/projects/{project_id}/environments")
+def create_project_environment(project_id: str, request: ProjectEnvironmentCreateRequest) -> dict[str, object]:
+    try:
+        environment = manifest_store.create_project_environment(project_id, request)
+        return {"status": "ok", "environment": environment.model_dump(mode="json")}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/api/companies")
+def list_companies() -> dict[str, object]:
+    return list_workspaces()
+
+
+@app.post("/api/companies")
+def create_company(request: WorkspaceCreateRequest) -> dict[str, object]:
+    try:
+        workspace = manifest_store.create_workspace(request)
+        return {"status": "ok", "company": workspace.model_dump(mode="json")}
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.patch("/api/companies/{company_id}")
+def patch_company(company_id: str, request: WorkspacePatchRequest) -> dict[str, object]:
+    try:
+        workspace = manifest_store.patch_workspace(company_id, request)
+        return {"status": "ok", "company": workspace.model_dump(mode="json")}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.delete("/api/companies/{company_id}")
+def delete_company(company_id: str) -> dict[str, object]:
+    try:
+        workspace = manifest_store.delete_workspace(company_id)
+        return {"status": "ok", "company": workspace.model_dump(mode="json")}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @app.patch("/api/projects/{project_id}")
 def patch_project(project_id: str, request: ProjectPatchRequest) -> dict[str, object]:
     try:
@@ -410,6 +620,8 @@ def patch_project(project_id: str, request: ProjectPatchRequest) -> dict[str, ob
         return {"status": "ok", "project": project.model_dump(mode="json")}
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.delete("/api/projects/{project_id}")
@@ -417,6 +629,26 @@ def delete_project(project_id: str) -> dict[str, object]:
     try:
         project = manifest_store.delete_project(project_id)
         return {"status": "ok", "project": project.model_dump(mode="json")}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.patch("/api/project-environments/{environment_id}")
+def patch_project_environment(environment_id: str, request: ProjectEnvironmentPatchRequest) -> dict[str, object]:
+    try:
+        environment = manifest_store.patch_project_environment(environment_id, request)
+        return {"status": "ok", "environment": environment.model_dump(mode="json")}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.delete("/api/project-environments/{environment_id}")
+def delete_project_environment(environment_id: str) -> dict[str, object]:
+    try:
+        environment = manifest_store.delete_project_environment(environment_id)
+        return {"status": "ok", "environment": environment.model_dump(mode="json")}
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

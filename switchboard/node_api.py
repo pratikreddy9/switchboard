@@ -6,12 +6,32 @@ import html
 import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
-from .node import list_node_files, load_node_manifest, load_pull_bundle_history, resolve_static_app_dir, snapshot_node
+from .node import (
+    list_manager_roots,
+    list_node_files,
+    load_manager_manifest,
+    load_node_manifest,
+    load_pull_bundle_history,
+    manager_all_root_health,
+    manager_all_root_snapshot,
+    manager_all_root_upgrade,
+    manager_all_root_verify_update,
+    manager_archive_old_scaffolding,
+    manager_install_root,
+    manager_root_health,
+    manager_root_manifest,
+    manager_root_snapshot,
+    manager_root_verify_update,
+    manager_safe_action,
+    manager_upgrade_root,
+    resolve_static_app_dir,
+    snapshot_node,
+)
 
 
 def create_node_app(project_root: str | Path | None = None) -> FastAPI:
@@ -76,6 +96,8 @@ def create_node_app(project_root: str | Path | None = None) -> FastAPI:
         expected_ports = html.escape(", ".join(str(port) for port in runtime.get("expected_ports", [])) or "none")
         healthcheck_command = html.escape(str(runtime.get("healthcheck_command", "") or "Not configured"))
         run_command_hint = html.escape(str(runtime.get("run_command_hint", "") or "Not configured"))
+        installed_version = html.escape(str(manifest.get("installed_version", __version__)))
+        bootstrap_version = html.escape(str(manifest.get("bootstrap_version", "") or "not recorded"))
         generated = html.escape(str(scope_snapshot.get("generated", "")))
         doc_index_generated = html.escape(str(doc_index.get("generated", "")))
         project_root_command = html.escape(str(project_root))
@@ -120,6 +142,8 @@ def create_node_app(project_root: str | Path | None = None) -> FastAPI:
         <p><strong>Service:</strong> <code>{service_id}</code></p>
         <p><strong>Project root:</strong> <code>{project_root_text}</code></p>
         <p><strong>Last snapshot:</strong> <code>{last_snapshot}</code></p>
+        <p><strong>Installed version:</strong> <code>{installed_version}</code></p>
+        <p><strong>Bootstrap version:</strong> <code>{bootstrap_version}</code></p>
       </section>
         <section class="grid">
         <div class="card">
@@ -211,5 +235,169 @@ def create_node_app(project_root: str | Path | None = None) -> FastAPI:
             if candidate.exists() and candidate.is_file():
                 return FileResponse(candidate)
             return JSONResponse({"detail": "Not Found"}, status_code=404)
+
+    return app
+
+
+def create_manager_node_app(manager_root: str | Path) -> FastAPI:
+    manager_root = Path(manager_root).resolve()
+    app = FastAPI(title="Switchboard Manager Node", version=__version__)
+
+    def _not_found(error: Exception) -> HTTPException:
+        return HTTPException(status_code=404, detail=str(error))
+
+    @app.get("/api/health")
+    def health() -> dict[str, object]:
+        manifest = load_manager_manifest(manager_root)
+        roots = manifest.get("managed_roots", [])
+        enabled_roots = [root for root in roots if isinstance(root, dict) and root.get("enabled", True)]
+        return {
+            "status": "ok",
+            "mode": "manager",
+            "version": __version__,
+            "manager_id": manifest.get("manager_id", ""),
+            "manager_root": str(manager_root),
+            "runtime_port": manifest.get("runtime_port", 8711),
+            "root_count": len(enabled_roots),
+        }
+
+    @app.get("/api/manager")
+    def manager_info() -> dict[str, object]:
+        return list_manager_roots(manager_root)
+
+    @app.get("/api/manager/roots")
+    def manager_roots() -> dict[str, object]:
+        return {"roots": list_manager_roots(manager_root)["roots"]}
+
+    @app.post("/api/manager/actions/status")
+    def manager_status() -> dict[str, object]:
+        return manager_all_root_health(manager_root)
+
+    @app.post("/api/manager/actions/snapshot")
+    def manager_snapshot() -> dict[str, object]:
+        return manager_all_root_snapshot(manager_root)
+
+    @app.post("/api/manager/actions/install")
+    def manager_install(payload: dict[str, object]) -> dict[str, object]:
+        project_root = str(payload.get("project_root", "")).strip()
+        if not project_root:
+            raise HTTPException(status_code=422, detail="project_root is required")
+        return manager_install_root(
+            manager_root,
+            project_root,
+            root_id=str(payload.get("root_id") or "") or None,
+            role=str(payload.get("role") or "minion"),
+            service_id=str(payload.get("service_id") or "") or None,
+            display_name=str(payload.get("display_name") or "") or None,
+        )
+
+    @app.post("/api/manager/actions/upgrade")
+    def manager_upgrade() -> dict[str, object]:
+        return manager_all_root_upgrade(manager_root)
+
+    @app.post("/api/manager/actions/verify-update")
+    def manager_verify_update() -> dict[str, object]:
+        return manager_all_root_verify_update(manager_root)
+
+    @app.post("/api/manager/actions/archive-old-scaffolding")
+    def manager_archive() -> dict[str, object]:
+        return manager_archive_old_scaffolding(manager_root)
+
+    @app.post("/api/manager/actions/{action}")
+    def manager_action(action: str) -> dict[str, object]:
+        result = manager_safe_action(manager_root, action)
+        if result.get("status") == "permission_limited":
+            raise HTTPException(status_code=403, detail=result)
+        return result
+
+    @app.get("/api/manager/roots/{root_id}/health")
+    def root_health(root_id: str) -> dict[str, object]:
+        try:
+            return manager_root_health(manager_root, root_id)
+        except (FileNotFoundError, KeyError) as error:
+            raise _not_found(error) from error
+
+    @app.get("/api/manager/roots/{root_id}/manifest")
+    def root_manifest(root_id: str) -> dict[str, object]:
+        try:
+            return manager_root_manifest(manager_root, root_id)
+        except (FileNotFoundError, KeyError) as error:
+            raise _not_found(error) from error
+
+    @app.post("/api/manager/roots/{root_id}/snapshot")
+    def root_snapshot(root_id: str) -> dict[str, object]:
+        try:
+            return manager_root_snapshot(manager_root, root_id)
+        except (FileNotFoundError, KeyError) as error:
+            raise _not_found(error) from error
+
+    @app.post("/api/manager/roots/{root_id}/verify-update")
+    def root_verify_update(root_id: str) -> dict[str, object]:
+        try:
+            return manager_root_verify_update(manager_root, root_id)
+        except (FileNotFoundError, KeyError) as error:
+            raise _not_found(error) from error
+
+    @app.post("/api/manager/roots/{root_id}/upgrade")
+    def root_upgrade(root_id: str) -> dict[str, object]:
+        try:
+            return manager_upgrade_root(manager_root, root_id)
+        except (FileNotFoundError, KeyError) as error:
+            raise _not_found(error) from error
+
+    @app.post("/api/manager/roots/{root_id}/archive-old-scaffolding")
+    def root_archive_old_scaffolding(root_id: str) -> dict[str, object]:
+        try:
+            return manager_archive_old_scaffolding(manager_root, root_id=root_id)
+        except (FileNotFoundError, KeyError) as error:
+            raise _not_found(error) from error
+
+    @app.get("/", include_in_schema=False)
+    def root() -> HTMLResponse:
+        manifest = load_manager_manifest(manager_root)
+        roots = manifest.get("managed_roots", [])
+        root_rows = "".join(
+            "<tr>"
+            f"<td><code>{html.escape(str(item.get('root_id', '')))}</code></td>"
+            f"<td>{html.escape(str(item.get('display_name', '')))}</td>"
+            f"<td><code>{html.escape(str(item.get('project_root', '')))}</code></td>"
+            f"<td>{html.escape(str(item.get('verify_status', 'not_run')))}</td>"
+            "</tr>"
+            for item in roots
+            if isinstance(item, dict)
+        )
+        page = f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Switchboard Manager Node</title>
+    <style>
+      body {{ font-family: ui-sans-serif, system-ui, sans-serif; background: #020617; color: #e5e7eb; margin: 0; }}
+      .wrap {{ max-width: 1080px; margin: 0 auto; padding: 24px; }}
+      .hero, table {{ border: 1px solid #1f2937; background: #0f172a; border-radius: 12px; }}
+      .hero {{ padding: 20px; }}
+      table {{ width: 100%; border-collapse: collapse; margin-top: 16px; overflow: hidden; }}
+      th, td {{ border-bottom: 1px solid #1f2937; padding: 10px; text-align: left; }}
+      code {{ color: #93c5fd; }}
+      .muted {{ color: #94a3b8; }}
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <section class="hero">
+        <div class="muted">Switchboard Manager Node</div>
+        <h1>{html.escape(str(manifest.get("manager_id", "manager")))}</h1>
+        <p><strong>Manager root:</strong> <code>{html.escape(str(manager_root))}</code></p>
+        <p><strong>Runtime port:</strong> <code>{html.escape(str(manifest.get("runtime_port", 8711)))}</code></p>
+      </section>
+      <table>
+        <thead><tr><th>Root ID</th><th>Project</th><th>Root</th><th>Verify</th></tr></thead>
+        <tbody>{root_rows or "<tr><td colspan='4'>No managed roots registered.</td></tr>"}</tbody>
+      </table>
+    </div>
+  </body>
+</html>"""
+        return HTMLResponse(page)
 
     return app

@@ -1,0 +1,11 @@
+{
+  "context": {
+    "fileName": [
+      "GEMINI.md"
+    ],
+    "includeDirectories": [
+      "switchboard/core"
+    ],
+    "loadFromIncludeDirectories": true
+  }
+}

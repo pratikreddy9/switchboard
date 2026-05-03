@@ -17,6 +17,7 @@ export interface PortInfo {
   process: string
   pid?: number | null
   state?: string
+  bind_address?: string
 }
 
 export interface RuntimeConfig {
@@ -26,6 +27,8 @@ export interface RuntimeConfig {
   monitoring_mode: 'manual' | 'detect' | 'node_managed'
   notes: string
 }
+
+export type ExecutionMode = 'networked' | 'batch' | 'lambda' | 'docs_only'
 
 export interface RepoSummary {
   path: string
@@ -65,7 +68,7 @@ export interface ServiceLocationDraft {
 
 export interface ScopeEntry {
   entry_id?: string
-  kind: 'repo' | 'doc' | 'log' | 'exclude'
+  kind: 'repo' | 'code' | 'doc' | 'log' | 'exclude'
   path: string
   path_type: 'file' | 'dir' | 'glob'
   source: 'seeded' | 'user_added' | 'node_manifest' | 'tasks_completed'
@@ -126,7 +129,7 @@ export interface RuntimeService {
   owner?: string
 }
 
-export type DependencyKind = 'service' | 'database' | 'deployment_host' | 'saas' | 'shared_data'
+export type DependencyKind = 'service' | 'database' | 'deployment_host' | 'saas' | 'shared_data' | 'api' | 'runtime' | 'library'
 
 export interface DependencyNode {
   kind: DependencyKind
@@ -151,7 +154,7 @@ export interface TaskLedgerEntry {
   dependencies?: DependencyNode[]
   cross_dependencies?: DependencyNode[]
   diagram?: string
-  notes?: string
+  notes?: string[]
   scope_entries?: ScopeEntry[]
   runtime?: RuntimeConfig
   readme?: string
@@ -180,24 +183,297 @@ export interface ProjectManifest {
   notes: string
 }
 
+export type ProjectEnvironmentKind = 'dev' | 'test' | 'staging' | 'qa' | 'prod' | 'custom'
+
+export interface ProjectDeploymentRef {
+  service_id: string
+  location_id?: string
+  server_id?: string
+  root?: string
+  version?: string
+  runtime_services?: RuntimeService[]
+  dependencies?: DependencyNode[]
+  cross_dependencies?: DependencyNode[]
+  notes?: string
+}
+
+export interface ProjectEnvironmentManifest {
+  environment_id: string
+  project_id: string
+  display_name: string
+  kind: ProjectEnvironmentKind
+  deployments: ProjectDeploymentRef[]
+  tags: string[]
+  notes: string
+}
+
+export interface ProjectPullSummary {
+  project_id: string
+  environment_id?: string
+  added_count: number
+  removed_count: number
+  changed_count: number
+  unchanged_count: number
+  latest_created_at: string
+  service_count: number
+  summary?: string
+}
+
+export interface EnvironmentDependencySummary {
+  dependencies: DependencyNode[]
+  cross_dependencies: DependencyNode[]
+  composition?: DependencyComposition
+}
+
+export interface DependencyComposition {
+  basis: string
+  language_percentages: Array<{
+    name: string
+    percentage: number
+    file_count: number
+  }>
+  ai_percentage: number
+  llm_percentage: number
+  embedding_percentage: number
+  models: ModelUsage[]
+}
+
+export interface ModelUsage {
+  name: string
+  category: 'llm' | 'embedding' | 'unknown'
+  source: string
+}
+
+export interface ProjectEnvironmentServiceSummary {
+  service_id: string
+  display_name: string
+  execution_mode: ExecutionMode
+  location_id?: string
+  server_id?: string
+  root?: string
+  version?: string
+  runtime_services?: RuntimeService[]
+  dependencies?: DependencyNode[]
+  cross_dependencies?: DependencyNode[]
+  runtime_snapshot?: EnvironmentLocationSnapshot
+  runtime_checks?: RuntimeCheckResult[]
+  node_viewer?: NodeViewerEntry[]
+  node_health?: {
+    status: string
+    runtime_ready: boolean
+    bootstrap_ready: boolean
+    runtime_port?: number
+    checked_at?: string
+  }
+  service_health?: {
+    status: string
+    healthcheck_status: string
+    checked_at?: string
+    healthcheck_command?: string
+    healthcheck_output?: string
+  }
+  pull_summary?: ProjectPullSummary
+  notes?: string
+}
+
+export interface ProjectEnvironmentView extends ProjectEnvironmentManifest {
+  pull_summary?: ProjectPullSummary
+  dependency_summary?: EnvironmentDependencySummary
+  service_summaries?: ProjectEnvironmentServiceSummary[]
+  runtime_snapshot?: EnvironmentRuntimeSnapshot
+  runtime_snapshot_summary?: {
+    captured_at: string
+    open_port_count: number
+    exposed_port_count: number
+    firewall_status: string
+  }
+  api_flow_count?: number
+  latest_flow_run_at?: string
+}
+
+export type ApiFlowTargetKind = 'service' | 'dependency' | 'cross_dependency'
+export type CaptureSource = 'json' | 'header'
+
+export interface ApiStepCapture {
+  variable_name: string
+  source: CaptureSource
+  selector: string
+}
+
+export interface ApiFlowStep {
+  step_id: string
+  order: number
+  display_name: string
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
+  path: string
+  query: Record<string, string>
+  headers: Record<string, string>
+  body: string
+  expected_status: number
+  continue_on_failure: boolean
+  timeout_seconds: number
+  notes: string
+  captures: ApiStepCapture[]
+}
+
+export interface ApiFlowManifest {
+  flow_id: string
+  environment_id: string
+  service_id?: string
+  display_name: string
+  target_kind: ApiFlowTargetKind
+  target_name: string
+  base_url: string
+  execution_mode: 'http'
+  enabled: boolean
+  tags: string[]
+  notes: string
+  steps: ApiFlowStep[]
+}
+
+export interface ApiStepRunResult {
+  step_id: string
+  status: 'ok' | 'failed' | 'skipped'
+  resolved_url: string
+  duration_ms: number
+  request_preview: {
+    method: string
+    url: string
+    headers: Record<string, string>
+    body_preview: string
+  }
+  response_status: number
+  response_headers: Record<string, string>
+  response_body_preview: string
+  extracted_variables: Record<string, string>
+  generated_curl: string
+  error: string
+}
+
+export interface ApiFlowRunRecord {
+  run_id: string
+  flow_id: string
+  environment_id: string
+  started_at: string
+  finished_at: string
+  status: 'ok' | 'partial' | 'failed'
+  step_results: ApiStepRunResult[]
+  summary: string
+}
+
+export interface OperatorCommand {
+  category: 'inspect_only' | 'verify_listener' | 'verify_firewall' | 'verify_health' | 'verify_node'
+  label: string
+  command: string
+  notes: string
+}
+
+export interface ProcessFinding {
+  port?: number
+  bind_address: string
+  process_name: string
+  pid?: number
+  state: string
+  raw: string
+  owner_service_id: string
+  owner_display_name: string
+  owner_location_id: string
+  owner_root: string
+}
+
+export interface PortExposureFinding {
+  host: string
+  port: number
+  bind_address: string
+  process_name: string
+  expected: boolean
+  exposure: 'local_only' | 'public' | 'unknown'
+  notes: string
+}
+
+export interface EnvironmentLocationSnapshot {
+  service_id: string
+  service_name: string
+  execution_mode: ExecutionMode
+  location_id: string
+  server_id: string
+  root: string
+  host: string
+  firewall_status: string
+  node_status: string
+  expected_ports: number[]
+  open_ports: number[]
+  unexpected_ports: number[]
+  exposed_ports: PortExposureFinding[]
+  process_findings: ProcessFinding[]
+  operator_commands: OperatorCommand[]
+  runtime_hint: string
+  healthcheck_command: string
+  healthcheck_status: string
+  healthcheck_output: string
+}
+
+export interface EnvironmentRuntimeSnapshot {
+  environment_id: string
+  captured_at: string
+  locations: EnvironmentLocationSnapshot[]
+  open_ports: number[]
+  expected_ports: number[]
+  unexpected_ports: number[]
+  exposed_ports: PortExposureFinding[]
+  firewall_status: string
+  process_findings: ProcessFinding[]
+  node_findings: Array<Record<string, unknown>>
+  operator_commands: OperatorCommand[]
+}
+
+export interface EnvironmentLabView {
+  project: ProjectManifest
+  environment: ProjectEnvironmentView
+  runtime_snapshot?: EnvironmentRuntimeSnapshot
+  api_flows: ApiFlowManifest[]
+  api_runs: Record<string, ApiFlowRunRecord[]>
+}
+
+export interface CompanyCreateRequest {
+  workspace_id: string
+  name: string
+  tags?: string[]
+  notes?: string
+}
+
+export interface CompanyPatchRequest {
+  name?: string
+  tags?: string[]
+  notes?: string
+}
+
 export interface ServerCreateRequest {
   server_id: string
+  company_id?: string
   name: string
   connection_type: 'local' | 'ssh'
   host?: string
   username?: string
   port?: number
+  deployment_mode?: 'native_agent' | 'local_bundle_only'
+  vpn_required?: boolean
   tags: string[]
   notes: string
+  local_password?: string
 }
 
 export interface ServerPatchRequest {
+  company_id?: string
   name?: string
   host?: string
   username?: string
   port?: number
+  deployment_mode?: 'native_agent' | 'local_bundle_only'
+  vpn_required?: boolean
   tags?: string[]
   notes?: string
+  local_password?: string
 }
 
 export interface ProjectCreateRequest {
@@ -210,11 +486,62 @@ export interface ProjectCreateRequest {
 }
 
 export interface ProjectPatchRequest {
+  project_id?: string
   display_name?: string
   parent_project_id?: string
   service_ids?: string[]
   tags?: string[]
   notes?: string
+}
+
+export interface ProjectEnvironmentCreateRequest {
+  environment_id: string
+  display_name: string
+  kind?: ProjectEnvironmentKind
+  deployments?: ProjectDeploymentRef[]
+  tags?: string[]
+  notes?: string
+}
+
+export interface ProjectEnvironmentPatchRequest {
+  environment_id?: string
+  display_name?: string
+  kind?: ProjectEnvironmentKind
+  deployments?: ProjectDeploymentRef[]
+  tags?: string[]
+  notes?: string
+}
+
+export interface EnvironmentRuntimeSnapshotRequest {
+  runtime_passwords?: Record<string, string>
+}
+
+export interface ApiFlowCreateRequest {
+  flow_id: string
+  service_id?: string
+  display_name: string
+  target_kind?: ApiFlowTargetKind
+  target_name?: string
+  base_url?: string
+  execution_mode?: 'http'
+  enabled?: boolean
+  tags?: string[]
+  notes?: string
+  steps?: ApiFlowStep[]
+}
+
+export interface ApiFlowPatchRequest {
+  flow_id?: string
+  service_id?: string
+  display_name?: string
+  target_kind?: ApiFlowTargetKind
+  target_name?: string
+  base_url?: string
+  execution_mode?: 'http'
+  enabled?: boolean
+  tags?: string[]
+  notes?: string
+  steps?: ApiFlowStep[]
 }
 
 export type PendingActionKey = `${string}:${string}:${'pull_bundle'|'sync_to_node'|'sync_from_node'|'runtime_check'}`
@@ -236,6 +563,7 @@ export interface Service {
   workspace_id: string
   display_name: string
   kind: ServiceKind
+  execution_mode: ExecutionMode
   tags: string[]
   favorite_tier: number
   locations: ServiceLocation[]
@@ -252,6 +580,7 @@ export interface Service {
   runtime_checks?: RuntimeCheckResult[]
   node_sync?: NodeSyncResult[]
   task_ledger?: TaskLedgerEntry[]
+  node_viewer?: NodeViewerEntry[]
 }
 
 export interface ServiceRunResult {
@@ -281,11 +610,14 @@ export interface FileEntry {
 
 export interface Workspace {
   workspace_id: string
+  company_id?: string
   display_name: string
   services: Service[]
   server_ids: string[]
   service_count?: number
   server_count?: number
+  tags?: string[]
+  notes?: string
 }
 
 export interface WorkspaceLatest {
@@ -309,11 +641,14 @@ export interface ServerInfo {
 
 export interface ServerRecord {
   server_id: string
+  company_id?: string
   name?: string
   connection_type?: 'local' | 'ssh'
   host?: string
   username?: string
   port?: number
+  deployment_mode?: 'native_agent' | 'local_bundle_only'
+  vpn_required?: boolean
   tags?: string[]
   notes?: string
 }
@@ -398,6 +733,45 @@ export interface GitPullResult {
   stderr?: string
 }
 
+export interface GitHubBackupRequest {
+  workspace_id?: string
+  service_ids?: string[]
+  runtime_passwords?: Record<string, string>
+  remote?: string
+  dry_run?: boolean
+}
+
+export interface GitHubBackupRepo {
+  workspace_id: string
+  service_id: string
+  repo_path: string
+  server_id: string
+  status: CollectStatus
+  branch: string
+  dirty: boolean
+  last_commit: string
+  remote_count: number
+  github_remote: boolean
+  push_mode: 'allowed' | 'blocked'
+  eligible: boolean
+  blocking_reasons: string[]
+}
+
+export interface GitHubBackupResult {
+  status: CollectStatus
+  generated: string
+  workspace_id: string
+  service_ids: string[]
+  repository_count: number
+  eligible_count: number
+  blocked_count: number
+  credential_note: string
+  repositories: GitHubBackupRepo[]
+  action?: 'dry_run' | 'run'
+  pushed_count?: number
+  push_results?: Array<Record<string, unknown>>
+}
+
 export interface RepoStateResult extends RepoSummary {
   repo_path: string
 }
@@ -414,7 +788,7 @@ export interface ScanEntry {
   name: string
   entry_type: 'file' | 'dir'
   depth: number
-  suggested_kind: 'repo' | 'doc' | 'log' | 'exclude'
+  suggested_kind: 'repo' | 'code' | 'doc' | 'log' | 'exclude'
 }
 
 export interface TreeNodeEntry {
@@ -424,7 +798,7 @@ export interface TreeNodeEntry {
   entry_type?: 'file' | 'dir'
   has_children: boolean
   children_loaded: boolean
-  suggested_kind: 'repo' | 'doc' | 'log' | 'exclude'
+  suggested_kind: 'repo' | 'code' | 'doc' | 'log' | 'exclude'
   default_selected: boolean
 }
 
@@ -485,6 +859,7 @@ export interface RuntimeCheckResult {
   root: string
   status: CollectStatus
   checked_at: string
+  execution_mode?: ExecutionMode
   configured_ports: number[]
   detected_ports: PortInfo[]
   missing_ports: number[]
@@ -497,6 +872,11 @@ export interface RuntimeCheckResult {
   notes: string
   node_present: boolean
   source?: string
+  firewall_status?: string
+  unexpected_ports?: number[]
+  process_findings?: ProcessFinding[]
+  exposed_ports?: PortExposureFinding[]
+  operator_commands?: OperatorCommand[]
 }
 
 export interface NodeSyncResult {
@@ -518,6 +898,110 @@ export interface PullBundleRequest {
   runtime_password?: string
   extra_includes: ScopeEntry[]
   extra_excludes: string[]
+  note?: string
+}
+
+export interface ExposureFinding {
+  relative_path: string
+  finding_kind: string
+  variable_name?: string
+  line_number: number
+  redacted: boolean
+}
+
+export interface PullBundleDiffSummary {
+  added_count: number
+  removed_count: number
+  changed_count: number
+  unchanged_count: number
+  summary: string
+}
+
+export interface PullBundleDiffEntry {
+  change: 'added' | 'removed' | 'changed'
+  relative_path: string
+  kind: 'repo' | 'code' | 'doc' | 'log'
+}
+
+export interface DependencyContext {
+  dependencies: DependencyNode[]
+  cross_dependencies: DependencyNode[]
+  notes: string[]
+  diagram: string
+  composition?: DependencyComposition
+}
+
+export interface PullBundleAuthority {
+  source: 'node-local' | 'control-center' | string
+  direction: string
+  location_id: string
+  server_id: string
+  root: string
+  manifest_path: string
+  updated_at: string
+  note: string
+}
+
+export interface NodeViewerEntry {
+  service_id: string
+  location_id: string
+  server_id: string
+  root: string
+  node_present: boolean
+  bootstrap_ready: boolean
+  runtime_ready: boolean
+  installed_version: string
+  bootstrap_version: string
+  manifest_updated_at: string
+  runtime_status: 'running' | 'stopped' | 'running_unmanaged' | 'missing'
+  runtime_pid?: number
+  runtime_port: number
+  needs_install: boolean
+  needs_upgrade: boolean
+  needs_bootstrap: boolean
+  attention_reason?: string
+  manifest_path: string
+  runtime_dir: string
+  log_file: string
+  last_error?: string
+  installed_release_version?: string
+  installed_release_asset_id?: string
+  installed_release_asset_name?: string
+  installed_release_published_at?: string
+  installed_release_url?: string
+  installed_release_commitish?: string
+}
+
+export interface NodeActionResult {
+  node: NodeViewerEntry
+  before?: NodeViewerEntry
+  after?: NodeViewerEntry
+  message?: string
+  release?: NodeReleaseCheck
+}
+
+export interface NodeReleaseCheck {
+  status: CollectStatus
+  current_version: string
+  latest_version: string
+  update_available: boolean
+  published_at?: string
+  release_url?: string
+  asset_url?: string
+  notes?: string
+  message?: string
+  exact_match_known?: boolean
+  exact_match?: boolean
+  current_release_version?: string
+  current_release_asset_id?: string
+  current_release_asset_name?: string
+  current_release_published_at?: string
+  current_release_url?: string
+  current_release_commitish?: string
+  latest_release_asset_id?: string
+  latest_release_asset_name?: string
+  latest_release_asset_updated_at?: string
+  latest_release_commitish?: string
 }
 
 export interface PullBundleRecord {
@@ -533,15 +1017,22 @@ export interface PullBundleRecord {
   source_tree_path?: string
   manifest_path: string
   repo_commits: string[]
+  note?: string
+  compared_to_bundle_id?: string
+  diff_summary?: PullBundleDiffSummary
+  diff_entries?: PullBundleDiffEntry[]
+  exposure_findings?: ExposureFinding[]
+  dependency_context?: DependencyContext
+  authority?: PullBundleAuthority
   skipped_entry_count?: number
   skipped_entries?: Array<{
     path: string
-    kind: 'doc' | 'log' | 'repo' | 'exclude'
+    kind: 'doc' | 'log' | 'repo' | 'code' | 'exclude'
     path_type: 'file' | 'dir' | 'glob'
     reason: string
   }>
   files?: Array<{
-    kind: 'doc' | 'log' | 'repo'
+    kind: 'doc' | 'log' | 'repo' | 'code'
     source_path: string
     target_path: string
     relative_path: string
@@ -555,6 +1046,7 @@ export interface CreateServiceRequest {
   service_id: string
   display_name: string
   kind?: string
+  execution_mode?: ExecutionMode
   ownership_tier?: 'owned' | 'shared' | 'infra'
   tags?: string[]
   favorite_tier?: 'primary' | 'secondary' | 'none'

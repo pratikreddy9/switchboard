@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Archive, ChevronDown, ChevronRight, Download, LoaderCircle, PackagePlus } from 'lucide-react'
-import { createPullBundle, listPullBundles, acquireActionLock, releaseActionLock } from '../api/client'
-import type { PullBundleRecord, ScopeEntry, Service } from '../types/switchboard'
+import { createPullBundle, getActionLocks, listPullBundles } from '../api/client'
+import type { DependencyComposition, PullBundleRecord, ScopeEntry, Service } from '../types/switchboard'
 import { isApiError } from '../types/switchboard'
 import { StatusBadge } from './StatusBadge'
 import { ConfirmationModal, ACTION_EXPLAIN } from './ConfirmationModal'
+import { AccordionSection } from './AccordionSection'
 
 interface Props {
   service: Service
@@ -21,27 +22,67 @@ function uniqueByPath(entries: ScopeEntry[]) {
 }
 
 export function PullBundlePanel({ service, disabled }: Props) {
+  const actionKey = 'pull_bundle'
+  const sessionKey = `pending:${actionKey}:${service.service_id}`
   const [history, setHistory] = useState<PullBundleRecord[]>([])
   const [bundleResult, setBundleResult] = useState<PullBundleRecord | null>(null)
   const [includePath, setIncludePath] = useState('')
-  const [includeKind, setIncludeKind] = useState<'doc' | 'log'>('doc')
+  const [includeKind, setIncludeKind] = useState<'code' | 'doc' | 'log'>('doc')
   const [includePathType, setIncludePathType] = useState<'file' | 'dir' | 'glob'>('file')
   const [extraIncludes, setExtraIncludes] = useState<ScopeEntry[]>([])
   const [extraExcludes, setExtraExcludes] = useState('')
+  const [note, setNote] = useState('')
   const [creating, setCreating] = useState(false)
   const [message, setMessage] = useState('')
   const [expandedHistory, setExpandedHistory] = useState<Record<string, boolean>>({})
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [pendingActions, setPendingActions] = useState<Record<string, boolean>>({})
+  const [createOpen, setCreateOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [leftOutOpen, setLeftOutOpen] = useState(false)
 
   useEffect(() => {
-    const keys = Object.keys(sessionStorage)
-    const pending: Record<string, boolean> = {}
-    for (const key of keys) {
-      if (key.startsWith('pending:')) pending[key] = true
+    let cancelled = false
+
+    const refreshPending = async () => {
+      const keys = Object.keys(sessionStorage)
+      const pending: Record<string, boolean> = {}
+      for (const key of keys) {
+        if (key.startsWith('pending:')) pending[key] = true
+      }
+
+      if (disabled) {
+        if (!cancelled) setPendingActions(pending)
+        return
+      }
+
+      const result = await getActionLocks(service.service_id)
+      if (cancelled) return
+      if (isApiError(result)) {
+        setPendingActions(pending)
+        return
+      }
+
+      const bundleLocked = result.locks.some((lock) => lock.action_key === actionKey)
+      if (bundleLocked) {
+        pending[sessionKey] = true
+      } else {
+        sessionStorage.removeItem(sessionKey)
+        delete pending[sessionKey]
+      }
+      setPendingActions(pending)
     }
-    setPendingActions(pending)
-  }, [])
+
+    void refreshPending()
+    const timer = window.setInterval(() => {
+      void refreshPending()
+    }, 5000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [actionKey, disabled, service.service_id, sessionKey])
 
   useEffect(() => {
     if (disabled) return
@@ -54,15 +95,17 @@ export function PullBundlePanel({ service, disabled }: Props) {
     () => service.scope_entries.filter((entry) => entry.enabled && entry.kind !== 'exclude'),
     [service.scope_entries],
   )
+  const savedScopeSummary = useMemo(() => {
+    const counts = { repo: 0, code: 0, doc: 0, log: 0 }
+    for (const entry of savedScope) {
+      if (entry.kind === 'repo' || entry.kind === 'code' || entry.kind === 'doc' || entry.kind === 'log') counts[entry.kind] += 1
+    }
+    return counts
+  }, [savedScope])
   const latestBundleWithFiles = useMemo(() => {
     if (bundleResult?.files?.length) return bundleResult
     return history.find((bundle) => (bundle.files?.length ?? 0) > 0) ?? null
   }, [bundleResult, history])
-
-  function matchingFilesForScope(scopePath: string) {
-    const files = latestBundleWithFiles?.files ?? []
-    return files.filter((file) => file.source_path.startsWith(scopePath))
-  }
 
   function addExtraInclude() {
     const trimmed = includePath.trim()
@@ -87,23 +130,11 @@ export function PullBundlePanel({ service, disabled }: Props) {
   }
 
   async function handleCreate() {
-    const actionKey = 'pull_bundle'
-    const sessionKey = `pending:${actionKey}:${service.service_id}`
-    
     sessionStorage.setItem(sessionKey, 'true')
     setPendingActions(prev => ({ ...prev, [sessionKey]: true }))
     setConfirmOpen(false)
     setCreating(true)
     setMessage('')
-
-    const lockRes = await acquireActionLock(service.service_id, actionKey)
-    if (isApiError(lockRes) || lockRes.status !== 'ok') {
-      setMessage((lockRes as any)?.message || 'Action is already in progress.')
-      setCreating(false)
-      sessionStorage.removeItem(sessionKey)
-      setPendingActions(prev => { const next = { ...prev }; delete next[sessionKey]; return next })
-      return
-    }
 
     try {
       const result = await createPullBundle(service.service_id, {
@@ -112,6 +143,7 @@ export function PullBundlePanel({ service, disabled }: Props) {
           .split('\n')
           .map((line) => line.trim())
           .filter(Boolean),
+        note,
       })
       if (isApiError(result)) {
         setMessage(result.message)
@@ -121,22 +153,59 @@ export function PullBundlePanel({ service, disabled }: Props) {
       setHistory((current) => [result, ...current])
       setMessage(`Bundle ${result.bundle_id} created.`)
     } finally {
-      await releaseActionLock(service.service_id, actionKey)
       setCreating(false)
       sessionStorage.removeItem(sessionKey)
       setPendingActions(prev => { const next = { ...prev }; delete next[sessionKey]; return next })
     }
   }
 
+  function renderComposition(composition?: DependencyComposition) {
+    if (!composition) return null
+    const topLanguages = composition.language_percentages.slice(0, 4)
+    const models = composition.models ?? []
+    return (
+      <div className="mt-3 rounded-lg border border-gray-800 bg-black/20 p-3">
+        <div className="text-[11px] uppercase tracking-[0.16em] text-gray-500">Composition</div>
+        <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+          {topLanguages.length === 0 ? (
+            <span className="text-gray-600">No file mix yet</span>
+          ) : (
+            topLanguages.map((item) => (
+              <span key={item.name} className="rounded-full border border-gray-800 px-2 py-1 text-gray-300">
+                {item.name} {item.percentage}%
+              </span>
+            ))
+          )}
+          <span className="rounded-full border border-cyan-900/40 bg-cyan-950/20 px-2 py-1 text-cyan-200">
+            AI {composition.ai_percentage}%
+          </span>
+          <span className="rounded-full border border-gray-800 px-2 py-1 text-gray-300">
+            LLM {composition.llm_percentage}%
+          </span>
+          <span className="rounded-full border border-gray-800 px-2 py-1 text-gray-300">
+            Embedding {composition.embedding_percentage}%
+          </span>
+        </div>
+        {models.length > 0 && (
+          <div className="mt-2 text-xs text-gray-400">
+            Models: {models.map((model) => `${model.name} (${model.category})`).join(', ')}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5">
-      <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
+      <AccordionSection
+        title="Create Bundle"
+        open={createOpen}
+        onToggle={() => setCreateOpen((current) => !current)}
+        icon={<PackagePlus className="h-4 w-4 text-cyan-400" />}
+        summary={`${savedScope.length} saved entries · ${extraIncludes.length} one-run extras · ${extraExcludes.split('\n').map((line) => line.trim()).filter(Boolean).length} excludes`}
+      >
         <div className="flex items-center justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2 text-sm font-medium text-white">
-              <PackagePlus className="h-4 w-4 text-cyan-400" />
-              Create pull bundle
-            </div>
             <p className="mt-1 text-sm text-gray-500">
               Pull saved scope plus one-run extras into a versioned local mirror of the source tree.
             </p>
@@ -153,35 +222,27 @@ export function PullBundlePanel({ service, disabled }: Props) {
 
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <div className="rounded-xl border border-gray-800 bg-gray-900 p-3">
-            <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Saved scope</div>
-            <div className="mt-3 space-y-2">
-              {savedScope.length === 0 ? (
-                <div className="text-sm text-gray-500">No saved scope entries yet.</div>
-              ) : (
-                savedScope.map((entry) => (
-                  <div key={`${entry.kind}:${entry.path}`} className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="font-mono text-xs text-gray-300 break-all">{entry.path}</div>
-                        {matchingFilesForScope(entry.path).length > 0 && (
-                          <div className="mt-2 max-h-32 space-y-1 overflow-auto rounded border border-gray-800 bg-black/20 p-2">
-                            {matchingFilesForScope(entry.path)
-                              .slice(0, 20)
-                              .map((file) => (
-                                <div key={`${file.target_path}:${file.sha256}`} className="font-mono text-[11px] text-gray-400 break-all">
-                                  {file.relative_path}
-                                </div>
-                              ))}
-                          </div>
-                        )}
-                      </div>
-                      <span className="rounded-full border border-gray-700 px-2 py-0.5 text-[11px] uppercase tracking-[0.14em] text-cyan-300">
-                        {entry.kind}
-                      </span>
-                    </div>
-                  </div>
-                ))
-              )}
+            <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Saved scope summary</div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-4">
+              <div className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-3 text-sm text-gray-300">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Repo</div>
+                <div className="mt-1 text-lg font-medium text-white">{savedScopeSummary.repo}</div>
+              </div>
+              <div className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-3 text-sm text-gray-300">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Code</div>
+                <div className="mt-1 text-lg font-medium text-white">{savedScopeSummary.code}</div>
+              </div>
+              <div className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-3 text-sm text-gray-300">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Doc</div>
+                <div className="mt-1 text-lg font-medium text-white">{savedScopeSummary.doc}</div>
+              </div>
+              <div className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-3 text-sm text-gray-300">
+                <div className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Log</div>
+                <div className="mt-1 text-lg font-medium text-white">{savedScopeSummary.log}</div>
+              </div>
+            </div>
+            <div className="mt-3 text-xs text-gray-500">
+              Saved scope paths are managed in the Scope panel. Bundle creation uses that snapshot without repeating the full list here.
             </div>
           </div>
 
@@ -197,10 +258,11 @@ export function PullBundlePanel({ service, disabled }: Props) {
               />
               <select
                 value={includeKind}
-                onChange={(event) => setIncludeKind(event.target.value as 'doc' | 'log')}
+                onChange={(event) => setIncludeKind(event.target.value as 'code' | 'doc' | 'log')}
                 className="rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500"
                 disabled={disabled}
               >
+                <option value="code">Code</option>
                 <option value="doc">Doc</option>
                 <option value="log">Log</option>
               </select>
@@ -256,6 +318,17 @@ export function PullBundlePanel({ service, disabled }: Props) {
                 disabled={disabled}
               />
             </label>
+
+            <label className="mt-4 block text-sm text-gray-300">
+              <div className="mb-1">Pull note</div>
+              <textarea
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                className="min-h-24 w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500"
+                placeholder="Optional note for this pull bundle."
+                disabled={disabled}
+              />
+            </label>
           </div>
         </div>
 
@@ -273,6 +346,22 @@ export function PullBundlePanel({ service, disabled }: Props) {
               </div>
               <StatusBadge status="ok" />
             </div>
+            {bundleResult.diff_summary && (
+              <div className="mt-3 rounded-lg border border-amber-800/40 bg-amber-950/20 px-3 py-2 text-xs text-amber-200">
+                {bundleResult.diff_summary.summary}
+              </div>
+            )}
+            {bundleResult.note && (
+              <div className="mt-3 rounded-lg border border-gray-800 bg-black/20 px-3 py-2 text-xs text-gray-200">
+                {bundleResult.note}
+              </div>
+            )}
+            {bundleResult.authority && (
+              <div className="mt-3 rounded-lg border border-cyan-900/40 bg-cyan-950/20 px-3 py-2 text-xs text-cyan-100">
+                Authority: {bundleResult.authority.source} · {bundleResult.authority.root}
+              </div>
+            )}
+            {renderComposition(bundleResult.dependency_context?.composition)}
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               <div className="rounded-lg border border-green-900/40 bg-black/20 p-3">
                 <div className="text-xs uppercase tracking-[0.16em] text-green-300/80">Pulled files</div>
@@ -290,6 +379,11 @@ export function PullBundlePanel({ service, disabled }: Props) {
                 </div>
               </div>
               <div className="rounded-lg border border-yellow-900/40 bg-black/20 p-3">
+                {(bundleResult.exposure_findings?.length ?? 0) > 0 && (
+                  <div className="mb-3 rounded-lg border border-yellow-900/30 bg-yellow-950/20 px-3 py-2 text-xs text-yellow-200">
+                    {bundleResult.exposure_findings?.length} exposure finding{bundleResult.exposure_findings?.length === 1 ? '' : 's'} in pulled files.
+                  </div>
+                )}
                 <div className="text-xs uppercase tracking-[0.16em] text-yellow-200/80">Missed scope</div>
                 <div className="mt-2 max-h-56 space-y-1 overflow-auto">
                   {(bundleResult.skipped_entries ?? []).length === 0 ? (
@@ -309,13 +403,15 @@ export function PullBundlePanel({ service, disabled }: Props) {
             </div>
           </div>
         )}
-      </div>
+      </AccordionSection>
 
-      <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
-        <div className="flex items-center gap-2 text-sm font-medium text-white">
-          <Download className="h-4 w-4 text-cyan-400" />
-          Bundle history
-        </div>
+      <AccordionSection
+        title="Bundle History"
+        open={historyOpen}
+        onToggle={() => setHistoryOpen((current) => !current)}
+        icon={<Download className="h-4 w-4 text-cyan-400" />}
+        summary={history.length > 0 ? `${history.length} bundles · latest ${new Date(history[0].created_at).toLocaleString()}` : 'No bundle history yet'}
+      >
         <div className="mt-3 space-y-3">
           {history.length === 0 ? (
             <div className="text-sm text-gray-500">No bundle history yet.</div>
@@ -343,6 +439,11 @@ export function PullBundlePanel({ service, disabled }: Props) {
                       <div className="mt-1 text-xs text-gray-500">
                         {new Date(bundle.created_at).toLocaleString()} · {bundle.file_count} files
                       </div>
+                      {bundle.diff_summary && (
+                        <div className="mt-2 inline-flex rounded-full border border-amber-900/50 bg-amber-950/20 px-2 py-0.5 text-[11px] text-amber-200">
+                          {bundle.diff_summary.summary}
+                        </div>
+                      )}
                     </div>
                   </button>
                   <div className="text-right text-xs text-gray-400">
@@ -352,7 +453,81 @@ export function PullBundlePanel({ service, disabled }: Props) {
                   </div>
                 </div>
                 {expandedHistory[bundle.bundle_id] && (
-                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <div className="mt-3 space-y-3">
+                    {(bundle.note || bundle.authority || bundle.dependency_context || (bundle.exposure_findings?.length ?? 0) > 0) && (
+                      <div className="rounded-lg border border-gray-800 bg-gray-950 p-3">
+                        <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Bundle Notes</div>
+                        {bundle.note && <div className="mt-2 text-sm text-gray-300">{bundle.note}</div>}
+                        {bundle.authority && (
+                          <div className="mt-2 rounded-lg border border-cyan-900/40 bg-cyan-950/20 px-3 py-2 text-xs text-cyan-100">
+                            Authority: {bundle.authority.source} · {bundle.authority.root}
+                            {bundle.authority.updated_at ? ` · synced ${new Date(bundle.authority.updated_at).toLocaleString()}` : ''}
+                          </div>
+                        )}
+                        {bundle.dependency_context && (
+                          <div className="mt-3 grid gap-3 md:grid-cols-2">
+                            <div>
+                              <div className="text-[11px] uppercase tracking-[0.16em] text-gray-500">Dependencies</div>
+                              <div className="mt-2 space-y-1">
+                                {(bundle.dependency_context.dependencies ?? []).length === 0 ? (
+                                  <div className="text-xs text-gray-600">None</div>
+                                ) : (
+                                  bundle.dependency_context.dependencies?.map((dep, idx) => (
+                                    <div key={idx} className="text-xs text-gray-300">
+                                      {dep.kind} · {dep.name} · {dep.host || 'local'}{dep.port ? `:${dep.port}` : ''}
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-[11px] uppercase tracking-[0.16em] text-gray-500">Cross-System Notes</div>
+                              <div className="mt-2 space-y-1">
+                                {(bundle.dependency_context.cross_dependencies ?? []).length === 0 ? (
+                                  <div className="text-xs text-gray-600">None</div>
+                                ) : (
+                                  bundle.dependency_context.cross_dependencies?.map((dep, idx) => (
+                                    <div key={idx} className="text-xs text-gray-300">
+                                      {dep.kind} · {dep.name} · {dep.host || 'local'}{dep.port ? `:${dep.port}` : ''}
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {renderComposition(bundle.dependency_context?.composition)}
+                        {(bundle.exposure_findings?.length ?? 0) > 0 && (
+                          <div className="mt-3">
+                            <div className="text-[11px] uppercase tracking-[0.16em] text-yellow-300">Exposure Notes</div>
+                            <div className="mt-2 space-y-1">
+                              {bundle.exposure_findings?.map((finding, idx) => (
+                                <div key={idx} className="text-xs text-yellow-100/90">
+                                  {finding.relative_path} · {finding.finding_kind}{finding.variable_name ? ` · ${finding.variable_name}` : ''} · line {finding.line_number}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {(bundle.diff_entries?.length ?? 0) > 0 && (
+                      <div className="rounded-lg border border-gray-800 bg-gray-950 p-3">
+                        <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Diff</div>
+                        <div className="mt-2 max-h-48 space-y-1 overflow-auto">
+                          {bundle.diff_entries?.map((entry, idx) => (
+                            <div key={`${bundle.bundle_id}:${entry.relative_path}:${idx}`} className="flex items-center gap-2 rounded border border-gray-800 px-2 py-1 text-xs">
+                              <span className={entry.change === 'added' ? 'text-green-400' : entry.change === 'removed' ? 'text-red-400' : 'text-amber-300'}>
+                                {entry.change === 'added' ? '+' : entry.change === 'removed' ? '-' : '~'}
+                              </span>
+                              <span className="font-mono text-gray-300 break-all">{entry.relative_path}</span>
+                              <span className="ml-auto uppercase tracking-[0.14em] text-gray-500">{entry.kind}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  <div className="grid gap-3 md:grid-cols-2">
                     <div className="rounded-lg border border-gray-800 bg-gray-950 p-3">
                       <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Pulled files</div>
                       <div className="mt-2 max-h-56 space-y-1 overflow-auto">
@@ -386,18 +561,21 @@ export function PullBundlePanel({ service, disabled }: Props) {
                       </div>
                     </div>
                   </div>
+                  </div>
                 )}
               </div>
             ))
           )}
         </div>
-      </div>
+      </AccordionSection>
 
-      <div className="rounded-xl border border-gray-800 bg-gray-950 p-4">
-        <div className="flex items-center gap-2 text-sm font-medium text-white mb-3">
-          <Archive className="h-4 w-4 text-gray-500" />
-          Left Out Scope
-        </div>
+      <AccordionSection
+        title="Left Out"
+        open={leftOutOpen}
+        onToggle={() => setLeftOutOpen((current) => !current)}
+        icon={<Archive className="h-4 w-4 text-gray-500" />}
+        summary={`${service.scope_entries.filter(e => e.kind === 'exclude' && e.enabled).length} saved excludes · ${(latestBundleWithFiles?.skipped_entries ?? []).length} skipped entries`}
+      >
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-lg border border-gray-800 bg-gray-900 p-3">
             <div className="text-xs uppercase tracking-[0.16em] text-gray-500 mb-2">Saved Excludes</div>
@@ -438,7 +616,7 @@ export function PullBundlePanel({ service, disabled }: Props) {
             </div>
           </div>
         </div>
-      </div>
+      </AccordionSection>
 
       {confirmOpen && ACTION_EXPLAIN['pull_bundle'] && (
         <ConfirmationModal
