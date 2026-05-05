@@ -1,5 +1,5 @@
 {
-  "generated": "2026-05-05T07:10:23+00:00",
+  "generated": "2026-05-05T07:29:14+00:00",
   "service_id": "switch",
   "project_root": "/Users/p/Desktop/dashboard",
   "tasks": [
@@ -622,6 +622,194 @@
         "- Service-level local install/update/restart now maps to manager register, refresh, and status check instead of creating per-project node runtimes.",
         "- Remote service-level node deploy, upgrade, and restart actions are blocked so remote work must happen through the remote manager workflow.",
         "- Control Center labels and command previews now match the one-port manager behavior instead of advertising latest GitHub release installs."
+      ],
+      "scope_entries": [
+        {
+          "kind": "repo",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/documentation",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/src",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/switchboard",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/tests_backend",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/README.md",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/CHANGELOG.md",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/package.json",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/package-lock.json",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/pyproject.toml",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/.git",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/.venv",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/build",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/dist",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/downloads",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/logs",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/node_modules",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/release",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/state",
+          "enabled": true,
+          "source": "tasks_completed"
+        }
+      ],
+      "runtime": {
+        "expected_ports": [],
+        "healthcheck_command": "",
+        "run_command_hint": "",
+        "monitoring_mode": "manual",
+        "notes": ""
+      },
+      "runtime_services": [],
+      "dependencies": [],
+      "cross_dependencies": [],
+      "diagram": "",
+      "readme": "",
+      "api": "",
+      "changelog": ""
+    },
+    {
+      "timestamp": "2026-05-05T07:24:34Z",
+      "title": "Release manager-wide normalization",
+      "tags": [
+        "task",
+        "handoff",
+        "scope"
+      ],
+      "version": "1.12.4",
+      "summary": "Added the 1.12.4 manager-wide normalization command and clarified manager-owned version display.",
+      "changed_paths": [
+        "switchboard/node.py",
+        "switchboard/cli.py",
+        "switchboard/collectors.py",
+        "switchboard/models.py",
+        "switchboard/local/tasks-completed.md",
+        "src/components/ServiceCard.tsx",
+        "src/pages/ServiceDetailPage.tsx",
+        "src/api/client.ts",
+        "src/types/switchboard.ts",
+        "tests_backend/test_node_mode.py",
+        "README.md",
+        "CHANGELOG.md",
+        "pyproject.toml",
+        "package.json",
+        "package-lock.json"
+      ],
+      "task_id": null,
+      "agent": "Codex",
+      "tool": "codex-desktop",
+      "read_back": "Confirmed Pratik wants the already-started fix completed as version 1.12.4, built, and handed to .47 for normalization.",
+      "scope_check": "Project shape stayed inside existing Switchboard source, UI, tests, and canonical evidence scope; no new root or report file was added.",
+      "bootstrap_version": "",
+      "notes": [
+        "- Added `switchboard node manager-normalize-all --manager-root <root>` so .47 can normalize every registered root from sys_docs with one command.",
+        "- Manager-owned cards now show manager version separately from root manifest version.",
+        "- Stale root manifests are shown as stale root state instead of making the manager look downgraded."
       ],
       "scope_entries": [
         {

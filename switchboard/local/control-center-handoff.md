@@ -160,3 +160,37 @@
   - exclude | dir | /Users/p/Desktop/dashboard/node_modules | true
   - exclude | dir | /Users/p/Desktop/dashboard/release | true
   - exclude | dir | /Users/p/Desktop/dashboard/state | true
+
+## 2026-05-05T07:24:34Z | Release manager-wide normalization
+- Tags: task, handoff, scope
+- Summary: Added the 1.12.4 manager-wide normalization command and clarified manager-owned version display.
+- Changed Paths: switchboard/node.py, switchboard/cli.py, switchboard/collectors.py, switchboard/models.py, switchboard/local/tasks-completed.md, src/components/ServiceCard.tsx, src/pages/ServiceDetailPage.tsx, src/api/client.ts, src/types/switchboard.ts, tests_backend/test_node_mode.py, README.md, CHANGELOG.md, pyproject.toml, package.json, package-lock.json
+- Agent: Codex
+- Tool: codex-desktop
+- Read Back: Confirmed Pratik wants the already-started fix completed as version 1.12.4, built, and handed to .47 for normalization.
+- Scope Check: Project shape stayed inside existing Switchboard source, UI, tests, and canonical evidence scope; no new root or report file was added.
+- Version: 1.12.4
+- Notes:
+  - - Added `switchboard node manager-normalize-all --manager-root <root>` so .47 can normalize every registered root from sys_docs with one command.
+  - - Manager-owned cards now show manager version separately from root manifest version.
+  - - Stale root manifests are shown as stale root state instead of making the manager look downgraded.
+- Scope Entries:
+  - repo | dir | /Users/p/Desktop/dashboard | true
+  - doc | dir | /Users/p/Desktop/dashboard/documentation | true
+  - doc | dir | /Users/p/Desktop/dashboard/src | true
+  - doc | dir | /Users/p/Desktop/dashboard/switchboard | true
+  - doc | dir | /Users/p/Desktop/dashboard/tests_backend | true
+  - doc | file | /Users/p/Desktop/dashboard/README.md | true
+  - doc | file | /Users/p/Desktop/dashboard/CHANGELOG.md | true
+  - doc | file | /Users/p/Desktop/dashboard/package.json | true
+  - doc | file | /Users/p/Desktop/dashboard/package-lock.json | true
+  - doc | file | /Users/p/Desktop/dashboard/pyproject.toml | true
+  - exclude | dir | /Users/p/Desktop/dashboard/.git | true
+  - exclude | dir | /Users/p/Desktop/dashboard/.venv | true
+  - exclude | dir | /Users/p/Desktop/dashboard/build | true
+  - exclude | dir | /Users/p/Desktop/dashboard/dist | true
+  - exclude | dir | /Users/p/Desktop/dashboard/downloads | true
+  - exclude | dir | /Users/p/Desktop/dashboard/logs | true
+  - exclude | dir | /Users/p/Desktop/dashboard/node_modules | true
+  - exclude | dir | /Users/p/Desktop/dashboard/release | true
+  - exclude | dir | /Users/p/Desktop/dashboard/state | true

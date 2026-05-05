@@ -1409,6 +1409,9 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
               const apiLabEnvironment = matchedEnvironments[0] ?? null
               const managerManaged = Boolean(nodeViewer?.manager_managed)
               const remoteNodeActionBlocked = serverMeta?.connection_type === 'ssh'
+              const rootManifestVersion = nodeViewer?.installed_version || ''
+              const managerVersion = nodeViewer?.manager_version || ''
+              const rootManifestStale = Boolean(managerManaged && managerVersion && rootManifestVersion && managerVersion !== rootManifestVersion)
               const managerRoot = nodeViewer?.manager_root || '/Users/p/Desktop/dashboard'
               const managerRootId = nodeViewer?.manager_root_id || serviceId
               const normalizeCommand = `switchboard node normalize-root --manager-root ${quoteShell(managerRoot)} --project-root ${quoteShell(location.root)} --root-id ${quoteShell(managerRootId)} --service-id ${quoteShell(serviceId)} --display-name ${quoteShell(service.display_name)}`
@@ -1607,8 +1610,13 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                             </>
                           )}
                           <span className="rounded-full border border-gray-700 bg-gray-900 px-2 py-1 text-gray-300">
-                            install {nodeViewer?.installed_version || 'not installed'}
+                            {managerManaged ? `manager ${managerVersion || 'active'}` : `node ${rootManifestVersion || 'not installed'}`}
                           </span>
+                          {rootManifestStale && (
+                            <span className="rounded-full border border-amber-700 bg-amber-950/30 px-2 py-1 text-amber-200">
+                              root manifest {rootManifestVersion}
+                            </span>
+                          )}
                           <span className="rounded-full border border-gray-700 bg-gray-900 px-2 py-1 text-gray-300">
                             bootstrap {nodeViewer?.bootstrap_ready ? 'ready' : 'not ready'}
                           </span>
@@ -1698,7 +1706,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                           The node runtime is up, but bootstrap metadata has not been written yet.
                         </div>
                         <div className="mt-2 text-xs text-amber-200/80">
-                          Current state: install {nodeViewer.installed_version || 'not installed'} · runtime {nodeViewer.runtime_status} · bootstrap not ready. Sync actions stay blocked until the first task-ledger/bootstrap entry is produced.
+                          Current state: {managerManaged ? `manager ${managerVersion || 'active'}` : `node ${rootManifestVersion || 'not installed'}`} · runtime {nodeViewer.runtime_status} · bootstrap not ready. Sync actions stay blocked until the first task-ledger/bootstrap entry is produced.
                         </div>
                       </div>
                     )}
@@ -1802,7 +1810,8 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                     <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Node Viewer</div>
                     {nodeViewer ? (
                       <div className="mt-2 grid gap-2 text-sm text-gray-300 md:grid-cols-2">
-                        <div><span className="text-gray-500">Installed:</span> {nodeViewer.installed_version || 'not installed'}</div>
+                        <div><span className="text-gray-500">Root manifest:</span> {rootManifestVersion || 'not installed'}</div>
+                        <div><span className="text-gray-500">Manager version:</span> {managerManaged ? managerVersion || 'active' : 'not manager-owned'}</div>
                         <div><span className="text-gray-500">Bootstrap:</span> {nodeViewer.bootstrap_version || 'not ready'}</div>
                         <div><span className="text-gray-500">Manager owned:</span> {nodeViewer.manager_managed ? 'yes' : 'no'}</div>
                         <div><span className="text-gray-500">Manager root:</span> {nodeViewer.manager_root_id || 'unregistered'}</div>
@@ -1814,6 +1823,11 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                         {nodeViewer.manager_managed && (
                           <div className="md:col-span-2 text-xs text-cyan-200">
                             This root is owned by the local Switchboard manager; service actions do not install or start a per-project node runtime.
+                          </div>
+                        )}
+                        {rootManifestStale && (
+                          <div className="md:col-span-2 text-xs text-amber-200">
+                            Root manifest version trails the manager. Refresh Manager Root will normalize this root and update its manifest.
                           </div>
                         )}
                         {nodeViewer.node_present && !nodeViewer.manager_managed && !nodeViewer.installed_release_asset_id && (
@@ -1837,7 +1851,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                           <div className="md:col-span-2 mt-2 rounded-lg border border-amber-900/40 bg-amber-950/20 px-3 py-2 text-xs text-amber-100">
                             <div className="uppercase tracking-[0.14em] text-amber-300">Latest action delta</div>
                             <div className="mt-1 flex flex-wrap gap-4">
-                              <span>Installed: {nodeTransition.before.installed_version || 'none'} → {nodeTransition.after.installed_version || 'none'}</span>
+                              <span>Root manifest: {nodeTransition.before.installed_version || 'none'} → {nodeTransition.after.installed_version || 'none'}</span>
                               <span>Bootstrap: {nodeTransition.before.bootstrap_ready ? 'ready' : 'not ready'} → {nodeTransition.after.bootstrap_ready ? 'ready' : 'not ready'}</span>
                               <span>Runtime: {nodeTransition.before.runtime_status} → {nodeTransition.after.runtime_status}</span>
                             </div>

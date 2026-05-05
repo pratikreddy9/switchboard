@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.12.4
+
+- Added manager-wide normalization so all registered roots can refresh manifests, snapshots, verification, and safe archive from one command.
+- Clarified manager-owned service cards so they show manager version separately from stale root manifest version.
+
 ## 1.12.3
 
 - Added `switchboard node normalize-root` as the canonical manager update gateway.

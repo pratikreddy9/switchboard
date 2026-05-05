@@ -472,6 +472,7 @@ function normalizeNodeViewer(result: any): NodeViewerEntry {
     manager_managed: Boolean(result.manager_managed),
     manager_root_id: result.manager_root_id ?? '',
     manager_root: result.manager_root ?? '',
+    manager_version: result.manager_version ?? '',
   }
 }
 

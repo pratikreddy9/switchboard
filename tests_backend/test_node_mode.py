@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from switchboard.node import (
     init_manager_node,
     install_node,
+    manager_all_root_normalize,
     manager_install_root,
     manager_archive_old_scaffolding,
     manager_safe_action,
@@ -342,6 +343,26 @@ class NodeModeTests(unittest.TestCase):
             self.assertIsNone(result["archive"])
             self.assertTrue(paths["start_script"].exists())
             self.assertTrue(paths["run_script"].exists())
+
+    def test_manager_normalize_all_updates_every_registered_root(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            manager_root = root / "manager"
+            project_one = root / "project-one"
+            project_two = root / "project-two"
+            install_node(project_one, service_id="one", display_name="One")
+            install_node(project_two, service_id="two", display_name="Two")
+            _write_complete_update(project_one, "Normalize one")
+            _write_complete_update(project_two, "Normalize two")
+            init_manager_node(manager_root)
+            register_manager_root(manager_root, project_one, root_id="one", snapshot=False)
+            register_manager_root(manager_root, project_two, root_id="two", snapshot=False)
+
+            result = manager_all_root_normalize(manager_root)
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual({item["root_id"] for item in result["roots"]}, {"one", "two"})
+            self.assertTrue(all(item["verify_update"]["status"] == "ok" for item in result["roots"]))
 
     def test_manager_api_exposes_all_root_safe_actions(self) -> None:
         with TemporaryDirectory() as tmpdir:

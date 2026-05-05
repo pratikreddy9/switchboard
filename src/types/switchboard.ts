@@ -973,6 +973,7 @@ export interface NodeViewerEntry {
   manager_managed?: boolean
   manager_root_id?: string
   manager_root?: string
+  manager_version?: string
 }
 
 export interface NodeActionResult {

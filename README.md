@@ -6,7 +6,7 @@ Switchboard is a project-first control center for tracking services, servers, pr
 switchboard/local/tasks-completed.md
 ```
 
-Current release: `1.12.3`
+Current release: `1.12.4`
 
 ## What 1.10.0 Adds
 

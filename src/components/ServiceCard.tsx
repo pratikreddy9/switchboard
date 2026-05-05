@@ -14,6 +14,10 @@ export function ServiceCard({ service, result, onClick }: Props) {
   const firewallActive = result?.firewall_active ?? false
   const dirty = result?.repo_summaries?.some((r) => r.dirty) ?? false
   const nodeViewer = service.node_viewer?.[0]
+  const rootManifestVersion = nodeViewer?.installed_version || ''
+  const managerVersion = nodeViewer?.manager_version || ''
+  const managerManaged = Boolean(nodeViewer?.manager_managed)
+  const rootManifestStale = Boolean(managerManaged && managerVersion && rootManifestVersion && managerVersion !== rootManifestVersion)
 
   return (
     <button
@@ -53,12 +57,19 @@ export function ServiceCard({ service, result, onClick }: Props) {
             {service.execution_mode}
           </span>
           <span className={`text-xs px-2 py-0.5 rounded border ${
-            nodeViewer.needs_install || nodeViewer.needs_upgrade
+            rootManifestStale || nodeViewer.needs_install || nodeViewer.needs_upgrade
               ? 'border-amber-700 bg-amber-950/30 text-amber-200'
-              : 'border-gray-800 bg-gray-900 text-gray-400'
+              : managerManaged
+                ? 'border-cyan-900/40 bg-cyan-950/20 text-cyan-200'
+                : 'border-gray-800 bg-gray-900 text-gray-400'
           }`}>
-            node {nodeViewer.installed_version || 'missing'}
+            {managerManaged ? `manager ${managerVersion || 'active'}` : `node ${rootManifestVersion || 'missing'}`}
           </span>
+          {rootManifestStale && (
+            <span className="text-xs px-2 py-0.5 rounded border border-amber-700 bg-amber-950/30 text-amber-200">
+              root manifest {rootManifestVersion}
+            </span>
+          )}
           <span className="text-xs px-2 py-0.5 rounded border border-gray-800 bg-gray-900 text-gray-400">
             bootstrap {nodeViewer.bootstrap_version || 'pending'}
           </span>

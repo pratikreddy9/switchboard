@@ -11,6 +11,7 @@ from unittest import mock
 
 from pydantic import ValidationError
 
+from switchboard import __version__
 from switchboard.collectors import CollectionCoordinator
 from switchboard.config import Settings
 from switchboard.manifests import ManifestStore, save_json
@@ -262,6 +263,7 @@ class RuntimeAndNodeSyncTests(unittest.TestCase):
             self.assertEqual(upgrade["status"], "ok")
             self.assertEqual(restart["status"], "ok")
             self.assertTrue(deploy["node"]["manager_managed"])
+            self.assertEqual(deploy["node"]["manager_version"], __version__)
             self.assertEqual(deploy["node"]["runtime_status"], "missing")
             self.assertEqual(restart["node"]["runtime_status"], "manager_running")
             self.assertEqual(snapshots.get_service_node_viewer("svc")[0]["runtime_status"], "manager_running")

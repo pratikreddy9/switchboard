@@ -24,6 +24,7 @@ from typing import Any, Iterator
 
 from pathspec import PathSpec
 
+from . import __version__
 from .config import Settings
 from .defaults import DEFAULT_EXCLUDE_GLOBS, DEFAULT_SECRET_PATTERNS, GIT_STATUS_COMMANDS, SAFE_REMOTE_COMMANDS
 from .manifests import ManifestStore
@@ -3609,6 +3610,7 @@ class CollectionCoordinator:
             "manager_managed": manager_record is not None,
             "manager_root_id": str((manager_record or {}).get("root_id", "")),
             "manager_root": str(manager_root or ""),
+            "manager_version": __version__ if manager_record is not None else "",
         }
         return record
 
@@ -3643,6 +3645,10 @@ class CollectionCoordinator:
             "installed_release_published_at": "",
             "installed_release_url": "",
             "installed_release_commitish": "",
+            "manager_managed": False,
+            "manager_root_id": "",
+            "manager_root": "",
+            "manager_version": "",
         }
 
     def _node_attention_reason(self, node_present: bool, bootstrap_ready: bool) -> str:

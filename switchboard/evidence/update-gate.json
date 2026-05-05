@@ -1,11 +1,11 @@
 {
-  "generated": "2026-05-05T07:10:38+00:00",
+  "generated": "2026-05-05T07:29:38+00:00",
   "status": "ok",
   "service_id": "switch",
   "project_root": "/Users/p/Desktop/dashboard",
   "latest_task": {
-    "timestamp": "2026-05-05T07:01:00Z",
-    "title": "Release manager normalization path",
+    "timestamp": "2026-05-05T07:24:34Z",
+    "title": "Release manager-wide normalization",
     "agent": "Codex",
     "tool": "codex-desktop"
   },

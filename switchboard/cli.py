@@ -18,6 +18,7 @@ from .node import (
     init_manager_node,
     install_node,
     list_manager_roots,
+    manager_all_root_normalize,
     manager_all_root_upgrade,
     manager_all_root_snapshot,
     manager_all_root_verify_update,
@@ -277,6 +278,16 @@ def node_manager_upgrade(
     root_id: str | None = typer.Option(None, "--root-id"),
 ) -> None:
     result = manager_upgrade_root(manager_root, root_id) if root_id else manager_all_root_upgrade(manager_root)
+    typer.echo(json.dumps(result, indent=2))
+    if result.get("status") != "ok":
+        raise typer.Exit(1)
+
+
+@node_app.command("manager-normalize-all")
+def node_manager_normalize_all(
+    manager_root: str = typer.Option(..., "--manager-root"),
+) -> None:
+    result = manager_all_root_normalize(manager_root)
     typer.echo(json.dumps(result, indent=2))
     if result.get("status") != "ok":
         raise typer.Exit(1)

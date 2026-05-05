@@ -645,6 +645,10 @@ class NodeInspectResult(BaseModel):
     installed_release_published_at: str = ""
     installed_release_url: str = ""
     installed_release_commitish: str = ""
+    manager_managed: bool = False
+    manager_root_id: str = ""
+    manager_root: str = ""
+    manager_version: str = ""
 
 
 class ProjectCreateRequest(BaseModel):

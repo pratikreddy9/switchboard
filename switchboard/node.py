@@ -941,6 +941,30 @@ def manager_upgrade_root(manager_root: str | Path, root_id: str) -> dict[str, An
     return {"status": "ok", "upgraded": upgraded, "registered": registered["record"]}
 
 
+def manager_all_root_normalize(manager_root: str | Path) -> dict[str, Any]:
+    roots = list_manager_roots(manager_root)["roots"]
+    results = []
+    for record in roots:
+        if not isinstance(record, dict) or not record.get("enabled", True):
+            continue
+        root_id = str(record.get("root_id", ""))
+        project_root = str(record.get("project_root", ""))
+        try:
+            results.append(
+                normalize_manager_root(
+                    manager_root,
+                    project_root,
+                    root_id=root_id,
+                    role=str(record.get("role", "minion")),
+                    service_id=str(record.get("service_id") or "") or None,
+                    display_name=str(record.get("display_name") or "") or None,
+                )
+            )
+        except Exception as exc:
+            results.append({"status": "partial", "root_id": root_id, "project_root": project_root, "message": str(exc)})
+    return {"status": "ok" if all(item.get("status") == "ok" for item in results) else "partial", "roots": results}
+
+
 def manager_all_root_upgrade(manager_root: str | Path) -> dict[str, Any]:
     roots = list_manager_roots(manager_root)["roots"]
     results = []
