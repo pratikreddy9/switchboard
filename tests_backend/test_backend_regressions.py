@@ -10,7 +10,7 @@ from switchboard.api import _raise_for_action_result, collect_workspace, get_wor
 from switchboard.config import Settings
 from switchboard.collectors import CollectionCoordinator
 from switchboard.manifests import ManifestStore, save_json
-from switchboard.models import CollectRequest, GitHubBackupRequest, GitPullRequest, PullBundleRequest, ResolvedServer, ScopeEntry, LocationSpec, ServiceManifest
+from switchboard.models import CollectRequest, GitHubBackupRequest, GitPullRequest, NodeActionRequest, PullBundleRequest, ResolvedServer, ScopeEntry, LocationSpec, ServiceManifest
 from switchboard.storage import SnapshotStore, read_json
 
 
@@ -40,6 +40,95 @@ class BackendRegressionTests(unittest.TestCase):
         self.assertIsInstance(body["services"], list)
         for service in body["services"]:
             self.assertIn("status", service)
+
+    def test_remote_service_node_actions_are_manager_limited(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            settings = Settings(
+                manifest_dir=root / "switchboard" / "manifests",
+                evidence_dir=root / "docs" / "evidence",
+                archive_dir=root / "docs" / "evidence" / "archive",
+                private_state_dir=root / "state" / "private",
+                downloads_dir=root / "downloads",
+            )
+            save_json(
+                settings.manifest_dir / "servers.json",
+                [
+                    {
+                        "server_id": "remote_box",
+                        "name": "Remote Box",
+                        "connection_type": "ssh",
+                        "host": "example.invalid",
+                        "username": "pesu",
+                        "port": 22,
+                        "tags": [],
+                    }
+                ],
+            )
+            save_json(
+                settings.manifest_dir / "workspaces.json",
+                [
+                    {
+                        "workspace_id": "zapp",
+                        "name": "ZAPP",
+                        "tags": [],
+                        "favorite_tier": "primary",
+                        "servers": ["remote_box"],
+                        "services": ["svc"],
+                        "notes": "",
+                    }
+                ],
+            )
+            save_json(
+                settings.manifest_dir / "services.json",
+                [
+                    {
+                        "service_id": "svc",
+                        "workspace_id": "zapp",
+                        "display_name": "Svc",
+                        "kind": "service",
+                        "ownership_tier": "owned",
+                        "tags": [],
+                        "favorite_tier": "primary",
+                        "locations": [
+                            {
+                                "location_id": "svc-remote",
+                                "server_id": "remote_box",
+                                "access_mode": "ssh",
+                                "root": "/srv/svc",
+                                "role": "primary",
+                                "is_primary": True,
+                                "path_aliases": [],
+                            }
+                        ],
+                    }
+                ],
+            )
+            manifests = ManifestStore(settings)
+            snapshots = SnapshotStore(settings, manifests)
+            coordinator = CollectionCoordinator(settings, manifests, snapshots)
+            node_record = {
+                "service_id": "svc",
+                "location_id": "svc-remote",
+                "server_id": "remote_box",
+                "root": "/srv/svc",
+                "node_present": True,
+                "bootstrap_ready": True,
+                "runtime_status": "stopped",
+                "runtime_port": 8720,
+            }
+
+            with mock.patch.object(coordinator, "_node_inspect_record", return_value=node_record):
+                deploy = coordinator.node_deploy("svc", NodeActionRequest(location_id="svc-remote"))
+                upgrade = coordinator.node_upgrade("svc", NodeActionRequest(location_id="svc-remote"))
+                restart = coordinator.node_restart("svc", NodeActionRequest(location_id="svc-remote"))
+
+            self.assertEqual(deploy["status"], "permission_limited")
+            self.assertEqual(upgrade["status"], "permission_limited")
+            self.assertEqual(restart["status"], "permission_limited")
+            self.assertIn("remote manager", deploy["message"].lower())
+            self.assertIn("remote manager", upgrade["message"].lower())
+            self.assertIn("remote manager", restart["message"].lower())
 
     def test_delete_service_clears_active_service_data(self) -> None:
         with TemporaryDirectory() as tmpdir:

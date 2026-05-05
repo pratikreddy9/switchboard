@@ -14,8 +14,8 @@ from pydantic import ValidationError
 from switchboard.collectors import CollectionCoordinator
 from switchboard.config import Settings
 from switchboard.manifests import ManifestStore, save_json
-from switchboard.models import CollectRequest, NodeSyncRequest, RuntimeActionRequest, RuntimeConfig
-from switchboard.node import init_manager_node, install_node, node_paths
+from switchboard.models import CollectRequest, NodeActionRequest, NodeSyncRequest, RuntimeActionRequest, RuntimeConfig
+from switchboard.node import init_manager_node, install_node, node_paths, register_manager_root
 from switchboard.node_runtime import manager_runtime_paths, manager_status, node_status, start_manager_runtime, stop_manager_runtime
 from switchboard.storage import SnapshotStore
 
@@ -113,6 +113,23 @@ def _write_local_fixture(root: Path, project_root: Path, runtime: dict, scope_en
     snapshots = SnapshotStore(settings, manifests)
     coordinator = CollectionCoordinator(settings, manifests, snapshots)
     return manifests, snapshots, coordinator
+
+
+def _write_complete_update(project_root: Path) -> None:
+    node_paths(project_root)["tasks_completed"].write_text(
+        "# Tasks Completed\n\n"
+        "## 2026-05-05T00:00:00+00:00 | Normalize root\n"
+        "- Tags: task, scope\n"
+        "- Summary: Normalized Switchboard through the manager path.\n"
+        "- Changed Paths: switchboard/local/tasks-completed.md\n"
+        "- Agent: Codex\n"
+        "- Tool: codex-cli\n"
+        "- Read Back: Restated the request before editing.\n"
+        "- Scope Check: Project root remains tracked by manager scope.\n"
+        "- Scope Entries:\n"
+        f"  - repo | dir | {project_root.resolve()} | true\n",
+        encoding="utf-8",
+    )
 
 
 class RuntimeAndNodeSyncTests(unittest.TestCase):
@@ -218,6 +235,36 @@ class RuntimeAndNodeSyncTests(unittest.TestCase):
                 status = node_status(project_root, port=8010)
 
             self.assertEqual(status["status"], "stopped_manager_owned")
+
+    def test_local_node_actions_use_manager_not_per_project_runtime(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            project_root = root / "project"
+            install_node(project_root, service_id="svc", display_name="Svc")
+            _write_complete_update(project_root)
+            init_manager_node(root, runtime_port=8010)
+            register_manager_root(root, project_root, root_id="svc", snapshot=False)
+            _, snapshots, coordinator = _write_local_fixture(
+                root,
+                project_root,
+                runtime={"expected_ports": [8010], "monitoring_mode": "manual"},
+                scope_entries=[],
+            )
+            request = NodeActionRequest(location_id="svc-local")
+
+            deploy = coordinator.node_deploy("svc", request)
+            upgrade = coordinator.node_upgrade("svc", request)
+
+            with mock.patch("switchboard.collectors.manager_status", return_value={"status": "running", "pid": 123, "runtime_dir": "", "log_file": ""}):
+                restart = coordinator.node_restart("svc", request)
+
+            self.assertEqual(deploy["status"], "ok")
+            self.assertEqual(upgrade["status"], "ok")
+            self.assertEqual(restart["status"], "ok")
+            self.assertTrue(deploy["node"]["manager_managed"])
+            self.assertEqual(deploy["node"]["runtime_status"], "missing")
+            self.assertEqual(restart["node"]["runtime_status"], "manager_running")
+            self.assertEqual(snapshots.get_service_node_viewer("svc")[0]["runtime_status"], "manager_running")
 
     def test_runtime_check_remote_mocked_ssh_uses_manual_hint_when_detection_missing(self) -> None:
         with TemporaryDirectory() as tmpdir:

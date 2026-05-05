@@ -628,7 +628,7 @@ class NodeInspectResult(BaseModel):
     installed_version: str = ""
     bootstrap_version: str = ""
     manifest_updated_at: str = ""
-    runtime_status: Literal["running", "stopped", "running_unmanaged", "missing"] = "missing"
+    runtime_status: Literal["running", "stopped", "running_unmanaged", "missing", "manager_running"] = "missing"
     runtime_pid: int | None = None
     runtime_port: int = 8010
     needs_install: bool = False

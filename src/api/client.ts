@@ -469,6 +469,9 @@ function normalizeNodeViewer(result: any): NodeViewerEntry {
     installed_release_published_at: result.installed_release_published_at ?? '',
     installed_release_url: result.installed_release_url ?? '',
     installed_release_commitish: result.installed_release_commitish ?? '',
+    manager_managed: Boolean(result.manager_managed),
+    manager_root_id: result.manager_root_id ?? '',
+    manager_root: result.manager_root ?? '',
   }
 }
 

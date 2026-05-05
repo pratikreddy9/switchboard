@@ -12,7 +12,7 @@
       "role": "minion",
       "enabled": true,
       "last_seen_version": "1.12.2",
-      "manifest_updated_at": "2026-05-03T04:15:28+00:00",
+      "manifest_updated_at": "2026-05-03T04:32:37+00:00",
       "verify_status": "ok",
       "design_principles": {
         "global": [
@@ -37,7 +37,7 @@
           "Verify with observable checks."
         ]
       },
-      "registered_at": "2026-05-03T04:17:56+00:00"
+      "registered_at": "2026-05-05T07:10:38+00:00"
     },
     {
       "root_id": "dashboard_core",
@@ -46,8 +46,8 @@
       "display_name": "switchboard",
       "role": "core",
       "enabled": true,
-      "last_seen_version": "1.12.2",
-      "manifest_updated_at": "2026-05-03T04:15:28+00:00",
+      "last_seen_version": "1.12.3",
+      "manifest_updated_at": "2026-05-05T07:10:23+00:00",
       "verify_status": "ok",
       "design_principles": {
         "global": [
@@ -72,7 +72,7 @@
           "Verify with observable checks."
         ]
       },
-      "registered_at": "2026-05-03T04:17:56+00:00"
+      "registered_at": "2026-05-05T07:10:38+00:00"
     },
     {
       "root_id": "finance",
@@ -107,7 +107,7 @@
           "Verify with observable checks."
         ]
       },
-      "registered_at": "2026-05-03T04:17:56+00:00"
+      "registered_at": "2026-05-05T07:10:38+00:00"
     },
     {
       "root_id": "lambdalogger",
@@ -142,7 +142,7 @@
           "Verify with observable checks."
         ]
       },
-      "registered_at": "2026-05-03T04:17:56+00:00"
+      "registered_at": "2026-05-05T07:10:38+00:00"
     },
     {
       "root_id": "lambdascripts",
@@ -177,7 +177,42 @@
           "Verify with observable checks."
         ]
       },
-      "registered_at": "2026-05-03T04:17:56+00:00"
+      "registered_at": "2026-05-05T07:10:38+00:00"
+    },
+    {
+      "root_id": "syspriv",
+      "project_root": "/Users/p/Desktop/main/sysdocs",
+      "service_id": "syspriv",
+      "display_name": "sys_docs",
+      "role": "minion",
+      "enabled": true,
+      "last_seen_version": "1.12.2",
+      "manifest_updated_at": "2026-05-03T14:31:21+00:00",
+      "verify_status": "ok",
+      "design_principles": {
+        "global": [
+          "Read back Pratik's request before acting.",
+          "Ask in simple English when intent is unclear.",
+          "Make the smallest useful change.",
+          "Touch only files required by the request.",
+          "Do not invent future features.",
+          "Keep output short and avoid ceremony.",
+          "Never delete for cleanup; move or zip instead.",
+          "Verify with observable checks."
+        ],
+        "project": [],
+        "effective": [
+          "Read back Pratik's request before acting.",
+          "Ask in simple English when intent is unclear.",
+          "Make the smallest useful change.",
+          "Touch only files required by the request.",
+          "Do not invent future features.",
+          "Keep output short and avoid ceremony.",
+          "Never delete for cleanup; move or zip instead.",
+          "Verify with observable checks."
+        ]
+      },
+      "registered_at": "2026-05-05T07:10:38+00:00"
     },
     {
       "root_id": "unionbank_service",
@@ -212,7 +247,7 @@
           "Verify with observable checks."
         ]
       },
-      "registered_at": "2026-05-03T04:17:56+00:00"
+      "registered_at": "2026-05-05T07:10:38+00:00"
     }
   ],
   "design_principles": {
@@ -238,5 +273,5 @@
       "Verify with observable checks."
     ]
   },
-  "updated_at": "2026-05-03T04:17:56+00:00"
+  "updated_at": "2026-05-05T07:10:38+00:00"
 }

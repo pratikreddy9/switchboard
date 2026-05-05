@@ -4,7 +4,6 @@ import type {
   ActionLock,
   ManagedDocConfig,
   NodeActionResult,
-  NodeReleaseCheck,
   ProjectEnvironmentView,
   RuntimeCheckResult,
   Service,
@@ -18,7 +17,6 @@ import type {
 import {
   deleteService,
   deployNode,
-  getNodeReleaseCheck,
   getService,
   getServiceScope,
   getActionLocks,
@@ -106,9 +104,9 @@ const LOCK_KEY_TO_ACTION: Record<PersistedActionKey, Exclude<LocationActionKey, 
 
 const ACTION_META: Record<LocationActionKey, { label: string; running_label: string; eta_seconds: number }> = {
   inspect: { label: 'Inspect Node', running_label: 'Inspecting node state', eta_seconds: 12 },
-  deploy: { label: 'Install Node Release', running_label: 'Installing latest node release', eta_seconds: 45 },
-  upgrade: { label: 'Reinstall / Update Node', running_label: 'Installing release and restarting node', eta_seconds: 45 },
-  restart: { label: 'Restart Node', running_label: 'Restarting node runtime', eta_seconds: 18 },
+  deploy: { label: 'Register Manager Root', running_label: 'Registering manager root', eta_seconds: 45 },
+  upgrade: { label: 'Refresh Manager Root', running_label: 'Refreshing manager root', eta_seconds: 45 },
+  restart: { label: 'Check Manager', running_label: 'Checking manager runtime', eta_seconds: 18 },
   runtime_check: { label: 'Refresh Snapshot', running_label: 'Refreshing runtime snapshot', eta_seconds: 28 },
   sync_from_node: { label: 'Sync From Node', running_label: 'Syncing from node', eta_seconds: 22 },
   sync_to_node: { label: 'Sync To Node', running_label: 'Syncing to node', eta_seconds: 22 },
@@ -157,14 +155,6 @@ function serverShellCommand(server?: ServerRecord, command?: string) {
     return `${shellPrefix(server.host, server.username, server.port)} ${quoteShell(command)}`
   }
   return command
-}
-
-function releaseNoteLines(release?: NodeReleaseCheck) {
-  return (release?.notes ?? '')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(0, 3)
 }
 
 function stripCodeFence(value?: string) {
@@ -674,10 +664,10 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         action === 'inspect'
           ? 'Inspecting node state and runtime.'
           : action === 'deploy'
-            ? 'Deploying the latest GitHub release for this node.'
+            ? 'Registering this root with the Switchboard manager.'
             : action === 'upgrade'
-            ? 'Installing the latest GitHub release and restarting the node runtime.'
-            : 'Starting or restarting the node runtime.',
+            ? 'Refreshing this root under the Switchboard manager.'
+            : 'Checking the Switchboard manager runtime.',
       timestamp: startedAt,
       started_at: startedAt,
     })
@@ -709,10 +699,12 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         (action === 'inspect'
           ? 'Node viewer refreshed.'
           : action === 'deploy'
-            ? 'Latest node deployed.'
+            ? 'Manager root registered.'
             : action === 'upgrade'
-              ? 'Node updated to the latest local version.'
-              : result.node.runtime_status === 'running'
+              ? 'Manager root refreshed.'
+              : result.node.runtime_status === 'manager_running'
+                ? 'Manager runtime is running.'
+                : result.node.runtime_status === 'running'
                 ? 'Node runtime started.'
                 : 'Node restart command completed.')
       setRuntimeMessage(successMessage)
@@ -969,51 +961,6 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
       setConfirmAction(null)
       setConfirmLocationId(null)
     }
-  }
-
-  async function openGithubNodeAction(
-    actionKey: 'node_deploy' | 'node_upgrade',
-    locationId: string,
-    fallbackDetails: ConfirmDetails,
-  ) {
-    const release = await getNodeReleaseCheck(serviceId, locationId)
-    if (isApiError(release)) {
-      initiateAction(actionKey, locationId, fallbackDetails)
-      return
-    }
-    const notes = releaseNoteLines(release)
-    const preflight = [
-      ...(fallbackDetails.preflight ?? []),
-      release.latest_version
-        ? `GitHub latest release: ${release.latest_version}${release.published_at ? ` (${new Date(release.published_at).toLocaleString()})` : ''}.`
-        : 'GitHub latest release version was not resolved.',
-      release.current_version
-        ? `Current installed version: ${release.current_version}.`
-        : 'No installed version is recorded yet at this location.',
-      release.exact_match_known
-        ? release.exact_match
-          ? 'Exact GitHub release asset already matches this node.'
-          : `Installed release asset differs from latest GitHub asset${release.current_release_asset_name ? ` (${release.current_release_asset_name})` : ''}.`
-        : release.current_version
-          ? 'Exact installed GitHub release asset is not recorded on this node yet.'
-          : '',
-      ...(release.message ? [release.message] : []),
-      ...notes.map((line, index) => `Release note ${index + 1}: ${line}`),
-    ]
-    const commandPreview = [
-      ...(fallbackDetails.commandPreview ?? []),
-      release.asset_url ? `GitHub wheel asset: ${release.asset_url}` : '',
-      release.release_url ? `Release page: ${release.release_url}` : '',
-    ].filter(Boolean)
-    const confirmLabel =
-      actionKey === 'node_upgrade'
-        ? release.exact_match
-          ? 'Reinstall Exact Release + Restart'
-          : release.latest_version
-            ? `Install ${release.latest_version} Release + Restart`
-            : 'Install Release + Restart'
-        : `Install ${release.latest_version || 'GitHub'} Release`
-    initiateAction(actionKey, locationId, { ...fallbackDetails, preflight, commandPreview, confirmLabel })
   }
 
   function addScopeEntry() {
@@ -1460,38 +1407,53 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
               const portsValue = location.runtime.expected_ports.join(', ')
               const matchedEnvironments = environmentMatchesByLocation.get(location.location_id) ?? environmentMatchesByLocation.get('__service__') ?? []
               const apiLabEnvironment = matchedEnvironments[0] ?? null
-              const nodeControlLabel = !nodeViewer?.node_present
-                ? 'Install Node Release'
-                : 'Reinstall / Update Node'
-              const runtimeControlLabel = nodeViewer?.runtime_status === 'running' || nodeViewer?.runtime_status === 'running_unmanaged'
-                ? 'Restart Node'
-                : 'Start Node'
+              const managerManaged = Boolean(nodeViewer?.manager_managed)
+              const remoteNodeActionBlocked = serverMeta?.connection_type === 'ssh'
+              const managerRoot = nodeViewer?.manager_root || '/Users/p/Desktop/dashboard'
+              const managerRootId = nodeViewer?.manager_root_id || serviceId
+              const normalizeCommand = `switchboard node normalize-root --manager-root ${quoteShell(managerRoot)} --project-root ${quoteShell(location.root)} --root-id ${quoteShell(managerRootId)} --service-id ${quoteShell(serviceId)} --display-name ${quoteShell(service.display_name)}`
+              const nodeControlLabel = remoteNodeActionBlocked
+                ? 'Remote Manager Required'
+                : managerManaged
+                ? 'Refresh Manager Root'
+                : !nodeViewer?.node_present
+                  ? 'Register Manager Root'
+                  : 'Refresh Manager Root'
+              const runtimeControlLabel = remoteNodeActionBlocked
+                ? 'Remote Manager Required'
+                : managerManaged
+                ? 'Check Manager'
+                : 'Normalize First'
               const syncBlocked = nodeViewer?.node_present === true && !nodeViewer.bootstrap_ready
               const nodePort = nodeViewer?.runtime_port ?? 8010
-              const nodeStartCommand = `switchboard node serve --project-root ${location.root} --host 127.0.0.1 --port ${nodePort}`
+              const nodeStartCommand = managerManaged
+                ? `switchboard node manager-status --manager-root ${quoteShell(managerRoot)} --port ${nodePort}`
+                : normalizeCommand
               const nodeManifestPath = `${location.root}/switchboard/node.manifest.json`
               const runtimePidPath = `${location.root}/switchboard/runtime/node.pid`
-              const runtimeLogPath = `${location.root}/switchboard/runtime/node.log`
               const runtimeScopePath = `${location.root}/switchboard/evidence/scope.snapshot.json`
               const inspectCommand = serverShellCommand(serverMeta, `test -f ${quoteShell(nodeManifestPath)} && cat ${quoteShell(nodeManifestPath)}; test -f ${quoteShell(runtimePidPath)} && ps -p "$(cat ${quoteShell(runtimePidPath)})" -o command=; ss -ltnp 2>/dev/null || lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null`)
               const deployAction = nodeViewer?.node_present ? 'node_upgrade' : 'node_deploy'
-              const deployCommandPreview = serverMeta?.connection_type === 'ssh'
+              const remoteManagerMessage = 'Remote service-level node runtime actions are blocked here. Run switchboard node normalize-root on the remote manager host after read-only preflight.'
+              const deployCommandPreview = remoteNodeActionBlocked
                 ? [
                     `POST /services/${serviceId}/node/${nodeViewer?.node_present ? 'upgrade' : 'deploy'} {"location_id":"${location.location_id}"}`,
-                    serverShellCommand(serverMeta, `python3 -m venv ${quoteShell(`${location.root}/switchboard/runtime/.venv`)} && ${quoteShell(`${location.root}/switchboard/runtime/.venv/bin/python`)} -m pip install --upgrade <github-release-wheel> && ${quoteShell(`${location.root}/switchboard/runtime/.venv/bin/python`)} -m switchboard.cli node install --project-root ${quoteShell(location.root)} --service-id ${quoteShell(serviceId)} --display-name ${quoteShell(service.display_name)}`),
+                    remoteManagerMessage,
                   ]
                 : [
                     `POST /services/${serviceId}/node/${nodeViewer?.node_present ? 'upgrade' : 'deploy'} {"location_id":"${location.location_id}"}`,
-                    `${location.root}/switchboard/runtime/.venv/bin/python -m pip install --upgrade <github-release-wheel> && ${location.root}/switchboard/runtime/.venv/bin/python -m switchboard.cli node install --project-root ${location.root} --service-id ${serviceId} --display-name ${service.display_name}`,
+                    normalizeCommand,
                   ]
-              const restartCommandPreview = serverMeta?.connection_type === 'ssh'
+              const restartCommandPreview = remoteNodeActionBlocked
                 ? [
                     `POST /services/${serviceId}/node/restart {"location_id":"${location.location_id}"}`,
-                    serverShellCommand(serverMeta, `if [ -f ${quoteShell(runtimePidPath)} ]; then kill "$(cat ${quoteShell(runtimePidPath)})" 2>/dev/null || true; rm -f ${quoteShell(runtimePidPath)}; fi; nohup ${quoteShell(`${location.root}/switchboard/runtime/.venv/bin/python`)} -m switchboard.cli node serve --project-root ${quoteShell(location.root)} --host 127.0.0.1 --port ${nodePort} >> ${quoteShell(runtimeLogPath)} 2>&1 < /dev/null & echo $! > ${quoteShell(runtimePidPath)}`),
+                    remoteManagerMessage,
                   ]
                 : [
                     `POST /services/${serviceId}/node/restart {"location_id":"${location.location_id}"}`,
-                    `switchboard node restart --project-root ${location.root} --host 127.0.0.1 --port ${nodePort}`,
+                    managerManaged
+                      ? `switchboard node manager-status --manager-root ${quoteShell(managerRoot)} --port ${nodePort}`
+                      : normalizeCommand,
                   ]
               const runtimeCheckCommandPreview = [
                 `POST /services/${serviceId}/runtime/check {"location_id":"${location.location_id}"}`,
@@ -1524,23 +1486,31 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
               const deployDetails: ConfirmDetails = {
                 preflight: [
                   serverMeta?.vpn_required ? 'VPN access must already be up for this server.' : 'Server route should already be reachable.',
-                  nodeViewer?.node_present ? 'An existing node install was already detected; this action will compare the exact GitHub release asset, install the selected release if needed, and restart the runtime.' : 'No tracked node install was detected; this will install the latest GitHub release and scaffold the node files.',
+                  remoteNodeActionBlocked
+                    ? 'Remote service-level node actions are blocked; use that machine’s manager workflow.'
+                    : managerManaged
+                    ? 'This root is manager-owned; the action refreshes the root registration and canonical Switchboard files without starting a separate node.'
+                    : 'This will register the project root under the local manager and write the canonical Switchboard files.',
                   'Make sure this project root is the correct owner before writing control-center files under switchboard/.',
                 ],
                 commandPreview: deployCommandPreview,
                 followUp: [
-                  nodeViewer?.node_present
-                    ? 'The runtime will come back on the tracked control port after the release install completes.'
-                    : 'Run Inspect Node or Restart Node if you want an immediate runtime start after the first install.',
+                  managerManaged
+                    ? 'The single local manager remains the only Switchboard runtime for this machine.'
+                    : 'Run Inspect Node afterward to confirm the root is manager-owned.',
                   'Bootstrap can still remain not ready until the first task-ledger/bootstrap write happens.',
                 ],
-                confirmLabel: nodeViewer?.node_present ? 'Reinstall / Update Node' : 'Install Node Release',
+                confirmLabel: nodeControlLabel,
               }
               const restartDetails: ConfirmDetails = {
                 preflight: [
                   serverMeta?.vpn_required ? 'VPN access must already be up for this server.' : 'Server route should already be reachable.',
-                  `This will reuse the tracked control port ${nodePort} for this node.`,
-                  'Restart only affects this tracked node runtime and its pid/log files.',
+                  remoteNodeActionBlocked
+                    ? 'Remote service-level node runtime actions are blocked; use that machine’s manager workflow.'
+                    : managerManaged
+                    ? `This checks the single manager port ${nodePort}; it will not start a project-specific node.`
+                    : 'This local root must be normalized before runtime checks; no project-specific node will be started.',
+                  managerManaged ? 'Manager-owned roots do not get their own node runtime.' : 'One-port mode blocks per-project runtime starts from this page.',
                 ],
                 commandPreview: restartCommandPreview,
                 followUp: [
@@ -1659,8 +1629,8 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                       </button>
                       <button
                         type="button"
-                        onClick={() => void openGithubNodeAction(deployAction, location.location_id, deployDetails)}
-                        disabled={offline || locationBusy}
+                        onClick={() => initiateAction(deployAction, location.location_id, deployDetails)}
+                        disabled={offline || remoteNodeActionBlocked || locationBusy}
                         data-attention={nodeViewer?.needs_install ? 'true' : 'false'}
                         className={`inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs transition-colors disabled:opacity-50 ${
                           nodeViewer?.needs_install
@@ -1670,19 +1640,19 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                       >
                         {activeAction === 'deploy' || activeAction === 'upgrade' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
                         {activeAction === 'deploy'
-                          ? 'Deploying…'
+                          ? 'Registering…'
                           : activeAction === 'upgrade'
-                            ? 'Updating + Restarting…'
+                            ? 'Refreshing…'
                             : nodeControlLabel}
                       </button>
                       <button
                         type="button"
                         onClick={() => initiateAction('node_restart', location.location_id, restartDetails)}
-                        disabled={offline || !nodeViewer?.node_present || locationBusy}
+                        disabled={offline || remoteNodeActionBlocked || !managerManaged || locationBusy}
                         className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
                       >
                         {activeAction === 'restart' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
-                        {activeAction === 'restart' ? `${runtimeControlLabel === 'Start Node' ? 'Starting' : 'Restarting'}…` : runtimeControlLabel}
+                        {activeAction === 'restart' ? 'Checking…' : runtimeControlLabel}
                       </button>
                       <button
                         type="button"
@@ -1834,25 +1804,19 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                       <div className="mt-2 grid gap-2 text-sm text-gray-300 md:grid-cols-2">
                         <div><span className="text-gray-500">Installed:</span> {nodeViewer.installed_version || 'not installed'}</div>
                         <div><span className="text-gray-500">Bootstrap:</span> {nodeViewer.bootstrap_version || 'not ready'}</div>
-                        <div><span className="text-gray-500">Release asset:</span> {nodeViewer.installed_release_asset_name || 'unknown'}</div>
-                        <div><span className="text-gray-500">Release commit:</span> {nodeViewer.installed_release_commitish || 'unknown'}</div>
+                        <div><span className="text-gray-500">Manager owned:</span> {nodeViewer.manager_managed ? 'yes' : 'no'}</div>
+                        <div><span className="text-gray-500">Manager root:</span> {nodeViewer.manager_root_id || 'unregistered'}</div>
                         <div><span className="text-gray-500">Runtime:</span> {nodeViewer.runtime_status}</div>
                         <div><span className="text-gray-500">Manifest:</span> <span className="font-mono text-xs">{nodeViewer.manifest_path}</span></div>
                         <div><span className="text-gray-500">Port:</span> {nodeViewer.runtime_port}</div>
                         <div><span className="text-gray-500">Runtime ready:</span> {nodeViewer.runtime_ready ? 'yes' : 'no'}</div>
-                        <div><span className="text-gray-500">Release published:</span> {nodeViewer.installed_release_published_at ? new Date(nodeViewer.installed_release_published_at).toLocaleString() : 'unknown'}</div>
-                        <div>
-                          <span className="text-gray-500">Release page:</span>{' '}
-                          {nodeViewer.installed_release_url ? (
-                            <a href={nodeViewer.installed_release_url} target="_blank" rel="noreferrer" className="text-cyan-300 hover:text-cyan-200">
-                              open
-                            </a>
-                          ) : (
-                            'unknown'
-                          )}
-                        </div>
                         {nodeViewer.last_error && <div className="md:col-span-2 text-amber-200">{nodeViewer.last_error}</div>}
-                        {nodeViewer.node_present && !nodeViewer.installed_release_asset_id && (
+                        {nodeViewer.manager_managed && (
+                          <div className="md:col-span-2 text-xs text-cyan-200">
+                            This root is owned by the local Switchboard manager; service actions do not install or start a per-project node runtime.
+                          </div>
+                        )}
+                        {nodeViewer.node_present && !nodeViewer.manager_managed && !nodeViewer.installed_release_asset_id && (
                           <div className="md:col-span-2 text-xs text-amber-200">
                             Exact GitHub release identity is not recorded on this node yet. Inspect can confirm package version, but release-asset equality stays unknown until the node is installed from a tracked GitHub release.
                           </div>
@@ -1863,10 +1827,10 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                           </div>
                         )}
                         <div className="md:col-span-2 rounded-lg border border-gray-800 bg-black/20 px-3 py-2">
-                          <div className="text-[11px] uppercase tracking-[0.14em] text-gray-500">Start Command</div>
+                          <div className="text-[11px] uppercase tracking-[0.14em] text-gray-500">{managerManaged ? 'Manager Command' : 'Normalize Command'}</div>
                           <pre className="mt-2 overflow-x-auto text-xs text-cyan-200">{nodeStartCommand}</pre>
                           <div className="mt-2 text-xs text-gray-500">
-                            Port assignment defaults to the framework-managed node port shown here. Bootstrap usually records app/runtime services, while the Switchboard node itself stays on this control port unless you change the runtime command.
+                            One-port mode keeps Switchboard runtime ownership on the manager. Project roots are normalized, snapshotted, and verified under that manager instead of running separate node listeners.
                           </div>
                         </div>
                         {nodeTransition?.before && nodeTransition?.after && (

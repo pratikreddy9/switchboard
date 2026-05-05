@@ -39,7 +39,8 @@
       "ingest_service",
       "adminchat",
       "rag",
-      "aichat_ingestion"
+      "aichat_ingestion",
+      "adaptive"
     ],
     "notes": "Seed workspace for the first named PESU lanes only."
   },
@@ -52,8 +53,23 @@
     "favorite_tier": "primary",
     "servers": [],
     "services": [
-      "switch"
+      "switch",
+      "finance",
+      "syspriv"
     ],
     "notes": "moi"
+  },
+  {
+    "workspace_id": "4",
+    "name": "excelcare",
+    "tags": [
+      "company"
+    ],
+    "favorite_tier": "primary",
+    "servers": [],
+    "services": [
+      "c"
+    ],
+    "notes": "pesu hospitals."
   }
 ]

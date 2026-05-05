@@ -163,3 +163,38 @@ Example format:
   - Registered dashboard_core, finance, unionbank_service, lambdalogger, lambdascripts, and adaptive_learning under the local manager.
   - Manager runtime uses switchboard/manager/runtime so old per-project switchboard/runtime folders can be archived without touching the active manager.
   - Preflight, postflight, and critic reports are stored under switchboard/manager/reports/20260503-040843-local-mac-cutover.
+
+## 2026-05-05T07:01:00Z | Release manager normalization path
+- Tags: task, handoff, scope
+- Summary: Converted Control Center node actions to the manager-owned normalize path and prepared the 1.12.3 Switchboard release.
+- Changed Paths: switchboard/node.py, switchboard/cli.py, switchboard/collectors.py, switchboard/models.py, switchboard/local/tasks-completed.md, switchboard/evidence/update-gate.json, switchboard/manager.manifest.json, switchboard/manifests/services.json, switchboard/manifests/workspaces.json, switchboard/manager/reports/20260505-071500-normalization-release/postflight.md, switchboard/manager/reports/20260505-071500-normalization-release/handoff-47.md, src/pages/ServiceDetailPage.tsx, src/components/ConfirmationModal.tsx, src/api/client.ts, src/types/switchboard.ts, tests_backend/test_node_mode.py, tests_backend/test_runtime_and_node_sync.py, tests_backend/test_backend_regressions.py, README.md, CHANGELOG.md, pyproject.toml, package.json, package-lock.json
+- Agent: Codex
+- Tool: codex-desktop
+- Read Back: Confirmed Pratik wants build, commit, and safe GitHub backup for Switchboard first while keeping one manager port per machine.
+- Scope Check: Project shape stayed within existing Switchboard source, UI, tests, manifests, and evidence scope; no new project root was added.
+- Version: 1.12.3
+- Scope Entries:
+  - repo | dir | /Users/p/Desktop/dashboard | true
+  - doc | dir | /Users/p/Desktop/dashboard/documentation | true
+  - doc | dir | /Users/p/Desktop/dashboard/src | true
+  - doc | dir | /Users/p/Desktop/dashboard/switchboard | true
+  - doc | dir | /Users/p/Desktop/dashboard/tests_backend | true
+  - doc | file | /Users/p/Desktop/dashboard/README.md | true
+  - doc | file | /Users/p/Desktop/dashboard/CHANGELOG.md | true
+  - doc | file | /Users/p/Desktop/dashboard/package.json | true
+  - doc | file | /Users/p/Desktop/dashboard/package-lock.json | true
+  - doc | file | /Users/p/Desktop/dashboard/pyproject.toml | true
+  - exclude | dir | /Users/p/Desktop/dashboard/.git | true
+  - exclude | dir | /Users/p/Desktop/dashboard/.venv | true
+  - exclude | dir | /Users/p/Desktop/dashboard/build | true
+  - exclude | dir | /Users/p/Desktop/dashboard/dist | true
+  - exclude | dir | /Users/p/Desktop/dashboard/downloads | true
+  - exclude | dir | /Users/p/Desktop/dashboard/logs | true
+  - exclude | dir | /Users/p/Desktop/dashboard/node_modules | true
+  - exclude | dir | /Users/p/Desktop/dashboard/release | true
+  - exclude | dir | /Users/p/Desktop/dashboard/state | true
+- Notes:
+  - Added `switchboard node normalize-root` as the one canonical manager gateway for registration, snapshot, verify-update, manager refresh, and safe archive.
+  - Service-level local install/update/restart now maps to manager register, refresh, and status check instead of creating per-project node runtimes.
+  - Remote service-level node deploy, upgrade, and restart actions are blocked so remote work must happen through the remote manager workflow.
+  - Control Center labels and command previews now match the one-port manager behavior instead of advertising latest GitHub release installs.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.12.3
+
+- Added `switchboard node normalize-root` as the canonical manager update gateway.
+- Routed local node actions through manager registration, snapshot, verify, and safe archive.
+- Blocked remote service-level node deploy, upgrade, and restart actions in favor of remote manager workflows.
+- Updated Control Center node-action labels and previews for the one-port manager model.
+
 ## 1.12.2
 
 - changed the service detail page to treat root project docs as tracked project files even when framework writes are disabled for them

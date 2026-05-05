@@ -23,6 +23,7 @@ from .node import (
     manager_all_root_verify_update,
     manager_archive_old_scaffolding,
     manager_install_root,
+    normalize_manager_root,
     manager_upgrade_root,
     manager_safe_action,
     register_manager_root,
@@ -228,6 +229,28 @@ def node_manager_install_root(
         display_name=display_name,
     )
     typer.echo(json.dumps(result, indent=2))
+
+
+@node_app.command("normalize-root")
+def node_normalize_root(
+    manager_root: str = typer.Option(..., "--manager-root"),
+    project_root: str = typer.Option(..., "--project-root"),
+    root_id: str | None = typer.Option(None, "--root-id"),
+    role: str = typer.Option("minion", "--role"),
+    service_id: str | None = typer.Option(None, "--service-id"),
+    display_name: str | None = typer.Option(None, "--display-name"),
+) -> None:
+    result = normalize_manager_root(
+        manager_root,
+        project_root,
+        root_id=root_id,
+        role=role,
+        service_id=service_id,
+        display_name=display_name,
+    )
+    typer.echo(json.dumps(result, indent=2))
+    if result.get("status") != "ok":
+        raise typer.Exit(1)
 
 
 @node_app.command("manager-list")

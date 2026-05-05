@@ -953,7 +953,7 @@ export interface NodeViewerEntry {
   installed_version: string
   bootstrap_version: string
   manifest_updated_at: string
-  runtime_status: 'running' | 'stopped' | 'running_unmanaged' | 'missing'
+  runtime_status: 'running' | 'stopped' | 'running_unmanaged' | 'missing' | 'manager_running'
   runtime_pid?: number
   runtime_port: number
   needs_install: boolean
@@ -970,6 +970,9 @@ export interface NodeViewerEntry {
   installed_release_published_at?: string
   installed_release_url?: string
   installed_release_commitish?: string
+  manager_managed?: boolean
+  manager_root_id?: string
+  manager_root?: string
 }
 
 export interface NodeActionResult {

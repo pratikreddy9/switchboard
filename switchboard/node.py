@@ -792,6 +792,20 @@ def _manager_record_by_id(manager_root: str | Path, root_id: str) -> dict[str, A
     raise KeyError(f"Manager root not found: {root_id}")
 
 
+def _manager_record_by_project_root(manager_root: str | Path, project_root: str | Path) -> dict[str, Any] | None:
+    target = Path(project_root).resolve()
+    manifest = load_manager_manifest(manager_root)
+    for record in manifest.get("managed_roots", []):
+        if not isinstance(record, dict):
+            continue
+        try:
+            if Path(str(record.get("project_root", ""))).resolve() == target:
+                return record
+        except OSError:
+            continue
+    return None
+
+
 def manager_root_manifest(manager_root: str | Path, root_id: str) -> dict[str, Any]:
     record = _manager_record_by_id(manager_root, root_id)
     project_root = Path(str(record["project_root"])).resolve()
@@ -868,6 +882,55 @@ def manager_install_root(
     installed = install_node(project_root, service_id=service_id, display_name=display_name)
     registered = register_manager_root(manager_root, project_root, root_id=root_id, role=role, snapshot=False)
     return {"status": "ok", "installed": installed, "registered": registered["record"]}
+
+
+def normalize_manager_root(
+    manager_root: str | Path,
+    project_root: str | Path,
+    root_id: str | None = None,
+    role: str = "minion",
+    service_id: str | None = None,
+    display_name: str | None = None,
+) -> dict[str, Any]:
+    manager_root = Path(manager_root).resolve()
+    project_root = Path(project_root).resolve()
+    if not node_paths(manager_root)["manager_manifest"].exists():
+        init_manager_node(manager_root)
+
+    existing_record = _manager_record_by_project_root(manager_root, project_root)
+    selected_root_id = root_id or (str(existing_record.get("root_id", "")) if existing_record else None)
+    selected_role = str(existing_record.get("role", role)) if existing_record else role
+
+    if existing_record is None:
+        install_result = manager_install_root(
+            manager_root,
+            project_root,
+            root_id=selected_root_id,
+            role=selected_role,
+            service_id=service_id,
+            display_name=display_name,
+        )
+    else:
+        install_result = manager_upgrade_root(manager_root, selected_root_id or str(existing_record["root_id"]))
+
+    normalized_root_id = str(install_result["registered"]["root_id"])
+    snapshot = manager_root_snapshot(manager_root, normalized_root_id)
+    verify = manager_root_verify_update(manager_root, normalized_root_id)
+    status = str(verify.get("verify_update", {}).get("status") or "partial")
+    archive = None
+    if status == "ok":
+        archive = manager_archive_old_scaffolding(manager_root, root_id=normalized_root_id)
+    return {
+        "status": status,
+        "manager_root": str(manager_root),
+        "project_root": str(project_root),
+        "root_id": normalized_root_id,
+        "install": install_result,
+        "snapshot": snapshot,
+        "verify_update": verify.get("verify_update", {}),
+        "registered": verify.get("root", install_result["registered"]),
+        "archive": archive,
+    }
 
 
 def manager_upgrade_root(manager_root: str | Path, root_id: str) -> dict[str, Any]:

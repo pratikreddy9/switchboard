@@ -14,12 +14,31 @@ from switchboard.node import (
     manager_safe_action,
     manager_upgrade_root,
     node_paths,
+    normalize_manager_root,
     register_manager_root,
     snapshot_node,
     verify_node_update,
 )
 from switchboard.node_api import create_manager_node_app, create_node_app
 from switchboard.node_runtime import node_status
+
+
+def _write_complete_update(project_root: Path, title: str = "Normalize root") -> None:
+    paths = node_paths(project_root)
+    paths["tasks_completed"].write_text(
+        "# Tasks Completed\n\n"
+        f"## 2026-05-05T00:00:00+00:00 | {title}\n"
+        "- Tags: task, scope\n"
+        "- Summary: Normalized Switchboard through the canonical manager path.\n"
+        "- Changed Paths: switchboard/local/tasks-completed.md\n"
+        "- Agent: Codex\n"
+        "- Tool: codex-cli\n"
+        "- Read Back: Restated the request before editing.\n"
+        "- Scope Check: Project root remains tracked by manager scope.\n"
+        "- Scope Entries:\n"
+        f"  - repo | dir | {project_root.resolve()} | true\n",
+        encoding="utf-8",
+    )
 
 
 class NodeModeTests(unittest.TestCase):
@@ -264,6 +283,65 @@ class NodeModeTests(unittest.TestCase):
             self.assertEqual(upgraded["status"], "ok")
             self.assertEqual(upgraded["registered"]["root_id"], "sample-service")
             self.assertTrue(node_paths(project_root)["manifest"].exists())
+
+    def test_normalize_root_runs_snapshot_verify_and_archives_after_green(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            manager_root = root / "manager"
+            project_root = root / "sample-project"
+            install_node(project_root, service_id="sample-service", display_name="Sample Service")
+            _write_complete_update(project_root)
+            init_manager_node(manager_root)
+
+            result = normalize_manager_root(
+                manager_root,
+                project_root,
+                root_id="sample-service",
+                service_id="sample-service",
+                display_name="Sample Service",
+            )
+            paths = node_paths(project_root)
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(result["root_id"], "sample-service")
+            self.assertEqual(result["verify_update"]["status"], "ok")
+            self.assertIsNotNone(result["archive"])
+            self.assertFalse(paths["runtime"].exists())
+            self.assertFalse(paths["start_script"].exists())
+            self.assertFalse(paths["run_script"].exists())
+            self.assertTrue(paths["local"].exists())
+            self.assertTrue(paths["evidence"].exists())
+            self.assertTrue(paths["manifest"].exists())
+
+    def test_normalize_root_does_not_archive_when_verify_fails(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            manager_root = root / "manager"
+            project_root = root / "sample-project"
+            install_node(project_root, service_id="sample-service", display_name="Sample Service")
+            node_paths(project_root)["tasks_completed"].write_text(
+                "# Tasks Completed\n\n"
+                "## 2026-05-05T00:00:00+00:00 | Incomplete update\n"
+                "- Tags: task\n"
+                "- Summary: Missing canonical gate fields.\n"
+                "- Changed Paths: switchboard/local/tasks-completed.md\n",
+                encoding="utf-8",
+            )
+            init_manager_node(manager_root)
+
+            result = normalize_manager_root(
+                manager_root,
+                project_root,
+                root_id="sample-service",
+                service_id="sample-service",
+                display_name="Sample Service",
+            )
+            paths = node_paths(project_root)
+
+            self.assertNotEqual(result["status"], "ok")
+            self.assertIsNone(result["archive"])
+            self.assertTrue(paths["start_script"].exists())
+            self.assertTrue(paths["run_script"].exists())
 
     def test_manager_api_exposes_all_root_safe_actions(self) -> None:
         with TemporaryDirectory() as tmpdir:
