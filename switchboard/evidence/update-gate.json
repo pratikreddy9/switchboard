@@ -1,11 +1,11 @@
 {
-  "generated": "2026-05-05T07:29:38+00:00",
+  "generated": "2026-05-10T05:16:11+00:00",
   "status": "ok",
   "service_id": "switch",
   "project_root": "/Users/p/Desktop/dashboard",
   "latest_task": {
-    "timestamp": "2026-05-05T07:24:34Z",
-    "title": "Release manager-wide normalization",
+    "timestamp": "2026-05-10T04:58:42+00:00",
+    "title": "Normalize Switchboard product surface",
     "agent": "Codex",
     "tool": "codex-desktop"
   },
@@ -83,7 +83,7 @@
     {
       "check_id": "agent_contract_files_present",
       "status": "ok",
-      "message": "All Switchboard agent contract files exist."
+      "message": "Required Switchboard agent contract files exist."
     }
   ]
 }

@@ -232,3 +232,55 @@ Example format:
   - Added `switchboard node manager-normalize-all --manager-root <root>` so .47 can normalize every registered root from sys_docs with one command.
   - Manager-owned cards now show manager version separately from root manifest version.
   - Stale root manifests are shown as stale root state instead of making the manager look downgraded.
+
+## 2026-05-10T04:58:42+00:00 | Normalize Switchboard product surface
+- Tags: task, handoff, scope
+- Summary: Released the 1.12.5 normalization slice so common agent rules are manager-owned, pull bundles require authority preflight, and the UI is less noisy.
+- Changed Paths: switchboard/node.py, switchboard/collectors.py, switchboard/models.py, switchboard/api.py, switchboard/cli.py, switchboard/manifests/services.json, switchboard/manager.manifest.json, src/components/PullBundlePanel.tsx, src/pages/ServiceDetailPage.tsx, src/components/TaskLedgerPanel.tsx, src/components/ProjectsPanel.tsx, src/pages/EnvironmentApiLabPage.tsx, src/api/client.ts, src/types/switchboard.ts, tests_backend/test_node_mode.py, tests_backend/test_backend_regressions.py, tests_backend/test_runtime_and_node_sync.py, README.md, CHANGELOG.md, documentation/runtime-monitoring.md, documentation/control-center-setup.md, documentation/node-install-guide.md, documentation/switchboard-roadmap.md, documentation/switchboard-april29-gap-audit.md, package.json, package-lock.json, pyproject.toml, switchboard/__init__.py, .gitignore, switchboard/local/tasks-completed.md
+- Agent: Codex
+- Tool: codex-desktop
+- Read Back: Restated that Switchboard must become cleaner, manager-owned, low-footprint, and safe before more node work.
+- Scope Check: Scope now excludes manager archives/reports and generated runtime clutter while keeping source, UI, docs, tests, manifests, and canonical task state.
+- Version: 1.12.5
+- API:
+  ## New Surfaces
+  - `POST /api/services/{service_id}/pull-bundles/preflight` checks source location, authority, scope freshness, include/exclude counts, and suspicious paths before mirroring files.
+  - `GET /api/exports/palimpsest` exports redacted mainboard state for Palimpsest handoff.
+  - `switchboard export palimpsest --out <path>` writes the same redacted state locally.
+- Changelog:
+  - Common agent contracts are manager-owned; minion roots only require enabled entrypoint files.
+  - Pull bundles now require explicit location preflight and block stale remote node scope.
+  - Service UI labels now say register, normalize, and manager status instead of per-project release install.
+  - Task ledger rows are compact by default and service pages have Simple/Ops/Full view presets.
+  - Project grouping copy now centers company -> project -> services.
+  - Optional root agent launchers and generated manager reports were moved into ignored Switchboard archives before the repo stopped tracking them.
+- Notes:
+  - `.47` already reported manager-only 1.12.4 state under `/home/pesu/sys_docs`; after 1.12.5 release it should update from the visible GitHub release and rerun manager normalization/verify.
+  - Cross-account backup remains unclaimed because the second repo target is not resolvable.
+- Scope Entries:
+  - repo | dir | /Users/p/Desktop/dashboard | true
+  - doc | dir | /Users/p/Desktop/dashboard/documentation | true
+  - doc | dir | /Users/p/Desktop/dashboard/src | true
+  - doc | dir | /Users/p/Desktop/dashboard/switchboard | true
+  - doc | dir | /Users/p/Desktop/dashboard/tests | true
+  - doc | dir | /Users/p/Desktop/dashboard/tests_backend | true
+  - doc | file | /Users/p/Desktop/dashboard/README.md | true
+  - doc | file | /Users/p/Desktop/dashboard/CHANGELOG.md | true
+  - doc | file | /Users/p/Desktop/dashboard/package.json | true
+  - doc | file | /Users/p/Desktop/dashboard/package-lock.json | true
+  - doc | file | /Users/p/Desktop/dashboard/pyproject.toml | true
+  - exclude | dir | /Users/p/Desktop/dashboard/.git | true
+  - exclude | dir | /Users/p/Desktop/dashboard/.venv | true
+  - exclude | dir | /Users/p/Desktop/dashboard/.npm-cache | true
+  - exclude | dir | /Users/p/Desktop/dashboard/.pytest_cache | true
+  - exclude | dir | /Users/p/Desktop/dashboard/build | true
+  - exclude | dir | /Users/p/Desktop/dashboard/dist | true
+  - exclude | dir | /Users/p/Desktop/dashboard/downloads | true
+  - exclude | dir | /Users/p/Desktop/dashboard/logs | true
+  - exclude | dir | /Users/p/Desktop/dashboard/node_modules | true
+  - exclude | dir | /Users/p/Desktop/dashboard/release | true
+  - exclude | dir | /Users/p/Desktop/dashboard/state | true
+  - exclude | dir | /Users/p/Desktop/dashboard/switchboard/manager/archives | true
+  - exclude | dir | /Users/p/Desktop/dashboard/switchboard/manager/reports | true
+  - exclude | dir | /Users/p/Desktop/dashboard/switchboard/manager/runtime | true
+  - exclude | dir | /Users/p/Desktop/dashboard/switchboard/static | true

@@ -102,6 +102,7 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
   const [addingEnvironmentFor, setAddingEnvironmentFor] = useState<string | null>(null)
   const [editingEnvironmentId, setEditingEnvironmentId] = useState<string | null>(null)
   const [environmentForm, setEnvironmentForm] = useState<EnvironmentFormState>(EMPTY_ENV_FORM)
+  const [serviceFilter, setServiceFilter] = useState('')
 
   useEffect(() => {
     if (offline || !expanded) return
@@ -226,6 +227,13 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
     () => selectableServices.filter((service) => !projectServiceIds.includes(service.service_id)),
     [projectServiceIds, selectableServices],
   )
+  const visibleSelectableServices = useMemo(() => {
+    const token = serviceFilter.trim().toLowerCase()
+    if (!token) return selectableServices
+    return selectableServices.filter((service) =>
+      `${service.display_name} ${service.service_id} ${service.execution_mode}`.toLowerCase().includes(token),
+    )
+  }, [selectableServices, serviceFilter])
 
   function beginAddEnvironment(projectId: string) {
     resetProjectForm()
@@ -753,7 +761,7 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
         <div className="border-t border-gray-800 p-4">
           <div className="flex justify-between items-center mb-4 gap-3">
             <p className="text-xs text-gray-500">
-              Group tracked services into business projects, attach notes, and map dev/test/staging/prod deployment environments with per-target roots, versions, and diff rollups.
+              Company → project grouping for tracked services. Environments stay available but are secondary.
             </p>
             {!offline && !addingProject && !editingProjectId && (
               <button
@@ -770,10 +778,8 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
           {(addingProject || editingProjectId) && (
             <div className="mb-6 bg-gray-950 border border-gray-800 p-4 rounded-xl">
               <div className="mb-3">
-                <h4 className="text-sm font-medium text-gray-300">{addingProject ? 'Add Project Group' : 'Edit Project Group'}</h4>
-                <div className="mt-1 text-xs text-gray-500">
-                  This does not scan a path. It groups already tracked services and adds environment views around them.
-                </div>
+                <h4 className="text-sm font-medium text-gray-300">{addingProject ? 'Add Project' : 'Edit Project'}</h4>
+                <div className="mt-1 text-xs text-gray-500">This edits grouping only. It does not scan paths or deploy nodes.</div>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="text-xs text-gray-400">
@@ -829,12 +835,18 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
               <div className="mt-4 rounded-xl border border-gray-800 bg-gray-900/60 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Tracked Services</div>
+                    <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Project Services</div>
                     <div className="mt-1 text-xs text-gray-400">
-                      Pick from existing services instead of typing ids manually.
+                      Search and select existing services; no raw JSON editing needed.
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      value={serviceFilter}
+                      onChange={(event) => setServiceFilter(event.target.value)}
+                      className="max-w-56 rounded-lg border border-gray-700 bg-gray-950 px-2 py-1 text-xs text-gray-300 outline-none hover:border-cyan-500 focus:border-cyan-500"
+                      placeholder="Search services"
+                    />
                     <select
                       value=""
                       onChange={(event) => addProjectService(event.target.value)}
@@ -842,7 +854,7 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
                       disabled={availableProjectServices.length === 0}
                     >
                       <option value="">
-                        {availableProjectServices.length === 0 ? 'No available projects' : 'Add available project'}
+                        {availableProjectServices.length === 0 ? 'No unassigned services' : 'Add available service'}
                       </option>
                       {availableProjectServices.map((service) => (
                         <option key={service.service_id} value={service.service_id}>
@@ -871,7 +883,7 @@ export function ProjectsPanel({ workspaceId, offline, workspaceName, workspaceNo
                   )}
                 </div>
                 <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                  {selectableServices.map((service) => {
+                  {visibleSelectableServices.map((service) => {
                     const selected = projectServiceIds.includes(service.service_id)
                     return (
                       <button

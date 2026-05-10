@@ -507,7 +507,7 @@ export function EnvironmentApiLabPage({ environmentId, offline, onBack, onSelect
             className="inline-flex items-center gap-2 rounded-lg border border-gray-700 px-3 py-2 text-sm text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${snapshotLoading ? 'animate-spin' : ''}`} />
-            {snapshotLoading ? 'Refreshing…' : 'Refresh Snapshot'}
+            {snapshotLoading ? 'Refreshing…' : 'Runtime Snapshot'}
           </button>
         </div>
         {lab.runtime_snapshot ? (

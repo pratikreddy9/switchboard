@@ -63,6 +63,12 @@ function parsePorts(value: string): number[] {
 
 const SERVICE_PANEL_KEYS = ['project', 'network', 'runtime', 'managed_docs', 'task_ledger', 'repositories', 'scope', 'pull_bundles', 'secret_paths', 'run_history'] as const
 type ServicePanelKey = (typeof SERVICE_PANEL_KEYS)[number]
+type ViewPreset = 'simple' | 'ops' | 'full'
+const VIEW_PRESETS: Record<ViewPreset, ServicePanelKey[]> = {
+  simple: ['project', 'runtime', 'task_ledger', 'pull_bundles'],
+  ops: ['project', 'runtime', 'repositories', 'scope', 'pull_bundles', 'secret_paths'],
+  full: [...SERVICE_PANEL_KEYS],
+}
 type NodeActionKey = 'inspect' | 'deploy' | 'upgrade' | 'restart'
 type LocationActionKey = NodeActionKey | 'runtime_check' | 'sync_from_node' | 'sync_to_node'
 type PersistedActionKey = 'node_deploy' | 'node_upgrade' | 'node_restart' | 'runtime_check' | 'sync_from_node' | 'sync_to_node'
@@ -103,11 +109,11 @@ const LOCK_KEY_TO_ACTION: Record<PersistedActionKey, Exclude<LocationActionKey, 
 }
 
 const ACTION_META: Record<LocationActionKey, { label: string; running_label: string; eta_seconds: number }> = {
-  inspect: { label: 'Inspect Node', running_label: 'Inspecting node state', eta_seconds: 12 },
-  deploy: { label: 'Register Manager Root', running_label: 'Registering manager root', eta_seconds: 45 },
-  upgrade: { label: 'Refresh Manager Root', running_label: 'Refreshing manager root', eta_seconds: 45 },
-  restart: { label: 'Check Manager', running_label: 'Checking manager runtime', eta_seconds: 18 },
-  runtime_check: { label: 'Refresh Snapshot', running_label: 'Refreshing runtime snapshot', eta_seconds: 28 },
+  inspect: { label: 'Inspect State', running_label: 'Inspecting source state', eta_seconds: 12 },
+  deploy: { label: 'Register Root', running_label: 'Registering root', eta_seconds: 45 },
+  upgrade: { label: 'Normalize Root', running_label: 'Normalizing root', eta_seconds: 45 },
+  restart: { label: 'Manager Status', running_label: 'Checking manager status', eta_seconds: 18 },
+  runtime_check: { label: 'Runtime Snapshot', running_label: 'Refreshing runtime snapshot', eta_seconds: 28 },
   sync_from_node: { label: 'Sync From Node', running_label: 'Syncing from node', eta_seconds: 22 },
   sync_to_node: { label: 'Sync To Node', running_label: 'Syncing to node', eta_seconds: 22 },
 }
@@ -229,6 +235,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
   const [actionLockStatus, setActionLockStatus] = useState<'online' | 'offline'>('online')
   const [actionStartTimes, setActionStartTimes] = useState<Record<string, string>>({})
   const [panelOpen, setPanelOpen] = useState<Record<string, boolean>>({})
+  const [viewPreset, setViewPreset] = useState<ViewPreset>('simple')
   const [locationPanels, setLocationPanels] = useState<Record<string, boolean>>({})
   const [nodeActionResults, setNodeActionResults] = useState<Record<string, NodeActionResult>>({})
   const [nodeActionLoading, setNodeActionLoading] = useState<Record<string, NodeActionKey | null>>({})
@@ -244,6 +251,8 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
   }, [])
 
   useEffect(() => {
+    const storedPreset = localStorage.getItem(`service-view:${serviceId}`) as ViewPreset | null
+    if (storedPreset && VIEW_PRESETS[storedPreset]) setViewPreset(storedPreset)
     const next: Record<string, boolean> = {}
     for (const key of SERVICE_PANEL_KEYS) {
       next[key] = sessionStorage.getItem(panelStorageKey(serviceId, key)) === 'true'
@@ -521,6 +530,17 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
       sessionStorage.setItem(panelStorageKey(serviceId, key), String(next))
       return { ...current, [key]: next }
     })
+  }
+
+  function applyViewPreset(preset: ViewPreset) {
+    const enabled = new Set(VIEW_PRESETS[preset])
+    const next = Object.fromEntries(SERVICE_PANEL_KEYS.map((key) => [key, enabled.has(key)]))
+    for (const key of SERVICE_PANEL_KEYS) {
+      sessionStorage.setItem(panelStorageKey(serviceId, key), String(Boolean(next[key])))
+    }
+    localStorage.setItem(`service-view:${serviceId}`, preset)
+    setViewPreset(preset)
+    setPanelOpen(next)
   }
 
   function toggleLocationPanel(locationId: string) {
@@ -1097,6 +1117,27 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         )}
       </div>
 
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-800 bg-gray-900 px-4 py-3">
+        <div>
+          <div className="text-xs uppercase tracking-[0.16em] text-gray-500">View Settings</div>
+          <div className="mt-1 text-sm text-gray-400">Choose how much service detail is visible on this machine.</div>
+        </div>
+        <div className="flex rounded-lg border border-gray-800 bg-gray-950 p-1">
+          {(['simple', 'ops', 'full'] as ViewPreset[]).map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              onClick={() => applyViewPreset(preset)}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
+                viewPreset === preset ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              {preset}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {deleteError && (
         <div className="mb-6 rounded-xl border border-red-900/70 bg-red-950/40 px-4 py-3 text-sm text-red-200">
           {deleteError}
@@ -1418,14 +1459,14 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
               const nodeControlLabel = remoteNodeActionBlocked
                 ? 'Remote Manager Required'
                 : managerManaged
-                ? 'Refresh Manager Root'
+                ? 'Normalize Root'
                 : !nodeViewer?.node_present
-                  ? 'Register Manager Root'
-                  : 'Refresh Manager Root'
+                  ? 'Register Root'
+                  : 'Normalize Root'
               const runtimeControlLabel = remoteNodeActionBlocked
                 ? 'Remote Manager Required'
                 : managerManaged
-                ? 'Check Manager'
+                ? 'Manager Status'
                 : 'Normalize First'
               const syncBlocked = nodeViewer?.node_present === true && !nodeViewer.bootstrap_ready
               const nodePort = nodeViewer?.runtime_port ?? 8010
@@ -1500,7 +1541,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                 followUp: [
                   managerManaged
                     ? 'The single local manager remains the only Switchboard runtime for this machine.'
-                    : 'Run Inspect Node afterward to confirm the root is manager-owned.',
+                    : 'Run Inspect State afterward to confirm the root is manager-owned.',
                   'Bootstrap can still remain not ready until the first task-ledger/bootstrap write happens.',
                 ],
                 confirmLabel: nodeControlLabel,
@@ -1633,7 +1674,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                         className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
                       >
                         {activeAction === 'inspect' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
-                        {activeAction === 'inspect' ? 'Inspecting…' : 'Inspect Node'}
+                        {activeAction === 'inspect' ? 'Inspecting…' : 'Inspect State'}
                       </button>
                       <button
                         type="button"
@@ -1669,7 +1710,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                         className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
                       >
                         <RefreshCw className={`h-3.5 w-3.5 ${checkingRuntimeLocation === location.location_id || activeLocks.runtime_check ? 'animate-spin' : ''}`} />
-                        {checkingRuntimeLocation === location.location_id || activeLocks.runtime_check ? 'Refreshing…' : actionLockStatus === 'offline' ? 'Backend Offline' : 'Refresh Snapshot'}
+                        {checkingRuntimeLocation === location.location_id || activeLocks.runtime_check ? 'Refreshing…' : actionLockStatus === 'offline' ? 'Backend Offline' : 'Runtime Snapshot'}
                       </button>
                       <button
                         type="button"
@@ -1827,7 +1868,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                         )}
                         {rootManifestStale && (
                           <div className="md:col-span-2 text-xs text-amber-200">
-                            Root manifest version trails the manager. Refresh Manager Root will normalize this root and update its manifest.
+                            Root manifest version trails the manager. Normalize Root refreshes the manifest through the manager path.
                           </div>
                         )}
                         {nodeViewer.node_present && !nodeViewer.manager_managed && !nodeViewer.installed_release_asset_id && (
@@ -1859,7 +1900,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                         )}
                       </div>
                     ) : (
-                      <div className="mt-2 text-sm text-gray-500">No node viewer data cached yet. Use Inspect Node.</div>
+                      <div className="mt-2 text-sm text-gray-500">No node viewer data cached yet. Use Inspect State.</div>
                     )}
                   </div>
 

@@ -11,9 +11,9 @@ Everything before that is plumbing: canonical updates, low-context agent handoff
 Done:
 
 - `tasks-completed.md` is the canonical task ledger.
-- `switchboard node snapshot` builds node manifests, scope snapshots, task JSON, docs index, and agent contracts.
+- `switchboard node normalize-root` is the normal manager gateway for task validation, snapshot, verify, and manager refresh.
 - `switchboard node verify-update` enforces the update gate.
-- Agent contract files exist for Codex, Claude Code, Gemini CLI, Qwen Code, opencode, and generic agents.
+- The manager owns the common agent contract; project roots only require enabled entrypoints.
 - Manager-node foundation exists: one manager root can register, inspect, snapshot, and verify many project roots.
 - `.47` proved the manager model with `sys_docs` as the core root and 10 verified roots behind one manager port.
 - Roadmap and design principles now record current state, open work, and operating rules.
@@ -35,12 +35,12 @@ Open:
 |---:|---|---|
 | 1 | Future plan, roadmap, design principles | Done |
 | 2 | Dependencies, cross-dependencies, composition, model usage | Done |
-| 3 | Sink pull authority clarity | Done |
-| 4 | Project Grouping Add Available selection | Done |
+| 3 | Sink pull authority clarity | Done in 1.12.5 |
+| 4 | Project Grouping Add Available selection | Partial |
 | 5 | One node per machine, one port, manager/minion | Done |
 | 6 | Manager-managed install, release, update | Done |
 | 7 | Safe scoped commands, move/zip only | Done |
-| 8 | Agent files for Codex, Claude, Gemini, Qwen, opencode | Done |
+| 8 | Agent files for Codex, Claude, Gemini, Qwen, opencode | Done in 1.12.5 as opt-in entrypoints |
 | 9 | Task ledger project colors | Done |
 | 10 | Agent habit discovery and token diet | Done, ongoing |
 | 11 | Read-back and low-ceremony principles | Done, ongoing |
@@ -52,17 +52,17 @@ Open:
 ## Execution Phases
 
 1. Agent Contract Gate
-   - Keep generated tool-native agent files small.
+   - Keep generated tool-native agent files optional and small.
    - Enforce read-back, scope check, snapshot, and verify-update.
    - Treat output size as a design constraint.
 
 2. Project UX Repair
-   - Fix Project Grouping service selection.
+   - Keep Project Grouping editable without raw JSON.
    - Keep company to project hierarchy simple.
    - Add deterministic project colors in task views.
 
 3. Pull And Dependency Intelligence
-   - Show pull authority source: manager, node-local, or control center.
+   - Preflight pull authority source: manager, node-local, or control center.
    - Present direct dependencies, cross-dependencies, composition, and model usage together.
    - Use evidence-based detection and declared project data.
 

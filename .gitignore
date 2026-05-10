@@ -22,3 +22,4 @@ release/
 switchboard/static/app/
 switchboard/manager/runtime/
 switchboard/manager/archives/
+switchboard/manager/reports/

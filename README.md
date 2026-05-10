@@ -6,50 +6,27 @@ Switchboard is a project-first control center for tracking services, servers, pr
 switchboard/local/tasks-completed.md
 ```
 
-Current release: `1.12.4`
+Current release: `1.12.5`
 
-## What 1.10.0 Adds
+## What 1.12.5 Fixes
 
-- control center branding and workflow centered on `Switchboard Control Center`
-- companies/workspaces such as `ZAPP` and `PESU`
-- project inventory with child projects and explicit environments like `test`, `prod`, `staging`, `qa`
-- per-environment deployment references:
-  - service
-  - location
-  - server
-  - root
-  - version
-  - dependency notes
-- execution modes for services:
-  - `networked`
-  - `batch`
-  - `lambda`
-  - `docs_only`
-- safe node actions from the control center:
-  - inspect
-  - deploy latest
-  - update
-  - restart
-- pull bundles with:
-  - optional pull notes
-  - file-level `+ / - / ~` diff summaries
-  - exposure findings for pulled files only
-  - dependency and cross-dependency context
-  - left-out scope visibility
-- action locks so bundle/sync/node actions do not double-run
-- task-ledger-driven dependency, runtime-service, and cross-system tracking across nodes
+- manager-owned agent rules: common contracts live under the manager; minion roots only keep enabled entrypoints and local proof
+- pull-bundle preflight: source location, authority, scope freshness, includes, excludes, and unsafe paths are checked before files are mirrored
+- safer node labels: service pages say register, normalize, and manager status instead of pretending to install per-project release runtimes
+- compact UI defaults: task ledger rows start collapsed, service pages have `Simple` / `Ops` / `Full` view presets, and project grouping is company -> project first
+- Palimpsest export: redacted mainboard state can be exported without secrets, logs, venvs, or raw env files
 
 ## Core Idea
 
 The control center is the operator surface.
 
-Nodes are lightweight runtime companions installed inside project roots under:
+Nodes are lightweight metadata companions installed inside project roots under:
 
 ```text
 <project-root>/switchboard/
 ```
 
-Agents still edit only one canonical file:
+Agents still edit only one project-local canonical file:
 
 ```text
 switchboard/local/tasks-completed.md
@@ -63,6 +40,8 @@ Everything else is derived from that file or from control-center state:
 - node manifest metadata
 - task ledger summaries
 - dependency and cross-dependency views
+
+In manager mode, common agent rules are manager-owned. Minion roots should not carry every CLI file by default; optional files such as `CLAUDE.md`, `GEMINI.md`, `QWEN.md`, and `opencode.json` are generated only when that tool is enabled for that root.
 
 ## Main Concepts
 
@@ -257,16 +236,16 @@ downloads/<workspace>/<service>/<bundle_id>/
 The control center can:
 
 - inspect node presence/version/runtime state
-- deploy the latest local Switchboard node into a project root
-- refresh/update an existing node
-- restart the node runtime
+- register or normalize a root through the manager
+- check manager status
+- sync from a node before pull-bundle creation
 
 Safety rules:
 
 - actions are location-scoped
 - action locks prevent duplicate runs
 - sync stays blocked until bootstrap is ready
-- node deploy/update is about the Switchboard node runtime, not the app process itself
+- node deploy/update is manager-root normalization, not app deploy and not a per-project runtime start
 
 ## Managed Docs
 

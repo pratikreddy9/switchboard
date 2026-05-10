@@ -49,8 +49,10 @@ from .storage import SnapshotStore
 app = typer.Typer(help="Switchboard control-center commands.")
 node_app = typer.Typer(help="Switchboard node-mode commands.")
 release_app = typer.Typer(help="Build releasable Switchboard artifacts.")
+export_app = typer.Typer(help="Export Switchboard state.")
 app.add_typer(node_app, name="node")
 app.add_typer(release_app, name="release")
+app.add_typer(export_app, name="export")
 
 
 def _runtime_passwords(pairs: list[str]) -> dict[str, str]:
@@ -117,6 +119,28 @@ def github_backup(
     typer.echo(json.dumps(result, indent=2))
     if result.get("status") == "permission_limited":
         raise typer.Exit(1)
+
+
+@app.command("export-palimpsest")
+def export_palimpsest(
+    out: str = typer.Option(..., "--out"),
+) -> None:
+    settings = get_settings()
+    manifests = ManifestStore(settings)
+    snapshots = SnapshotStore(settings, manifests)
+    coordinator = CollectionCoordinator(settings, manifests, snapshots)
+    payload = coordinator.export_palimpsest_state()
+    output_path = Path(out)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    typer.echo(json.dumps({"status": "ok", "path": str(output_path)}, indent=2))
+
+
+@export_app.command("palimpsest")
+def export_palimpsest_nested(
+    out: str = typer.Option(..., "--out"),
+) -> None:
+    export_palimpsest(out=out)
 
 
 @app.command()
@@ -429,11 +453,14 @@ def release_build(
     """
     root = ROOT_DIR
     dist_dir = root / "dist"
+    build_dir = root / "build"
     static_app_dir = root / "switchboard" / "static" / "app"
     wheel_dir = root / wheel_out
 
     _run(["npm", "run", "build"], root)
 
+    if build_dir.exists():
+        shutil.rmtree(build_dir)
     if static_app_dir.exists():
         shutil.rmtree(static_app_dir)
     static_app_dir.parent.mkdir(parents=True, exist_ok=True)

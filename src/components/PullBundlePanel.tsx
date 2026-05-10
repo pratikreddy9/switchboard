@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Archive, ChevronDown, ChevronRight, Download, LoaderCircle, PackagePlus } from 'lucide-react'
-import { createPullBundle, getActionLocks, listPullBundles } from '../api/client'
-import type { DependencyComposition, PullBundleRecord, ScopeEntry, Service } from '../types/switchboard'
+import { Archive, ChevronDown, ChevronRight, Download, LoaderCircle, PackagePlus, Settings2 } from 'lucide-react'
+import { createPullBundle, getActionLocks, listPullBundles, preflightPullBundle } from '../api/client'
+import type { DependencyComposition, PullBundlePreflight, PullBundleRecord, ScopeEntry, Service } from '../types/switchboard'
 import { isApiError } from '../types/switchboard'
 import { StatusBadge } from './StatusBadge'
 import { ConfirmationModal, ACTION_EXPLAIN } from './ConfirmationModal'
@@ -34,12 +34,25 @@ export function PullBundlePanel({ service, disabled }: Props) {
   const [note, setNote] = useState('')
   const [creating, setCreating] = useState(false)
   const [message, setMessage] = useState('')
+  const [preflight, setPreflight] = useState<PullBundlePreflight | null>(null)
+  const [preflighting, setPreflighting] = useState(false)
   const [expandedHistory, setExpandedHistory] = useState<Record<string, boolean>>({})
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [pendingActions, setPendingActions] = useState<Record<string, boolean>>({})
   const [createOpen, setCreateOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [leftOutOpen, setLeftOutOpen] = useState(false)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const defaultLocationId = useMemo(() => {
+    if (service.locations.length === 1) return service.locations[0].location_id
+    return service.locations.find((location) => location.is_primary)?.location_id ?? ''
+  }, [service.locations])
+  const [locationId, setLocationId] = useState(defaultLocationId)
+
+  useEffect(() => {
+    setLocationId(defaultLocationId)
+    setPreflight(null)
+  }, [defaultLocationId, service.service_id])
 
   useEffect(() => {
     let cancelled = false
@@ -129,6 +142,37 @@ export function PullBundlePanel({ service, disabled }: Props) {
     setConfirmOpen(true)
   }
 
+  function pullRequestPayload() {
+    return {
+      location_id: locationId || undefined,
+      extra_includes: advancedOpen ? extraIncludes : [],
+      extra_excludes: advancedOpen
+        ? extraExcludes
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean)
+        : [],
+      note,
+    }
+  }
+
+  async function runPreflight() {
+    setPreflighting(true)
+    setMessage('')
+    try {
+      const result = await preflightPullBundle(service.service_id, pullRequestPayload())
+      setPreflight(result as PullBundlePreflight)
+      if ((result as PullBundlePreflight).status !== 'ok') {
+        setMessage((result as PullBundlePreflight).message || 'Pull bundle preflight failed.')
+        return false
+      }
+      setMessage('Pull bundle preflight passed. Source authority is explicit.')
+      return true
+    } finally {
+      setPreflighting(false)
+    }
+  }
+
   async function handleCreate() {
     sessionStorage.setItem(sessionKey, 'true')
     setPendingActions(prev => ({ ...prev, [sessionKey]: true }))
@@ -137,14 +181,9 @@ export function PullBundlePanel({ service, disabled }: Props) {
     setMessage('')
 
     try {
-      const result = await createPullBundle(service.service_id, {
-        extra_includes: extraIncludes,
-        extra_excludes: extraExcludes
-          .split('\n')
-          .map((line) => line.trim())
-          .filter(Boolean),
-        note,
-      })
+      const ready = await runPreflight()
+      if (!ready) return
+      const result = await createPullBundle(service.service_id, pullRequestPayload())
       if (isApiError(result)) {
         setMessage(result.message)
         return
@@ -207,17 +246,66 @@ export function PullBundlePanel({ service, disabled }: Props) {
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="mt-1 text-sm text-gray-500">
-              Pull saved scope plus one-run extras into a versioned local mirror of the source tree.
+              Pull the selected node-defined scope into a versioned local mirror. Remote bundles require Sync From Node first.
             </p>
           </div>
-          <button
-            onClick={initiateCreate}
-            disabled={disabled || creating || pendingActions[`pending:pull_bundle:${service.service_id}`]}
-            className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-gray-200 disabled:opacity-50"
-          >
-            {creating || pendingActions[`pending:pull_bundle:${service.service_id}`] ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
-            {creating || pendingActions[`pending:pull_bundle:${service.service_id}`] ? 'Creating' : 'Create bundle'}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => void runPreflight()}
+              disabled={disabled || preflighting}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-700 px-3 py-2 text-sm text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
+            >
+              {preflighting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Settings2 className="h-4 w-4" />}
+              Check scope
+            </button>
+            <button
+              onClick={initiateCreate}
+              disabled={disabled || creating || pendingActions[`pending:pull_bundle:${service.service_id}`] || !locationId}
+              className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-gray-200 disabled:opacity-50"
+            >
+              {creating || pendingActions[`pending:pull_bundle:${service.service_id}`] ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
+              {creating || pendingActions[`pending:pull_bundle:${service.service_id}`] ? 'Creating' : 'Create bundle'}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-gray-800 bg-gray-900 p-3">
+          <div className="grid gap-3 md:grid-cols-[1.2fr,2fr]">
+            <label className="text-xs text-gray-400">
+              Source location
+              <select
+                value={locationId}
+                onChange={(event) => {
+                  setLocationId(event.target.value)
+                  setPreflight(null)
+                }}
+                className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500"
+                disabled={disabled}
+              >
+                <option value="">Select a location</option>
+                {service.locations.map((location) => (
+                  <option key={location.location_id} value={location.location_id}>
+                    {location.location_id} · {location.server_id}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-2 text-xs text-gray-300">
+              {preflight ? (
+                <>
+                  <div className={preflight.status === 'ok' ? 'text-green-300' : 'text-amber-200'}>
+                    {preflight.status === 'ok' ? 'Ready' : 'Blocked'} · {preflight.message}
+                  </div>
+                  <div className="mt-1 text-gray-500">
+                    Authority {preflight.source_authority?.source ?? 'unknown'} · includes {preflight.include_count ?? 0} · excludes {preflight.exclude_count ?? 0}
+                  </div>
+                  {preflight.root && <div className="mt-1 font-mono text-[11px] text-gray-500 break-all">{preflight.root}</div>}
+                </>
+              ) : (
+                <div className="text-gray-500">Run scope check before pulling. The bundle will also check this before it creates files.</div>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -247,7 +335,21 @@ export function PullBundlePanel({ service, disabled }: Props) {
           </div>
 
           <div className="rounded-xl border border-gray-800 bg-gray-900 p-3">
-            <div className="text-xs uppercase tracking-[0.16em] text-gray-500">One-run extras</div>
+            <button
+              type="button"
+              onClick={() => setAdvancedOpen((current) => !current)}
+              className="flex w-full items-center justify-between text-left"
+            >
+              <span className="text-xs uppercase tracking-[0.16em] text-gray-500">Advanced one-run overrides</span>
+              {advancedOpen ? <ChevronDown className="h-4 w-4 text-gray-500" /> : <ChevronRight className="h-4 w-4 text-gray-500" />}
+            </button>
+            {!advancedOpen && (
+              <div className="mt-3 text-sm text-gray-500">
+                Off by default. Normal pulls use the node-defined scope only.
+              </div>
+            )}
+            {advancedOpen && (
+              <>
             <div className="mt-3 grid gap-3 md:grid-cols-[2fr,1fr,1fr,auto]">
               <input
                 value={includePath}
@@ -318,6 +420,8 @@ export function PullBundlePanel({ service, disabled }: Props) {
                 disabled={disabled}
               />
             </label>
+              </>
+            )}
 
             <label className="mt-4 block text-sm text-gray-300">
               <div className="mb-1">Pull note</div>

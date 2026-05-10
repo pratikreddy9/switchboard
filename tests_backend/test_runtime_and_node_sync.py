@@ -493,6 +493,76 @@ class RuntimeAndNodeSyncTests(unittest.TestCase):
             self.assertTrue(sync_state[0]["timestamp"])
             self.assertIn("doc_index", sync_state[0])
 
+    def test_sync_from_node_replaces_stale_control_center_scope_with_node_scope(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            project_root = root / "project"
+            project_root.mkdir(parents=True)
+            (project_root / "app.py").write_text("print('ok')\n", encoding="utf-8")
+            install_node(project_root, service_id="svc", display_name="Svc")
+            paths = node_paths(project_root)
+            paths["scope_snapshot"].write_text(
+                json.dumps(
+                    {
+                        "generated": "2026-05-10T00:00:00+00:00",
+                        "service_id": "svc",
+                        "project_root": str(project_root),
+                        "scope_entries": [
+                            {
+                                "kind": "repo",
+                                "path_type": "file",
+                                "path": str(project_root / "app.py"),
+                                "enabled": True,
+                                "source": "node_manifest",
+                            },
+                            {
+                                "kind": "exclude",
+                                "path_type": "glob",
+                                "path": "runtime",
+                                "enabled": True,
+                                "source": "node_manifest",
+                            },
+                        ],
+                        "scope_updates": [],
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            manifests, _, coordinator = _write_local_fixture(
+                root,
+                project_root,
+                runtime={},
+                scope_entries=[
+                    {
+                        "entry_id": "stale-runtime",
+                        "kind": "doc",
+                        "path": str(project_root / "runtime"),
+                        "path_type": "dir",
+                        "source": "user_added",
+                        "enabled": True,
+                    },
+                    {
+                        "entry_id": "stale-logs",
+                        "kind": "log",
+                        "path": str(project_root / "logs"),
+                        "path_type": "dir",
+                        "source": "user_added",
+                        "enabled": True,
+                    },
+                ],
+            )
+
+            pulled = coordinator.sync_from_node("svc", NodeSyncRequest(location_id="svc-local"))
+
+            self.assertEqual(pulled["status"], "ok")
+            stored_service = manifests.get_service("svc")
+            stored_paths = {entry.path for entry in stored_service.scope_entries}
+            self.assertIn(str(project_root / "app.py"), stored_paths)
+            self.assertNotIn(str(project_root / "runtime"), stored_paths)
+            self.assertNotIn(str(project_root / "logs"), stored_paths)
+
     def test_collect_with_service_filter_only_resolves_relevant_servers(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

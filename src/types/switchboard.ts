@@ -895,10 +895,38 @@ export interface NodeSyncResult {
 
 export interface PullBundleRequest {
   server_id?: string
+  location_id?: string
   runtime_password?: string
   extra_includes: ScopeEntry[]
   extra_excludes: string[]
   note?: string
+}
+
+export interface PullBundlePreflight {
+  status: CollectStatus
+  message: string
+  service_id: string
+  server_id?: string
+  location_id?: string
+  root?: string
+  connection_type?: 'local' | 'ssh'
+  source_authority?: PullBundleAuthority
+  node_local_scope_timestamp?: string
+  control_center_scope_timestamp?: string
+  include_count?: number
+  saved_include_count?: number
+  extra_include_count?: number
+  exclude_count?: number
+  suspicious_entries?: Array<{ path: string; kind: string; reason: string }>
+  blocked_reasons?: string[]
+  location_required?: boolean
+  locations?: Array<{
+    location_id: string
+    server_id: string
+    root: string
+    role: string
+    is_primary?: boolean
+  }>
 }
 
 export interface ExposureFinding {

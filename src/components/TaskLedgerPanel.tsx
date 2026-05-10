@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { ChevronDown, ChevronRight, Activity, Cpu, Network, PenTool, Hash, LayoutTemplate, Braces } from 'lucide-react'
 import type { TaskLedgerEntry } from '../types/switchboard'
 
@@ -34,13 +34,6 @@ function projectColorClass(value: string): string {
 export function TaskLedgerPanel({ tasks, title = 'Task Ledger', showServiceLabel = false }: Props) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
-  useEffect(() => {
-    const first = tasks[0]
-    if (!first) return
-    const firstId = first.task_id || `${first.timestamp}-0`
-    setExpanded((current) => (Object.keys(current).length > 0 ? current : { [firstId]: true }))
-  }, [tasks])
-
   if (!tasks || tasks.length === 0) {
     return null
   }
@@ -57,24 +50,24 @@ export function TaskLedgerPanel({ tasks, title = 'Task Ledger', showServiceLabel
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {title && (
         <h3 className="text-sm font-medium text-gray-300 mb-3 flex items-center gap-2">
           <Activity className="h-4 w-4 text-cyan-400" />
           {title}
         </h3>
       )}
-      <div className="space-y-3">
+      <div className="space-y-2">
         {tasks.map((task, idx) => {
           const rowId = task.task_id || `${task.timestamp}-${idx}`
           const isExpanded = expanded[rowId]
           const projectLabel = task.service_name || task.node_id || ''
           return (
-            <div key={rowId} className="rounded-xl border border-gray-800 bg-gray-900 overflow-hidden">
+            <div key={rowId} className="rounded-lg border border-gray-800 bg-gray-900 overflow-hidden">
               <button
                 type="button"
                 onClick={() => toggle(rowId)}
-                className="w-full flex items-start justify-between p-3 text-left hover:bg-gray-800/50 transition-colors"
+                className="w-full flex items-start justify-between px-3 py-2 text-left hover:bg-gray-800/50 transition-colors"
               >
                 <div className="flex items-start gap-3 min-w-0">
                   {isExpanded ? (
@@ -116,8 +109,9 @@ export function TaskLedgerPanel({ tasks, title = 'Task Ledger', showServiceLabel
                         </span>
                       )}
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
                       <span>{new Date(task.timestamp).toLocaleString()}</span>
+                      {task.summary && <span className="max-w-xl truncate text-gray-400">{task.summary}</span>}
                       {task.tags && task.tags.length > 0 && (
                         <>
                           <span className="text-gray-700">•</span>
@@ -134,7 +128,7 @@ export function TaskLedgerPanel({ tasks, title = 'Task Ledger', showServiceLabel
               </button>
 
               {isExpanded && (
-                <div className="border-t border-gray-800 p-4 space-y-4 bg-gray-950">
+                <div className="border-t border-gray-800 p-3 space-y-3 bg-gray-950">
                   {task.summary && (
                     <div>
                       <div className="text-xs uppercase tracking-[0.1em] text-gray-500 mb-1">Summary</div>

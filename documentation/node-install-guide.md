@@ -4,7 +4,7 @@
 
 This guide explains how to install a Switchboard node into a project root and how that node interacts with the control center.
 
-In `v0.1.x`, node mode is installable and usable, but still secondary to the control center.
+Node mode is now manager-first. A machine should run one manager, and project roots should act as thin minion roots.
 
 ## Direction Rule
 
@@ -22,20 +22,18 @@ A node install creates only one top-level folder inside the project root:
 <project-root>/
   switchboard/
     node.manifest.json
-    core/
     local/
     evidence/
-    runtime/
 ```
 
-It does not overwrite project-owned root docs by default.
+Standalone nodes may still have `switchboard/core/`, but manager-owned minion roots inherit common rules from the manager and do not need every CLI-specific agent file.
 
 ## Core Node Files
 
-Primary rulebook:
+Manager-owned common rulebook:
 
 ```text
-switchboard/core/playbook.md
+<manager-root>/switchboard/core/playbook.md
 ```
 
 Canonical editable file:
@@ -74,9 +72,9 @@ That build:
 Example:
 
 ```bash
-gh release create v0.1.7 release/switchboard-0.1.7-py3-none-any.whl \
-  --title "Switchboard v0.1.7" \
-  --notes "Single canonical doc source and derived project docs."
+gh release create v1.12.5 release/switchboard-1.12.5-py3-none-any.whl \
+  --title "Switchboard v1.12.5" \
+  --notes "Product normalization, manager-owned contracts, and pull-bundle preflight."
 ```
 
 ## Install The Node Tool
@@ -91,7 +89,7 @@ Prerequisites:
 Install:
 
 ```bash
-uv tool install /path/to/switchboard-0.1.7-py3-none-any.whl --force
+uv tool install /path/to/switchboard-1.12.5-py3-none-any.whl --force
 ```
 
 No `npm install` is needed on the node machine.
@@ -101,8 +99,10 @@ No `npm install` is needed on the node machine.
 Example:
 
 ```bash
-switchboard node install \
+switchboard node normalize-root \
+  --manager-root /Users/p/Desktop/dashboard \
   --project-root /Users/p/Desktop/work/zapp/lambdascripts \
+  --root-id lambdascripts \
   --service-id lambdascripts \
   --display-name "Lambda Scripts"
 ```
@@ -197,15 +197,14 @@ The node view shows:
 
 ## Control Center Detection Flow
 
-In `v0.1.x`, node pickup is still manual:
+Manager registration is explicit:
 
-1. install the node into the real project root
+1. run `switchboard node normalize-root` from the manager context
 2. open the control center
-3. add that project root as a service location
-4. include the relevant project files plus `switchboard/`
+3. confirm the project root appears as a manager-owned service location
+4. run `Sync From Node` before pull-bundle creation
 5. use:
    - `Sync From Node`
-   - `Sync To Node`
    - `Run Runtime Check`
 
 Primary node marker file:

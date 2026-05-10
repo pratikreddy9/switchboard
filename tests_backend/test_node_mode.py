@@ -65,11 +65,12 @@ class NodeModeTests(unittest.TestCase):
             self.assertTrue(paths["start_script"].exists())
             self.assertTrue(paths["run_script"].exists())
             self.assertTrue((project_root / "AGENTS.md").exists())
-            self.assertTrue((project_root / "CLAUDE.md").exists())
-            self.assertTrue((project_root / "GEMINI.md").exists())
-            self.assertTrue((project_root / "QWEN.md").exists())
-            self.assertTrue((project_root / "opencode.json").exists())
-            self.assertTrue((project_root / ".opencode" / "agents" / "switchboard.md").exists())
+            self.assertFalse((project_root / "CLAUDE.md").exists())
+            self.assertFalse((project_root / "GEMINI.md").exists())
+            self.assertFalse((project_root / "QWEN.md").exists())
+            self.assertFalse((project_root / "opencode.json").exists())
+            self.assertFalse((project_root / ".opencode" / "agents" / "switchboard.md").exists())
+            self.assertEqual(result["manifest"]["agent_contract"]["enabled_entrypoints"], ["agents"])
             self.assertEqual(result["manifest"]["service_id"], "sample-service")
             self.assertEqual(result["manifest"]["evidence_paths"]["update_gate"], "switchboard/evidence/update-gate.json")
             self.assertIn("Read back Pratik's request before acting.", result["manifest"]["design_principles"]["global"])
@@ -77,6 +78,24 @@ class NodeModeTests(unittest.TestCase):
             self.assertIn("README.md", top_level)
             self.assertIn("switchboard", top_level)
             self.assertIn("AGENTS.md", top_level)
+
+    def test_manager_root_inherits_common_agent_contract(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            manager_root = Path(tmpdir) / "manager"
+            project_root = Path(tmpdir) / "child-project"
+            manager_root.mkdir(parents=True)
+            project_root.mkdir(parents=True)
+            install_node(manager_root, service_id="manager", display_name="Manager")
+            _write_complete_update(manager_root, "Manager contract")
+            snapshot_node(manager_root)
+
+            result = manager_install_root(manager_root, project_root, root_id="child")
+            paths = node_paths(project_root)
+
+            self.assertEqual(result["installed"]["manifest"]["agent_contract"]["mode"], "manager_inherited")
+            self.assertFalse(paths["agent_contract_md"].exists())
+            self.assertTrue((project_root / "AGENTS.md").exists())
+            self.assertIn(str(manager_root / "switchboard" / "core" / "agent-contract.md"), (project_root / "AGENTS.md").read_text(encoding="utf-8"))
 
     def test_snapshot_splits_tasks_into_derived_docs_and_json(self) -> None:
         with TemporaryDirectory() as tmpdir:
@@ -262,7 +281,7 @@ class NodeModeTests(unittest.TestCase):
             self.assertFalse(paths["runtime"].exists())
             self.assertFalse(paths["start_script"].exists())
             self.assertFalse(paths["run_script"].exists())
-            self.assertTrue(paths["core"].exists())
+            self.assertFalse(paths["core"].exists())
             self.assertTrue(paths["local"].exists())
             self.assertTrue(paths["evidence"].exists())
             self.assertTrue(paths["manifest"].exists())

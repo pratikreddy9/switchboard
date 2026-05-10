@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.12.5
+
+- Made manager-owned roots inherit common agent rules from the manager and require only enabled agent entrypoints.
+- Added pull-bundle preflight with explicit location, source authority, scope freshness, unsafe-path checks, and stale remote-scope blocking.
+- Added redacted Palimpsest state export for mainboard handoff.
+- Tightened service UI wording around manager root normalization, added view presets, and made task ledger rows compact by default.
+- Simplified project grouping copy toward company -> project -> services.
+
 ## 1.12.4
 
 - Added manager-wide normalization so all registered roots can refresh manifests, snapshots, verification, and safe archive from one command.

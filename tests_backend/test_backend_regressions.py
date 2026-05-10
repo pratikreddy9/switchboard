@@ -548,6 +548,52 @@ class BackendRegressionTests(unittest.TestCase):
             self.assertIn("main.py", copied_names)
             self.assertNotIn(".DS_Store", copied_names)
 
+    def test_pull_bundle_preflight_requires_explicit_location_for_multi_location_service(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            one = root / "one"
+            two = root / "two"
+            one.mkdir()
+            two.mkdir()
+            service = ServiceManifest(
+                service_id="svc",
+                workspace_id="ws",
+                display_name="Svc",
+                locations=[
+                    LocationSpec(location_id="one", server_id="local_mac", access_mode="local", root=str(one), role="primary", is_primary=True),
+                    LocationSpec(location_id="two", server_id="local_mac", access_mode="local", root=str(two), role="secondary", is_primary=False),
+                ],
+                scope_entries=[
+                    ScopeEntry(kind="repo", path=str(one), path_type="dir", source="user_added", enabled=True),
+                    ScopeEntry(kind="repo", path=str(two), path_type="dir", source="user_added", enabled=True),
+                ],
+            )
+            settings = Settings()
+            manifests = ManifestStore(settings)
+            snapshots = SnapshotStore(settings, manifests)
+            coordinator = CollectionCoordinator(settings, manifests, snapshots)
+            manifests.get_service = lambda _service_id: service  # type: ignore[assignment]
+            manifests.resolve_server = lambda *_args, **_kwargs: ResolvedServer(  # type: ignore[assignment]
+                server_id="local_mac",
+                name="Local",
+                connection_type="local",
+                host="127.0.0.1",
+                username="p",
+                port=22,
+                tags=[],
+                favorite_tier="primary",
+                notes="",
+                password=None,
+            )
+
+            blocked = coordinator.pull_bundle_preflight("svc", PullBundleRequest())
+            ready = coordinator.pull_bundle_preflight("svc", PullBundleRequest(location_id="one"))
+
+            self.assertEqual(blocked["status"], "partial")
+            self.assertTrue(blocked["location_required"])
+            self.assertEqual(ready["status"], "ok")
+            self.assertEqual(ready["location_id"], "one")
+
     def test_github_backup_readiness_and_dry_run_are_workspace_scoped(self) -> None:
         with TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
