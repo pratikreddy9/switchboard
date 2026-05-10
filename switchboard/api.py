@@ -111,6 +111,11 @@ def health() -> dict[str, object]:
     }
 
 
+@app.get("/api/exports/palimpsest")
+def export_palimpsest() -> dict[str, object]:
+    return coordinator.export_palimpsest_state()
+
+
 @app.get("/api/workspaces")
 def list_workspaces() -> dict[str, object]:
     workspaces = manifest_store.load_workspaces()
@@ -500,6 +505,16 @@ def list_pull_bundles(service_id: str) -> dict[str, object]:
 def create_pull_bundle(service_id: str, request: PullBundleRequest) -> dict[str, object]:
     try:
         result = coordinator.pull_bundle(service_id, request)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _raise_for_action_result(result)
+    return result
+
+
+@app.post("/api/services/{service_id}/pull-bundles/preflight")
+def preflight_pull_bundle(service_id: str, request: PullBundleRequest) -> dict[str, object]:
+    try:
+        result = coordinator.pull_bundle_preflight(service_id, request)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     _raise_for_action_result(result)

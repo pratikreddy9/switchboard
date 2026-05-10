@@ -38,6 +38,7 @@ import type {
   NodeSyncRequest,
   NodeSyncResult,
   PullBundleRecord,
+  PullBundlePreflight,
   PullBundleRequest,
   RepoStateResult,
   RepoActionRequest,
@@ -947,6 +948,15 @@ export const createPullBundle = (
   req: PullBundleRequest,
 ): Promise<ApiResult<PullBundleRecord & { files?: unknown[] }>> =>
   apiFetch<PullBundleRecord & { files?: unknown[] }>(`/services/${id}/pull-bundles`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  })
+
+export const preflightPullBundle = (
+  id: string,
+  req: PullBundleRequest,
+): Promise<ApiResult<PullBundlePreflight>> =>
+  apiFetch<PullBundlePreflight>(`/services/${id}/pull-bundles/preflight`, {
     method: 'POST',
     body: JSON.stringify(req),
   })

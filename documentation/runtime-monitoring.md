@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Runtime config in `v0.1.x` is a per-location operator-managed layer. It is not a full monitoring platform.
+Runtime config is a per-location operator-managed layer. It is not a full monitoring platform.
 
 ## Runtime Config Fields
 
@@ -27,7 +27,7 @@ Runtime config belongs to a specific service location, not to the service as a w
 
 ## Health Check Commands
 
-Health checks are raw operator-managed commands in `v0.1.x`.
+Health checks are raw operator-managed commands.
 
 Typical pattern:
 
@@ -71,7 +71,7 @@ streamlit run app.py --server.port 8503
 - updated by `switchboard node snapshot`
 - synced manually into or out of the control center
 
-## Conflict Rule In `v0.1.x`
+## Conflict Rule
 
 - sync is manual
 - last write wins
@@ -88,13 +88,13 @@ Normal node-side agent work should update:
 switchboard/local/tasks-completed.md
 ```
 
-with a `Runtime:` block, then run:
+with a `Runtime:` block, then run the canonical normalization path:
 
 ```bash
-switchboard node snapshot --project-root <path>
+switchboard node normalize-root --manager-root <manager-root> --project-root <path>
 ```
 
-That snapshot mirrors runtime into `switchboard/node.manifest.json`.
+That path snapshots, verifies, and refreshes the manager view.
 
 ## What The Service Page Shows
 

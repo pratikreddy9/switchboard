@@ -4,7 +4,7 @@
   "display_name": "switchboard",
   "project_root": "/Users/p/Desktop/dashboard",
   "mode": "node",
-  "installed_version": "1.12.4",
+  "installed_version": "1.12.5",
   "runtime_port": 8010,
   "repo_paths": [
     "/Users/p/Desktop/dashboard"
@@ -86,35 +86,35 @@
       "path": "switchboard/local/control-center-handoff.md",
       "enabled": true,
       "generated_from": "switchboard/local/tasks-completed.md",
-      "last_generated_at": "2026-05-05T07:29:14+00:00"
+      "last_generated_at": "2026-05-10T05:16:10+00:00"
     },
     {
       "doc_id": "runbook",
       "path": "switchboard/local/runbook.md",
       "enabled": true,
       "generated_from": "switchboard/local/tasks-completed.md",
-      "last_generated_at": "2026-05-05T07:29:14+00:00"
+      "last_generated_at": "2026-05-10T05:16:10+00:00"
     },
     {
       "doc_id": "approach_history",
       "path": "switchboard/local/approach-history.md",
       "enabled": true,
       "generated_from": "switchboard/local/tasks-completed.md",
-      "last_generated_at": "2026-05-05T07:29:14+00:00"
+      "last_generated_at": "2026-05-10T05:16:10+00:00"
     },
     {
       "doc_id": "doc_index_md",
       "path": "switchboard/local/doc-index.md",
       "enabled": true,
       "generated_from": "switchboard/local/tasks-completed.md",
-      "last_generated_at": "2026-05-05T07:29:14+00:00"
+      "last_generated_at": "2026-05-10T05:16:10+00:00"
     },
     {
       "doc_id": "doc_index_json",
       "path": "switchboard/evidence/doc-index.json",
       "enabled": true,
       "generated_from": "switchboard/local/tasks-completed.md",
-      "last_generated_at": "2026-05-05T07:29:14+00:00"
+      "last_generated_at": "2026-05-10T05:16:10+00:00"
     }
   ],
   "bootstrap_version": "",
@@ -145,6 +145,20 @@
       "Verify with observable checks."
     ]
   },
+  "manager_root": "/Users/p/Desktop/dashboard",
+  "agent_contract": {
+    "version": "2026-04-29",
+    "mode": "local",
+    "inherited_from": "",
+    "enabled_entrypoints": [
+      "agents"
+    ],
+    "files": {
+      "agent_contract_md": "written",
+      "agent_contract_json": "written",
+      "AGENTS.md": "written"
+    }
+  },
   "installed_release": {
     "version": "1.12.1",
     "tag_name": "v1.12.1",
@@ -159,7 +173,7 @@
     "installed_at": "2026-04-22T04:44:29+00:00"
   },
   "doc_index": {
-    "generated": "2026-05-05T07:29:14+00:00",
+    "generated": "2026-05-10T05:16:10+00:00",
     "service_id": "switch",
     "project_root": "/Users/p/Desktop/dashboard",
     "docs": [
@@ -179,7 +193,9 @@
         "enabled": false,
         "generated_at": null,
         "generated_from": "switchboard/local/tasks-completed.md",
-        "contributor_timestamps": []
+        "contributor_timestamps": [
+          "2026-05-10T04:58:42+00:00"
+        ]
       },
       {
         "doc_id": "changelog",
@@ -197,7 +213,8 @@
           "2026-05-01T05:57:30Z",
           "2026-05-03T04:10:18Z",
           "2026-05-05T07:01:00Z",
-          "2026-05-05T07:24:34Z"
+          "2026-05-05T07:24:34Z",
+          "2026-05-10T04:58:42+00:00"
         ]
       },
       {
@@ -205,7 +222,7 @@
         "label": "Control Center Handoff",
         "path": "switchboard/local/control-center-handoff.md",
         "enabled": true,
-        "generated_at": "2026-05-05T07:29:14+00:00",
+        "generated_at": "2026-05-10T05:16:10+00:00",
         "generated_from": "switchboard/local/tasks-completed.md",
         "contributor_timestamps": [
           "2026-04-06T15:30:38+00:00",
@@ -216,7 +233,8 @@
           "2026-05-01T05:57:30Z",
           "2026-05-03T04:10:18Z",
           "2026-05-05T07:01:00Z",
-          "2026-05-05T07:24:34Z"
+          "2026-05-05T07:24:34Z",
+          "2026-05-10T04:58:42+00:00"
         ]
       },
       {
@@ -224,7 +242,7 @@
         "label": "Runbook",
         "path": "switchboard/local/runbook.md",
         "enabled": true,
-        "generated_at": "2026-05-05T07:29:14+00:00",
+        "generated_at": "2026-05-10T05:16:10+00:00",
         "generated_from": "switchboard/local/tasks-completed.md",
         "contributor_timestamps": []
       },
@@ -233,7 +251,7 @@
         "label": "Approach History",
         "path": "switchboard/local/approach-history.md",
         "enabled": true,
-        "generated_at": "2026-05-05T07:29:14+00:00",
+        "generated_at": "2026-05-10T05:16:10+00:00",
         "generated_from": "switchboard/local/tasks-completed.md",
         "contributor_timestamps": []
       },
@@ -242,7 +260,7 @@
         "label": "Doc Index Markdown",
         "path": "switchboard/local/doc-index.md",
         "enabled": true,
-        "generated_at": "2026-05-05T07:29:14+00:00",
+        "generated_at": "2026-05-10T05:16:10+00:00",
         "generated_from": "switchboard/local/tasks-completed.md",
         "contributor_timestamps": [
           "2026-04-06T15:30:38+00:00",
@@ -253,7 +271,8 @@
           "2026-05-01T05:57:30Z",
           "2026-05-03T04:10:18Z",
           "2026-05-05T07:01:00Z",
-          "2026-05-05T07:24:34Z"
+          "2026-05-05T07:24:34Z",
+          "2026-05-10T04:58:42+00:00"
         ]
       },
       {
@@ -261,7 +280,7 @@
         "label": "Doc Index JSON",
         "path": "switchboard/evidence/doc-index.json",
         "enabled": true,
-        "generated_at": "2026-05-05T07:29:14+00:00",
+        "generated_at": "2026-05-10T05:16:10+00:00",
         "generated_from": "switchboard/local/tasks-completed.md",
         "contributor_timestamps": [
           "2026-04-06T15:30:38+00:00",
@@ -272,7 +291,8 @@
           "2026-05-01T05:57:30Z",
           "2026-05-03T04:10:18Z",
           "2026-05-05T07:01:00Z",
-          "2026-05-05T07:24:34Z"
+          "2026-05-05T07:24:34Z",
+          "2026-05-10T04:58:42+00:00"
         ]
       }
     ]
@@ -285,20 +305,5 @@
     "scope_snapshot": "switchboard/evidence/scope.snapshot.json",
     "update_gate": "switchboard/evidence/update-gate.json"
   },
-  "updated_at": "2026-05-05T07:29:14+00:00",
-  "agent_contract": {
-    "version": "2026-04-29",
-    "files": {
-      "agent_contract_md": "written",
-      "agent_contract_json": "written",
-      "AGENTS.md": "written",
-      "CLAUDE.md": "written",
-      "GEMINI.md": "written",
-      "QWEN.md": "written",
-      ".opencode/agents/switchboard.md": "written",
-      ".gemini/settings.json": "written",
-      ".qwen/settings.json": "written",
-      "opencode.json": "written"
-    }
-  }
+  "updated_at": "2026-05-10T05:16:10+00:00"
 }

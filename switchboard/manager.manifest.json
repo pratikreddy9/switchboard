@@ -8,11 +8,11 @@
       "root_id": "adaptive_learning",
       "project_root": "/Users/p/Desktop/work/adaptivelearning",
       "service_id": "adaptive_learning",
-      "display_name": "Adaptive Learning",
+      "display_name": "Adaptive Testing",
       "role": "minion",
       "enabled": true,
-      "last_seen_version": "1.12.4",
-      "manifest_updated_at": "2026-05-05T07:29:14+00:00",
+      "last_seen_version": "1.12.5",
+      "manifest_updated_at": "2026-05-10T05:06:04+00:00",
       "verify_status": "ok",
       "design_principles": {
         "global": [
@@ -37,7 +37,7 @@
           "Verify with observable checks."
         ]
       },
-      "registered_at": "2026-05-05T07:29:38+00:00"
+      "registered_at": "2026-05-10T05:16:11+00:00"
     },
     {
       "root_id": "dashboard_core",
@@ -46,8 +46,8 @@
       "display_name": "switchboard",
       "role": "core",
       "enabled": true,
-      "last_seen_version": "1.12.4",
-      "manifest_updated_at": "2026-05-05T07:29:14+00:00",
+      "last_seen_version": "1.12.5",
+      "manifest_updated_at": "2026-05-10T05:16:10+00:00",
       "verify_status": "ok",
       "design_principles": {
         "global": [
@@ -72,7 +72,7 @@
           "Verify with observable checks."
         ]
       },
-      "registered_at": "2026-05-05T07:29:38+00:00"
+      "registered_at": "2026-05-10T05:16:11+00:00"
     },
     {
       "root_id": "finance",
@@ -81,8 +81,8 @@
       "display_name": "financedash",
       "role": "minion",
       "enabled": true,
-      "last_seen_version": "1.12.4",
-      "manifest_updated_at": "2026-05-05T07:29:14+00:00",
+      "last_seen_version": "1.12.5",
+      "manifest_updated_at": "2026-05-10T05:06:04+00:00",
       "verify_status": "ok",
       "design_principles": {
         "global": [
@@ -107,7 +107,7 @@
           "Verify with observable checks."
         ]
       },
-      "registered_at": "2026-05-05T07:29:38+00:00"
+      "registered_at": "2026-05-10T05:16:11+00:00"
     },
     {
       "root_id": "lambdalogger",
@@ -116,8 +116,8 @@
       "display_name": "lambdalogger",
       "role": "minion",
       "enabled": true,
-      "last_seen_version": "1.12.4",
-      "manifest_updated_at": "2026-05-05T07:29:14+00:00",
+      "last_seen_version": "1.12.5",
+      "manifest_updated_at": "2026-05-10T05:14:00+00:00",
       "verify_status": "ok",
       "design_principles": {
         "global": [
@@ -142,7 +142,7 @@
           "Verify with observable checks."
         ]
       },
-      "registered_at": "2026-05-05T07:29:38+00:00"
+      "registered_at": "2026-05-10T05:16:11+00:00"
     },
     {
       "root_id": "lambdascripts",
@@ -151,8 +151,8 @@
       "display_name": "lambdascripts",
       "role": "minion",
       "enabled": true,
-      "last_seen_version": "1.12.4",
-      "manifest_updated_at": "2026-05-05T07:29:14+00:00",
+      "last_seen_version": "1.12.5",
+      "manifest_updated_at": "2026-05-10T05:06:04+00:00",
       "verify_status": "ok",
       "design_principles": {
         "global": [
@@ -177,7 +177,7 @@
           "Verify with observable checks."
         ]
       },
-      "registered_at": "2026-05-05T07:29:38+00:00"
+      "registered_at": "2026-05-10T05:16:11+00:00"
     },
     {
       "root_id": "syspriv",
@@ -186,8 +186,8 @@
       "display_name": "sys_docs",
       "role": "minion",
       "enabled": true,
-      "last_seen_version": "1.12.4",
-      "manifest_updated_at": "2026-05-05T07:29:15+00:00",
+      "last_seen_version": "1.12.5",
+      "manifest_updated_at": "2026-05-10T05:06:04+00:00",
       "verify_status": "ok",
       "design_principles": {
         "global": [
@@ -212,7 +212,7 @@
           "Verify with observable checks."
         ]
       },
-      "registered_at": "2026-05-05T07:29:38+00:00"
+      "registered_at": "2026-05-10T05:16:11+00:00"
     },
     {
       "root_id": "unionbank_service",
@@ -221,8 +221,8 @@
       "display_name": "Union Bank Service",
       "role": "minion",
       "enabled": true,
-      "last_seen_version": "1.12.4",
-      "manifest_updated_at": "2026-05-05T07:29:15+00:00",
+      "last_seen_version": "1.12.5",
+      "manifest_updated_at": "2026-05-10T05:06:04+00:00",
       "verify_status": "ok",
       "design_principles": {
         "global": [
@@ -247,7 +247,7 @@
           "Verify with observable checks."
         ]
       },
-      "registered_at": "2026-05-05T07:29:38+00:00"
+      "registered_at": "2026-05-10T05:16:11+00:00"
     }
   ],
   "design_principles": {
@@ -273,5 +273,5 @@
       "Verify with observable checks."
     ]
   },
-  "updated_at": "2026-05-05T07:29:38+00:00"
+  "updated_at": "2026-05-10T05:16:11+00:00"
 }

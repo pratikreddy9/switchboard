@@ -567,6 +567,7 @@ class DiscoveryTreeRequest(BaseModel):
 
 class PullBundleRequest(BaseModel):
     server_id: str | None = None
+    location_id: str | None = None
     runtime_password: str | None = None
     extra_includes: list[ScopeEntry] = Field(default_factory=list)
     extra_excludes: list[str] = Field(default_factory=list)

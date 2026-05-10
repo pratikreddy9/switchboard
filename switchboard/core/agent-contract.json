@@ -2,6 +2,11 @@
   "version": "2026-04-29",
   "service_id": "switch",
   "display_name": "switchboard",
+  "mode": "local",
+  "inherited_from": "",
+  "enabled_entrypoints": [
+    "agents"
+  ],
   "supported_agents": [
     "codex",
     "claude-code",

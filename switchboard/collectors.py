@@ -1221,13 +1221,6 @@ class CollectionCoordinator:
                 request.include_scope_snapshot
                 and scope_snapshot is not None
                 and scope_snapshot.get("scope_entries")
-                and (
-                    scope_snapshot.get("scope_updates")
-                    or any(
-                        entry.get("source") not in {"node_manifest", "seeded"}
-                        for entry in scope_snapshot.get("scope_entries", [])
-                    )
-                )
             )
             scope_entries = (
                 self._normalize_imported_scope_entries(scope_snapshot["scope_entries"])
@@ -1382,7 +1375,14 @@ class CollectionCoordinator:
             if lock_error is not None:
                 return lock_error
             service = self.manifests.get_service(service_id)
-            location = self._select_location(service, request.server_id)
+            preflight = self.pull_bundle_preflight(service_id, request)
+            if preflight.get("status") != "ok":
+                return {
+                    "status": preflight.get("status", "partial"),
+                    "message": preflight.get("message", "Pull bundle preflight failed."),
+                    "preflight": preflight,
+                }
+            location = self._select_location(service, request.server_id, request.location_id)
             if location is None:
                 return {"status": "path_missing", "message": "No service location available."}
             server_id = location.server_id
@@ -1476,10 +1476,111 @@ class CollectionCoordinator:
                 "files": copied_files,
                 "repo_metadata": repo_metadata,
                 "skipped_entries": skipped_entries,
+                "preflight": preflight,
             }
+
+    def pull_bundle_preflight(self, service_id: str, request: PullBundleRequest) -> dict[str, Any]:
+        service = self.manifests.get_service(service_id)
+        explicit_location = bool(request.location_id or request.server_id)
+        if len(service.locations) > 1 and not explicit_location:
+            return {
+                "status": "partial",
+                "message": "Choose a source location before creating a pull bundle for a multi-location service.",
+                "service_id": service_id,
+                "location_required": True,
+                "locations": [item.model_dump(mode="json") for item in service.locations],
+            }
+        location = self._select_location(service, request.server_id, request.location_id)
+        if location is None:
+            return {"status": "path_missing", "message": "No service location available.", "service_id": service_id}
+        server = self.manifests.resolve_server(
+            location.server_id,
+            {location.server_id: request.runtime_password} if request.runtime_password else {},
+        )
+        saved_scope = [entry for entry in service.scope_entries if entry.enabled and entry.kind != "exclude" and entry.path.startswith(location.root)]
+        extra_scope = [entry for entry in request.extra_includes if entry.enabled and entry.kind != "exclude"]
+        exclude_entries = [entry for entry in service.scope_entries if entry.enabled and entry.kind == "exclude"]
+        runtime_state = self.snapshots.get_service_runtime_state(service_id)
+        node_sync = [
+            entry for entry in runtime_state.get("node_sync", [])
+            if entry.get("location_id") == location.location_id
+        ]
+        latest_sync = node_sync[0] if node_sync else {}
+        authority = self._bundle_authority_context(service, location, server)
+        suspicious = [
+            {
+                "path": entry.path,
+                "kind": entry.kind,
+                "reason": "unsafe_pull_scope",
+            }
+            for entry in [*saved_scope, *extra_scope]
+            if self._bundle_scope_path_is_suspicious(entry.path, entry.kind)
+        ]
+        blocked_reasons: list[str] = []
+        if not saved_scope and not extra_scope:
+            blocked_reasons.append("No enabled include scope for this location.")
+        if suspicious:
+            blocked_reasons.append("Enabled pull scope includes unsafe paths.")
+        if server.connection_type == "ssh" and latest_sync.get("direction") != "from_node":
+            blocked_reasons.append("Remote bundles require a fresh Sync From Node so node-local scope is the authority.")
+        status = "ok" if not blocked_reasons else "partial"
+        return {
+            "status": status,
+            "message": "Pull bundle scope is ready." if status == "ok" else " ".join(blocked_reasons),
+            "service_id": service_id,
+            "server_id": location.server_id,
+            "location_id": location.location_id,
+            "root": location.root,
+            "connection_type": server.connection_type,
+            "source_authority": authority,
+            "node_local_scope_timestamp": latest_sync.get("timestamp", "") if latest_sync.get("direction") == "from_node" else "",
+            "control_center_scope_timestamp": runtime_state.get("generated", "") or "",
+            "include_count": len(saved_scope) + len(extra_scope),
+            "saved_include_count": len(saved_scope),
+            "extra_include_count": len(extra_scope),
+            "exclude_count": len(exclude_entries) + len(request.extra_excludes),
+            "suspicious_entries": suspicious,
+            "blocked_reasons": blocked_reasons,
+            "locations": [item.model_dump(mode="json") for item in service.locations],
+        }
 
     def get_node_viewer(self, service_id: str) -> dict[str, Any]:
         return {"service_id": service_id, "locations": self.snapshots.get_service_node_viewer(service_id)}
+
+    def export_palimpsest_state(self) -> dict[str, Any]:
+        services = self.manifests.load_services()
+        return {
+            "generated": utc_now_iso(),
+            "format": "switchboard-palimpsest-state",
+            "redaction": {
+                "secrets": "excluded",
+                "env_files": "excluded",
+                "passwords": "excluded",
+                "venvs": "excluded",
+                "logs": "excluded",
+            },
+            "workspaces": [item.model_dump(mode="json") for item in self.manifests.load_workspaces()],
+            "servers": [
+                {
+                    **item.model_dump(mode="json"),
+                    "password": None,
+                }
+                for item in self.manifests.load_servers()
+            ],
+            "services": [item.model_dump(mode="json") for item in services],
+            "projects": [item.model_dump(mode="json") for item in self.manifests.load_projects()],
+            "project_environments": [item.model_dump(mode="json") for item in self.manifests.load_project_environments()],
+            "api_flows": [item.model_dump(mode="json") for item in self.manifests.load_api_flows()],
+            "runtime_state": {
+                service.service_id: {
+                    "node_sync": self.snapshots.get_service_runtime_state(service.service_id).get("node_sync", []),
+                    "node_viewer": self.snapshots.get_service_node_viewer(service.service_id),
+                    "task_ledger": self.snapshots.get_service_task_ledger(service.service_id),
+                    "pull_bundles": self.snapshots.list_pull_bundles(service.service_id),
+                }
+                for service in services
+            },
+        }
 
     def _project_environment_view(
         self,
@@ -3258,6 +3359,38 @@ class CollectionCoordinator:
             "updated_at": latest_sync.get("timestamp", ""),
             "note": note,
         }
+
+    def _bundle_scope_path_is_suspicious(self, path: str, kind: str) -> bool:
+        lowered = path.replace("\\", "/").lower()
+        blocked_tokens = (
+            "/.git/",
+            "/.venv/",
+            "/venv/",
+            "/node_modules/",
+            "/__pycache__/",
+            "/dist/",
+            "/build/",
+            "/cache/",
+            "/caches/",
+            "/runtime/",
+            "/logs/",
+            "/log/",
+            "/switchboard/core/",
+            "/switchboard/manager/archives/",
+            "/switchboard/manager/reports/",
+            "/switchboard/manager/runtime/",
+            "/switchboard/static/",
+            ".env",
+            "secret",
+            "password",
+            "credential",
+            ".pem",
+            ".key",
+            "id_rsa",
+        )
+        if kind == "log":
+            return True
+        return any(token in lowered or lowered.endswith(token.strip("/")) for token in blocked_tokens)
 
     def _bundle_dependency_context(self, service: ServiceManifest, copied_files: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         ledger = self.snapshots.get_service_task_ledger(service.service_id)

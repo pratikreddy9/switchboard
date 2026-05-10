@@ -52,7 +52,7 @@ SWITCHBOARD_SERVER_ZAPP_TEST_114_PASSWORD=
 
 ## 5. Check Manifest Definitions
 
-Current `v0.1.x` behavior:
+Current behavior:
 
 - servers are defined in `switchboard/manifests/servers.json`
 - workspaces are defined in `switchboard/manifests/workspaces.json`
@@ -130,10 +130,10 @@ The control center should assume node-side agents normally edit only:
 switchboard/local/tasks-completed.md
 ```
 
-and then run:
+and then run the canonical manager update path:
 
 ```bash
-switchboard node snapshot --project-root <path>
+switchboard node normalize-root --manager-root <manager-root> --project-root <path>
 ```
 
-That is how derived docs and evidence stay aligned in `v0.1.7`.
+That is how derived docs, evidence, scope, verify status, and manager state stay aligned.
