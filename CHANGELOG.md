@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.12.4
+
+- Added manager-wide normalization so all registered roots can refresh manifests, snapshots, verification, and safe archive from one command.
+- Clarified manager-owned service cards so they show manager version separately from stale root manifest version.
+
+## 1.12.3
+
+- Added `switchboard node normalize-root` as the canonical manager update gateway.
+- Routed local node actions through manager registration, snapshot, verify, and safe archive.
+- Blocked remote service-level node deploy, upgrade, and restart actions in favor of remote manager workflows.
+- Updated Control Center node-action labels and previews for the one-port manager model.
+
+## 1.12.2
+
+- changed the service detail page to treat root project docs as tracked project files even when framework writes are disabled for them
+- changed the project snapshot to prefer real project context over framework bootstrap/maintenance entries when both exist in the task ledger
+- clarified framework doc ownership in the UI so `managed_docs` only means write permission, not whether a project doc exists
+- changed node release checks and viewer metadata to compare exact GitHub release asset identity, not just the semver string
+- pulled project-facing root docs from node doc indexes into control-center scope suggestions while excluding Switchboard overhead paths
+
+## 1.12.1
+
+- fixed self-conflicting control-center action locks that made `sync-from-node` and pull bundles report themselves as already running
+- changed action-lock API conflicts to return HTTP `409` instead of a misleading success response
+- made runtime-cache writes atomic so lock polling does not intermittently fail with JSON decode errors under concurrent reads and writes
+
 ## 0.1.7
 
 - made `switchboard/local/tasks-completed.md` the single canonical node update file for normal agent work

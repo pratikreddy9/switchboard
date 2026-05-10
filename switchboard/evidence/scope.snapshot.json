@@ -1,0 +1,702 @@
+{
+  "generated": "2026-05-05T07:29:14+00:00",
+  "service_id": "switch",
+  "project_root": "/Users/p/Desktop/dashboard",
+  "scope_entries": [
+    {
+      "kind": "repo",
+      "path_type": "dir",
+      "path": "/Users/p/Desktop/dashboard",
+      "enabled": true,
+      "source": "tasks_completed"
+    },
+    {
+      "kind": "doc",
+      "path_type": "dir",
+      "path": "/Users/p/Desktop/dashboard/documentation",
+      "enabled": true,
+      "source": "tasks_completed"
+    },
+    {
+      "kind": "doc",
+      "path_type": "dir",
+      "path": "/Users/p/Desktop/dashboard/src",
+      "enabled": true,
+      "source": "tasks_completed"
+    },
+    {
+      "kind": "doc",
+      "path_type": "dir",
+      "path": "/Users/p/Desktop/dashboard/switchboard",
+      "enabled": true,
+      "source": "tasks_completed"
+    },
+    {
+      "kind": "doc",
+      "path_type": "dir",
+      "path": "/Users/p/Desktop/dashboard/tests_backend",
+      "enabled": true,
+      "source": "tasks_completed"
+    },
+    {
+      "kind": "doc",
+      "path_type": "file",
+      "path": "/Users/p/Desktop/dashboard/README.md",
+      "enabled": true,
+      "source": "tasks_completed"
+    },
+    {
+      "kind": "doc",
+      "path_type": "file",
+      "path": "/Users/p/Desktop/dashboard/CHANGELOG.md",
+      "enabled": true,
+      "source": "tasks_completed"
+    },
+    {
+      "kind": "doc",
+      "path_type": "file",
+      "path": "/Users/p/Desktop/dashboard/package.json",
+      "enabled": true,
+      "source": "tasks_completed"
+    },
+    {
+      "kind": "doc",
+      "path_type": "file",
+      "path": "/Users/p/Desktop/dashboard/package-lock.json",
+      "enabled": true,
+      "source": "tasks_completed"
+    },
+    {
+      "kind": "doc",
+      "path_type": "file",
+      "path": "/Users/p/Desktop/dashboard/pyproject.toml",
+      "enabled": true,
+      "source": "tasks_completed"
+    },
+    {
+      "kind": "exclude",
+      "path_type": "dir",
+      "path": "/Users/p/Desktop/dashboard/.git",
+      "enabled": true,
+      "source": "tasks_completed"
+    },
+    {
+      "kind": "exclude",
+      "path_type": "dir",
+      "path": "/Users/p/Desktop/dashboard/.venv",
+      "enabled": true,
+      "source": "tasks_completed"
+    },
+    {
+      "kind": "exclude",
+      "path_type": "dir",
+      "path": "/Users/p/Desktop/dashboard/build",
+      "enabled": true,
+      "source": "tasks_completed"
+    },
+    {
+      "kind": "exclude",
+      "path_type": "dir",
+      "path": "/Users/p/Desktop/dashboard/dist",
+      "enabled": true,
+      "source": "tasks_completed"
+    },
+    {
+      "kind": "exclude",
+      "path_type": "dir",
+      "path": "/Users/p/Desktop/dashboard/downloads",
+      "enabled": true,
+      "source": "tasks_completed"
+    },
+    {
+      "kind": "exclude",
+      "path_type": "dir",
+      "path": "/Users/p/Desktop/dashboard/logs",
+      "enabled": true,
+      "source": "tasks_completed"
+    },
+    {
+      "kind": "exclude",
+      "path_type": "dir",
+      "path": "/Users/p/Desktop/dashboard/node_modules",
+      "enabled": true,
+      "source": "tasks_completed"
+    },
+    {
+      "kind": "exclude",
+      "path_type": "dir",
+      "path": "/Users/p/Desktop/dashboard/release",
+      "enabled": true,
+      "source": "tasks_completed"
+    },
+    {
+      "kind": "exclude",
+      "path_type": "dir",
+      "path": "/Users/p/Desktop/dashboard/state",
+      "enabled": true,
+      "source": "tasks_completed"
+    }
+  ],
+  "scope_updates": [
+    {
+      "timestamp": "2026-04-29T08:57:34Z",
+      "title": "Add Switchboard agent update gate",
+      "summary": "Added the shared agent contract and verify-update gate so Switchboard updates require read-back, scope check, snapshot, and verification.",
+      "changed_paths": [
+        "switchboard/node.py",
+        "switchboard/cli.py",
+        "tests_backend/test_node_mode.py",
+        "documentation/switchboard-roadmap.md",
+        "switchboard/local/tasks-completed.md"
+      ],
+      "scope_entries": [
+        {
+          "kind": "repo",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/docs",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/documentation",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/scripts",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/src",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/switchboard",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/tests",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/tests_backend",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/README.md",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/CHANGELOG.md",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/MANIFEST.in",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/package-lock.json",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/package.json",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/pyproject.toml",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/tsconfig.json",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/tsconfig.test.json",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/.git",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/.venv",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/.claude",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/.npm-cache",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/.pytest_cache",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/build",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/dist",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/downloads",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/logs",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/node_modules",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/release",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/state",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/switchboard.egg-info",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/.DS_Store",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/.env",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/.npmrc",
+          "enabled": true,
+          "source": "tasks_completed"
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-05-05T07:01:00Z",
+      "title": "Release manager normalization path",
+      "summary": "Converted Control Center node actions to the manager-owned normalize path and prepared the 1.12.3 Switchboard release.",
+      "changed_paths": [
+        "switchboard/node.py",
+        "switchboard/cli.py",
+        "switchboard/collectors.py",
+        "switchboard/models.py",
+        "switchboard/local/tasks-completed.md",
+        "switchboard/evidence/update-gate.json",
+        "switchboard/manager.manifest.json",
+        "switchboard/manifests/services.json",
+        "switchboard/manifests/workspaces.json",
+        "switchboard/manager/reports/20260505-071500-normalization-release/postflight.md",
+        "switchboard/manager/reports/20260505-071500-normalization-release/handoff-47.md",
+        "src/pages/ServiceDetailPage.tsx",
+        "src/components/ConfirmationModal.tsx",
+        "src/api/client.ts",
+        "src/types/switchboard.ts",
+        "tests_backend/test_node_mode.py",
+        "tests_backend/test_runtime_and_node_sync.py",
+        "tests_backend/test_backend_regressions.py",
+        "README.md",
+        "CHANGELOG.md",
+        "pyproject.toml",
+        "package.json",
+        "package-lock.json"
+      ],
+      "scope_entries": [
+        {
+          "kind": "repo",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/documentation",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/src",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/switchboard",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/tests_backend",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/README.md",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/CHANGELOG.md",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/package.json",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/package-lock.json",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/pyproject.toml",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/.git",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/.venv",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/build",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/dist",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/downloads",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/logs",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/node_modules",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/release",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/state",
+          "enabled": true,
+          "source": "tasks_completed"
+        }
+      ]
+    },
+    {
+      "timestamp": "2026-05-05T07:24:34Z",
+      "title": "Release manager-wide normalization",
+      "summary": "Added the 1.12.4 manager-wide normalization command and clarified manager-owned version display.",
+      "changed_paths": [
+        "switchboard/node.py",
+        "switchboard/cli.py",
+        "switchboard/collectors.py",
+        "switchboard/models.py",
+        "switchboard/local/tasks-completed.md",
+        "src/components/ServiceCard.tsx",
+        "src/pages/ServiceDetailPage.tsx",
+        "src/api/client.ts",
+        "src/types/switchboard.ts",
+        "tests_backend/test_node_mode.py",
+        "README.md",
+        "CHANGELOG.md",
+        "pyproject.toml",
+        "package.json",
+        "package-lock.json"
+      ],
+      "scope_entries": [
+        {
+          "kind": "repo",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/documentation",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/src",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/switchboard",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/tests_backend",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/README.md",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/CHANGELOG.md",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/package.json",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/package-lock.json",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "doc",
+          "path_type": "file",
+          "path": "/Users/p/Desktop/dashboard/pyproject.toml",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/.git",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/.venv",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/build",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/dist",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/downloads",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/logs",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/node_modules",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/release",
+          "enabled": true,
+          "source": "tasks_completed"
+        },
+        {
+          "kind": "exclude",
+          "path_type": "dir",
+          "path": "/Users/p/Desktop/dashboard/state",
+          "enabled": true,
+          "source": "tasks_completed"
+        }
+      ]
+    }
+  ]
+}

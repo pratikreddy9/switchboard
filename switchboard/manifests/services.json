@@ -1,341 +1,10 @@
 [
   {
-    "service_id": "docgenerator",
-    "workspace_id": "zapp",
-    "display_name": "Document Generator",
-    "kind": "service",
-    "ownership_tier": "owned",
-    "tags": [
-      "docs",
-      "generator",
-      "zapp"
-    ],
-    "favorite_tier": "primary",
-    "locations": [
-      {
-        "location_id": "docgenerator_local",
-        "server_id": "local_mac",
-        "access_mode": "local",
-        "root": "/Users/p/Desktop/work/zapp/docgenerator",
-        "role": "control_source",
-        "is_primary": true,
-        "path_aliases": []
-      },
-      {
-        "location_id": "docgenerator_test",
-        "server_id": "zapp_test_114",
-        "access_mode": "ssh",
-        "root": "/home/zappadmin/python_service/docgenerator",
-        "role": "test_runtime",
-        "is_primary": false,
-        "path_aliases": []
-      },
-      {
-        "location_id": "docgenerator_prod",
-        "server_id": "zapp_prod_253",
-        "access_mode": "ssh",
-        "root": "/home/zappadmin/python_service/docgenerator",
-        "role": "prod_runtime",
-        "is_primary": false,
-        "path_aliases": []
-      }
-    ],
-    "repo_paths": [
-      "/Users/p/Desktop/work/zapp/docgenerator",
-      "/home/zappadmin/python_service/docgenerator"
-    ],
-    "docs_paths": [
-      "/Users/p/Desktop/work/zapp/docgenerator/README.md",
-      "/home/zappadmin/python_service/docgenerator/README.md"
-    ],
-    "log_paths": [
-      "/Users/p/Desktop/work/zapp/docgenerator/docgen.log",
-      "/Users/p/Desktop/work/zapp/docgenerator/server.log",
-      "/Users/p/Desktop/work/zapp/docgenerator/uvicorn.log",
-      "/home/zappadmin/python_service/docgenerator/docgen.log",
-      "/home/zappadmin/python_service/docgenerator/server.log",
-      "/home/zappadmin/python_service/docgenerator/uvicorn.log"
-    ],
-    "allowed_git_pull_paths": [
-      "/Users/p/Desktop/work/zapp/docgenerator",
-      "/home/zappadmin/python_service/docgenerator"
-    ],
-    "exclude_globs": [
-      "generated_docs",
-      "temp_images",
-      "__pycache__"
-    ],
-    "notes": "Initial seed for doc generation runtime and source paths.",
-    "path_aliases": []
-  },
-  {
-    "service_id": "lambdalogger",
-    "workspace_id": "zapp",
-    "display_name": "Lambda Logger",
-    "kind": "service",
-    "ownership_tier": "owned",
-    "tags": [
-      "logger",
-      "fastapi",
-      "zapp"
-    ],
-    "favorite_tier": "primary",
-    "locations": [
-      {
-        "location_id": "lambdalogger_local",
-        "server_id": "local_mac",
-        "access_mode": "local",
-        "root": "/Users/p/Desktop/work/zapp/lambdalogger",
-        "role": "control_source",
-        "is_primary": true,
-        "path_aliases": []
-      },
-      {
-        "location_id": "lambdalogger_test",
-        "server_id": "zapp_test_114",
-        "access_mode": "ssh",
-        "root": "/home/zappadmin/python_service/zapplambdalogger",
-        "role": "test_runtime",
-        "is_primary": false,
-        "path_aliases": []
-      }
-    ],
-    "repo_paths": [
-      "/Users/p/Desktop/work/zapp/lambdalogger",
-      "/home/zappadmin/python_service/zapplambdalogger"
-    ],
-    "docs_paths": [
-      "/Users/p/Desktop/work/zapp/lambdalogger/README.md",
-      "/home/zappadmin/python_service/zapplambdalogger/README.md"
-    ],
-    "log_paths": [
-      "/Users/p/Desktop/work/zapp/lambdalogger/logging_service.out",
-      "/Users/p/Desktop/work/zapp/lambdalogger/runtime/events.log",
-      "/home/zappadmin/python_service/zapplambdalogger/logging_service.out",
-      "/home/zappadmin/python_service/zapplambdalogger/runtime/events.log"
-    ],
-    "allowed_git_pull_paths": [
-      "/Users/p/Desktop/work/zapp/lambdalogger",
-      "/home/zappadmin/python_service/zapplambdalogger"
-    ],
-    "exclude_globs": [
-      "runtime",
-      "__pycache__"
-    ],
-    "notes": "Logger lane for the ZAPP umbrella.",
-    "path_aliases": []
-  },
-  {
-    "service_id": "e",
-    "workspace_id": "pesu",
-    "display_name": "emailagent",
-    "kind": "service",
-    "ownership_tier": "owned",
-    "tags": [],
-    "favorite_tier": "none",
-    "locations": [
-      {
-        "location_id": "e-pesu_dev_47-primary",
-        "server_id": "pesu_dev_47",
-        "access_mode": "ssh",
-        "root": "/home/pesu/emailagent",
-        "role": "primary",
-        "is_primary": true,
-        "path_aliases": []
-      }
-    ],
-    "repo_paths": [
-      "/home/pesu/emailagent"
-    ],
-    "docs_paths": [
-      "/home/pesu/emailagent/documentation",
-      "/home/pesu/emailagent/.env",
-      "/home/pesu/emailagent/.env.test",
-      "/home/pesu/emailagent/.gitignore",
-      "/home/pesu/emailagent/AGENTS.md",
-      "/home/pesu/emailagent/categories.csv",
-      "/home/pesu/emailagent/emailagent.pid",
-      "/home/pesu/emailagent/PLAN.md",
-      "/home/pesu/emailagent/README copy.md",
-      "/home/pesu/emailagent/README.md",
-      "/home/pesu/emailagent/requirements.txt",
-      "/home/pesu/emailagent/Screenshot 2026-03-31 at 6.16.30\u202fPM.png",
-      "/home/pesu/emailagent/Screenshot 2026-03-31 at 9.54.10\u202fAM.png"
-    ],
-    "log_paths": [
-      "/home/pesu/emailagent/logs"
-    ],
-    "allowed_git_pull_paths": [
-      "/home/pesu/emailagent"
-    ],
-    "exclude_globs": [
-      "/home/pesu/emailagent/.git",
-      "/home/pesu/emailagent/platform/node_modules",
-      "/home/pesu/emailagent/venv"
-    ],
-    "scope_entries": [
-      {
-        "entry_id": "repo-f35004b712cc",
-        "kind": "repo",
-        "path": "/home/pesu/emailagent",
-        "path_type": "dir",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "exclude-8d1232e1c679",
-        "kind": "exclude",
-        "path": "/home/pesu/emailagent/.git",
-        "path_type": "dir",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "doc-7323e2a2222d",
-        "kind": "doc",
-        "path": "/home/pesu/emailagent/documentation",
-        "path_type": "dir",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "log-495d1218fb8a",
-        "kind": "log",
-        "path": "/home/pesu/emailagent/logs",
-        "path_type": "dir",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "exclude-11125df6de17",
-        "kind": "exclude",
-        "path": "/home/pesu/emailagent/platform/node_modules",
-        "path_type": "dir",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "exclude-98a7680e95e3",
-        "kind": "exclude",
-        "path": "/home/pesu/emailagent/venv",
-        "path_type": "dir",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "doc-5bf68682d8ed",
-        "kind": "doc",
-        "path": "/home/pesu/emailagent/.env",
-        "path_type": "file",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "doc-d89f725f51d4",
-        "kind": "doc",
-        "path": "/home/pesu/emailagent/.env.test",
-        "path_type": "file",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "doc-4359941f9a91",
-        "kind": "doc",
-        "path": "/home/pesu/emailagent/.gitignore",
-        "path_type": "file",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "doc-161d4dc2a3ea",
-        "kind": "doc",
-        "path": "/home/pesu/emailagent/AGENTS.md",
-        "path_type": "file",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "doc-5ba64220d648",
-        "kind": "doc",
-        "path": "/home/pesu/emailagent/categories.csv",
-        "path_type": "file",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "doc-08434510cc7d",
-        "kind": "doc",
-        "path": "/home/pesu/emailagent/emailagent.pid",
-        "path_type": "file",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "doc-ef949061b9a6",
-        "kind": "doc",
-        "path": "/home/pesu/emailagent/PLAN.md",
-        "path_type": "file",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "doc-e0242131ff0a",
-        "kind": "doc",
-        "path": "/home/pesu/emailagent/README copy.md",
-        "path_type": "file",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "doc-dcd63147ded4",
-        "kind": "doc",
-        "path": "/home/pesu/emailagent/README.md",
-        "path_type": "file",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "doc-4343659176f3",
-        "kind": "doc",
-        "path": "/home/pesu/emailagent/requirements.txt",
-        "path_type": "file",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "doc-8cd418fe9c8b",
-        "kind": "doc",
-        "path": "/home/pesu/emailagent/Screenshot 2026-03-31 at 6.16.30\u202fPM.png",
-        "path_type": "file",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "doc-fb8b752a797e",
-        "kind": "doc",
-        "path": "/home/pesu/emailagent/Screenshot 2026-03-31 at 9.54.10\u202fAM.png",
-        "path_type": "file",
-        "source": "user_added",
-        "enabled": true
-      }
-    ],
-    "repo_policies": [
-      {
-        "repo_path": "/home/pesu/emailagent",
-        "push_mode": "allowed",
-        "safety_profile": "generic_python",
-        "allowed_branches": [],
-        "allowed_remotes": []
-      }
-    ],
-    "notes": "",
-    "path_aliases": []
-  },
-  {
     "service_id": "aichat",
     "workspace_id": "pesu",
     "display_name": "aichat",
     "kind": "service",
+    "execution_mode": "networked",
     "ownership_tier": "owned",
     "tags": [],
     "favorite_tier": "none",
@@ -347,243 +16,245 @@
         "root": "/home/pesu/aichat",
         "role": "primary",
         "is_primary": true,
-        "path_aliases": []
+        "path_aliases": [],
+        "runtime": {
+          "expected_ports": [
+            8505,
+            8506
+          ],
+          "healthcheck_command": "curl -sf http://127.0.0.1:8506/health",
+          "run_command_hint": "cd /home/pesu/aichat && nohup ./project/venv/bin/python -m uvicorn backend.main_v2:app --host 0.0.0.0 --port 8506 --reload >> backend.log 2>&1 &",
+          "monitoring_mode": "manual",
+          "notes": "real app traffic uses 8506 and 8505 only; Switchboard 8702 is secondary tracking metadata."
+        }
       }
     ],
-    "repo_paths": [
-      "/home/pesu/aichat"
-    ],
+    "repo_paths": [],
     "docs_paths": [
-      "/home/pesu/aichat/backend/documentation",
-      "/home/pesu/aichat/backend/.env",
-      "/home/pesu/aichat/backend/backend_8506.log2",
-      "/home/pesu/aichat/backend/Pesu logo.png",
-      "/home/pesu/aichat/backend/pesu_logo_main.png",
-      "/home/pesu/aichat/backend/README.md",
-      "/home/pesu/aichat/backend/requirements.txt",
-      "/home/pesu/aichat/documentation",
-      "/home/pesu/aichat/.env"
+      "/home/pesu/aichat/backend/documentation/RAG_QUALITY_HANDOFF_2026-04-25.md",
+      "/home/pesu/aichat/backend/documentation/RAG_PROMPT_HELPER_2026-04-25.md",
+      "/home/pesu/aichat/backend/documentation/CHANGELOG_2026-04-24.md",
+      "/home/pesu/aichat/README.md",
+      "/home/pesu/aichat/API.md",
+      "/home/pesu/aichat/CHANGELOG.md"
     ],
-    "log_paths": [
-      "/home/pesu/aichat/backend/server_v2.log",
-      "/home/pesu/aichat/backend/streamlit_8505.log",
-      "/home/pesu/aichat/backend.log",
-      "/home/pesu/aichat/backend_8506.log"
-    ],
-    "allowed_git_pull_paths": [
-      "/home/pesu/aichat"
-    ],
-    "exclude_globs": [
-      "/home/pesu/aichat/backend/__pycache__",
-      "/home/pesu/aichat/project",
-      "/home/pesu/aichat/storage"
-    ],
+    "log_paths": [],
+    "allowed_git_pull_paths": [],
+    "exclude_globs": [],
     "scope_entries": [
       {
-        "entry_id": "repo-a23b583e270d",
-        "kind": "repo",
-        "path": "/home/pesu/aichat",
-        "path_type": "dir",
-        "source": "user_added",
+        "entry_id": "code-3d92471bd887",
+        "kind": "code",
+        "path": "/home/pesu/aichat/backend/llm_agent/agent_multi.py",
+        "path_type": "file",
+        "source": "tasks_completed",
         "enabled": true
       },
       {
-        "entry_id": "exclude-1065d5afaa12",
-        "kind": "exclude",
-        "path": "/home/pesu/aichat/backend/__pycache__",
-        "path_type": "dir",
-        "source": "user_added",
+        "entry_id": "code-612b04f52bf8",
+        "kind": "code",
+        "path": "/home/pesu/aichat/backend/llm_agent/query_expander.py",
+        "path_type": "file",
+        "source": "tasks_completed",
         "enabled": true
       },
       {
-        "entry_id": "doc-57175235c920",
+        "entry_id": "code-3d303395bc91",
+        "kind": "code",
+        "path": "/home/pesu/aichat/backend/llm_agent/parallel_retrieval.py",
+        "path_type": "file",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-da8b9f7ce4d3",
         "kind": "doc",
-        "path": "/home/pesu/aichat/backend/documentation",
-        "path_type": "dir",
-        "source": "user_added",
+        "path": "/home/pesu/aichat/backend/documentation/RAG_QUALITY_HANDOFF_2026-04-25.md",
+        "path_type": "file",
+        "source": "tasks_completed",
         "enabled": true
       },
       {
-        "entry_id": "doc-99ec44b03104",
+        "entry_id": "doc-364b67e4058d",
         "kind": "doc",
-        "path": "/home/pesu/aichat/backend/.env",
+        "path": "/home/pesu/aichat/backend/documentation/RAG_PROMPT_HELPER_2026-04-25.md",
         "path_type": "file",
-        "source": "user_added",
+        "source": "tasks_completed",
         "enabled": true
       },
       {
-        "entry_id": "doc-1b5b29da2f10",
+        "entry_id": "doc-4a96a90d6958",
         "kind": "doc",
-        "path": "/home/pesu/aichat/backend/backend_8506.log2",
+        "path": "/home/pesu/aichat/backend/documentation/CHANGELOG_2026-04-24.md",
         "path_type": "file",
-        "source": "user_added",
+        "source": "tasks_completed",
         "enabled": true
       },
       {
-        "entry_id": "doc-3a5f2cbd69b4",
+        "entry_id": "doc-841b2e02d375",
         "kind": "doc",
-        "path": "/home/pesu/aichat/backend/Pesu logo.png",
+        "path": "/home/pesu/aichat/README.md",
         "path_type": "file",
-        "source": "user_added",
+        "source": "node_manifest",
         "enabled": true
       },
       {
-        "entry_id": "doc-1340b78cd31b",
+        "entry_id": "doc-e0dd7628d555",
         "kind": "doc",
-        "path": "/home/pesu/aichat/backend/pesu_logo_main.png",
+        "path": "/home/pesu/aichat/API.md",
         "path_type": "file",
-        "source": "user_added",
+        "source": "node_manifest",
         "enabled": true
       },
       {
-        "entry_id": "doc-b506db4bf04e",
+        "entry_id": "doc-4666acf67beb",
         "kind": "doc",
-        "path": "/home/pesu/aichat/backend/README.md",
+        "path": "/home/pesu/aichat/CHANGELOG.md",
         "path_type": "file",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "doc-e55cfa3c77c9",
-        "kind": "doc",
-        "path": "/home/pesu/aichat/backend/requirements.txt",
-        "path_type": "file",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "log-00969d3fb188",
-        "kind": "log",
-        "path": "/home/pesu/aichat/backend/server_v2.log",
-        "path_type": "file",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "log-92fe235a4477",
-        "kind": "log",
-        "path": "/home/pesu/aichat/backend/streamlit_8505.log",
-        "path_type": "file",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "doc-19994bdd393e",
-        "kind": "doc",
-        "path": "/home/pesu/aichat/documentation",
-        "path_type": "dir",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "exclude-ba2e3ca67bf2",
-        "kind": "exclude",
-        "path": "/home/pesu/aichat/project",
-        "path_type": "dir",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "exclude-45ad9a36ecff",
-        "kind": "exclude",
-        "path": "/home/pesu/aichat/storage",
-        "path_type": "dir",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "doc-2f1bd3a560ca",
-        "kind": "doc",
-        "path": "/home/pesu/aichat/.env",
-        "path_type": "file",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "log-582c471d30a3",
-        "kind": "log",
-        "path": "/home/pesu/aichat/backend.log",
-        "path_type": "file",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "log-d13fd533b902",
-        "kind": "log",
-        "path": "/home/pesu/aichat/backend_8506.log",
-        "path_type": "file",
-        "source": "user_added",
+        "source": "node_manifest",
         "enabled": true
       }
     ],
-    "repo_policies": [
+    "managed_docs": [
       {
-        "repo_path": "/home/pesu/aichat",
-        "push_mode": "allowed",
-        "safety_profile": "generic_python",
-        "allowed_branches": [],
-        "allowed_remotes": []
+        "doc_id": "readme",
+        "path": "README.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "api",
+        "path": "API.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "changelog",
+        "path": "CHANGELOG.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "handoff",
+        "path": "switchboard/local/control-center-handoff.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-25T01:36:42+00:00"
+      },
+      {
+        "doc_id": "runbook",
+        "path": "switchboard/local/runbook.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-25T01:36:42+00:00"
+      },
+      {
+        "doc_id": "approach_history",
+        "path": "switchboard/local/approach-history.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-25T01:36:42+00:00"
+      },
+      {
+        "doc_id": "doc_index_md",
+        "path": "switchboard/local/doc-index.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-25T01:36:42+00:00"
+      },
+      {
+        "doc_id": "doc_index_json",
+        "path": "switchboard/evidence/doc-index.json",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-25T01:36:42+00:00"
       }
     ],
-    "notes": "",
+    "repo_policies": [],
+    "notes": "Backend API remains auth protected for many routes. Safe operator checks: /health on 8506 and /_stcore/health on 8505.",
     "path_aliases": []
   },
   {
-    "service_id": "zapplambda",
+    "service_id": "lambdascripts",
     "workspace_id": "zapp",
     "display_name": "lambdascripts",
     "kind": "service",
+    "execution_mode": "lambda",
     "ownership_tier": "owned",
     "tags": [],
     "favorite_tier": "none",
     "locations": [
       {
-        "location_id": "zapplambda-local_mac-primary",
+        "location_id": "lambdascripts-local_mac-primary",
         "server_id": "local_mac",
         "access_mode": "local",
         "root": "/Users/p/Desktop/work/zapp/lambdascripts",
         "role": "primary",
         "is_primary": true,
-        "path_aliases": []
+        "path_aliases": [],
+        "runtime": {
+          "expected_ports": [
+            8010
+          ],
+          "healthcheck_command": "curl http://127.0.0.1:8010/api/health",
+          "run_command_hint": "switchboard node start --project-root /Users/p/Desktop/work/zapp/lambdascripts --host 127.0.0.1 --port 8010",
+          "monitoring_mode": "manual",
+          "notes": "Runtime continues to refer to the local Switchboard node; the Lambda project itself does not expose a local application server from this repo."
+        }
       }
     ],
     "repo_paths": [
-      "/Users/p/Desktop/work/zapp/lambdascripts"
+      "/Users/p/Desktop/work/zapp/lambdascripts/addResumeToZap.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/aiMatchResumesJd.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/fetchjddata.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/fetchresumedata.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/getAIscore.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/getJobDescreptionVector.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/getResumeScoreForJD.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/test_db_verify.py"
     ],
     "docs_paths": [
+      "/Users/p/Desktop/work/zapp/lambdascripts/switchboard",
       "/Users/p/Desktop/work/zapp/lambdascripts/API.md",
       "/Users/p/Desktop/work/zapp/lambdascripts/CHANGELOG.md",
       "/Users/p/Desktop/work/zapp/lambdascripts/README.md"
     ],
     "log_paths": [],
     "allowed_git_pull_paths": [
-      "/Users/p/Desktop/work/zapp/lambdascripts"
+      "/Users/p/Desktop/work/zapp/lambdascripts/addResumeToZap.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/aiMatchResumesJd.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/fetchjddata.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/fetchresumedata.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/getAIscore.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/getJobDescreptionVector.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/getResumeScoreForJD.py",
+      "/Users/p/Desktop/work/zapp/lambdascripts/test_db_verify.py"
     ],
-    "exclude_globs": [
-      "/Users/p/Desktop/work/zapp/lambdascripts/__pycache__",
-      "/Users/p/Desktop/work/zapp/lambdascripts/.DS_Store"
-    ],
+    "exclude_globs": [],
     "scope_entries": [
       {
-        "entry_id": "repo-e7c3f752c827",
+        "entry_id": "doc-7c744d57c8ee",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/switchboard",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-c251a9dbca61",
         "kind": "repo",
-        "path": "/Users/p/Desktop/work/zapp/lambdascripts",
-        "path_type": "dir",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/addResumeToZap.py",
+        "path_type": "file",
         "source": "user_added",
         "enabled": true
       },
       {
-        "entry_id": "exclude-20f53d6c9559",
-        "kind": "exclude",
-        "path": "/Users/p/Desktop/work/zapp/lambdascripts/__pycache__",
-        "path_type": "dir",
-        "source": "user_added",
-        "enabled": true
-      },
-      {
-        "entry_id": "exclude-24b78c8a97d6",
-        "kind": "exclude",
-        "path": "/Users/p/Desktop/work/zapp/lambdascripts/.DS_Store",
+        "entry_id": "repo-3697942a0722",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/aiMatchResumesJd.py",
         "path_type": "file",
         "source": "user_added",
         "enabled": true
@@ -605,9 +276,297 @@
         "enabled": true
       },
       {
+        "entry_id": "repo-4802a8e2f39e",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/fetchjddata.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-555b7663a3e1",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/fetchresumedata.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-e06e20864cc1",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/getAIscore.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-16aecabbdce0",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/getJobDescreptionVector.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-806d936bd555",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/getResumeScoreForJD.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
         "entry_id": "doc-418774b42ae0",
         "kind": "doc",
         "path": "/Users/p/Desktop/work/zapp/lambdascripts/README.md",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-3e64f3124eca",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/work/zapp/lambdascripts/test_db_verify.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      }
+    ],
+    "managed_docs": [
+      {
+        "doc_id": "readme",
+        "path": "README.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "api",
+        "path": "API.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "changelog",
+        "path": "CHANGELOG.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "handoff",
+        "path": "switchboard/local/control-center-handoff.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-07T15:57:53+00:00"
+      },
+      {
+        "doc_id": "runbook",
+        "path": "switchboard/local/runbook.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-07T15:57:53+00:00"
+      },
+      {
+        "doc_id": "approach_history",
+        "path": "switchboard/local/approach-history.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-07T15:57:53+00:00"
+      },
+      {
+        "doc_id": "doc_index_md",
+        "path": "switchboard/local/doc-index.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-07T15:57:53+00:00"
+      },
+      {
+        "doc_id": "doc_index_json",
+        "path": "switchboard/evidence/doc-index.json",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-07T15:57:53+00:00"
+      }
+    ],
+    "repo_policies": [
+      {
+        "repo_path": "/Users/p/Desktop/work/zapp/lambdascripts/addResumeToZap.py",
+        "push_mode": "blocked",
+        "safety_profile": "secret_heavy",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/Users/p/Desktop/work/zapp/lambdascripts/aiMatchResumesJd.py",
+        "push_mode": "blocked",
+        "safety_profile": "secret_heavy",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/Users/p/Desktop/work/zapp/lambdascripts/fetchjddata.py",
+        "push_mode": "blocked",
+        "safety_profile": "secret_heavy",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/Users/p/Desktop/work/zapp/lambdascripts/fetchresumedata.py",
+        "push_mode": "blocked",
+        "safety_profile": "secret_heavy",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/Users/p/Desktop/work/zapp/lambdascripts/getAIscore.py",
+        "push_mode": "blocked",
+        "safety_profile": "secret_heavy",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/Users/p/Desktop/work/zapp/lambdascripts/getJobDescreptionVector.py",
+        "push_mode": "blocked",
+        "safety_profile": "secret_heavy",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/Users/p/Desktop/work/zapp/lambdascripts/getResumeScoreForJD.py",
+        "push_mode": "blocked",
+        "safety_profile": "secret_heavy",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/Users/p/Desktop/work/zapp/lambdascripts/test_db_verify.py",
+        "push_mode": "blocked",
+        "safety_profile": "secret_heavy",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      }
+    ],
+    "notes": "",
+    "path_aliases": []
+  },
+  {
+    "service_id": "lambdalogger",
+    "workspace_id": "zapp",
+    "display_name": "lambdalogger",
+    "kind": "service",
+    "execution_mode": "lambda",
+    "ownership_tier": "owned",
+    "tags": [],
+    "favorite_tier": "none",
+    "locations": [
+      {
+        "location_id": "lambdalogger-local_mac-primary",
+        "server_id": "local_mac",
+        "access_mode": "local",
+        "root": "/Users/p/Desktop/work/zapp/lambdalogger",
+        "role": "primary",
+        "is_primary": true,
+        "path_aliases": [],
+        "runtime": {
+          "expected_ports": [],
+          "healthcheck_command": "curl -s http://148.66.152.114:8001/health",
+          "run_command_hint": "",
+          "monitoring_mode": "manual",
+          "notes": ""
+        }
+      }
+    ],
+    "repo_paths": [
+      "/Users/p/Desktop/work/zapp/lambdalogger/lambda_logging_client.py",
+      "/Users/p/Desktop/work/zapp/lambdalogger/logging_service.py"
+    ],
+    "docs_paths": [
+      "/Users/p/Desktop/work/zapp/lambdalogger/runtime",
+      "/Users/p/Desktop/work/zapp/lambdalogger/zapplambdalogger",
+      "/Users/p/Desktop/work/zapp/lambdalogger/.DS_Store",
+      "/Users/p/Desktop/work/zapp/lambdalogger/logging_service.out",
+      "/Users/p/Desktop/work/zapp/lambdalogger/README.md",
+      "/Users/p/Desktop/work/zapp/lambdalogger/requirements.txt"
+    ],
+    "log_paths": [
+      "/Users/p/Desktop/work/zapp/lambdalogger/zapplambdalogger/logs"
+    ],
+    "allowed_git_pull_paths": [
+      "/Users/p/Desktop/work/zapp/lambdalogger/lambda_logging_client.py",
+      "/Users/p/Desktop/work/zapp/lambdalogger/logging_service.py"
+    ],
+    "exclude_globs": [],
+    "scope_entries": [
+      {
+        "entry_id": "doc-4af5734fb2b0",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/zapp/lambdalogger/runtime",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-c141534c6f76",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/zapp/lambdalogger/zapplambdalogger",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "log-bb38d013cb67",
+        "kind": "log",
+        "path": "/Users/p/Desktop/work/zapp/lambdalogger/zapplambdalogger/logs",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-ed2947292dc4",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/zapp/lambdalogger/.DS_Store",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-6bc4011eb474",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/work/zapp/lambdalogger/lambda_logging_client.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-19dc04d3c97e",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/zapp/lambdalogger/logging_service.out",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-88842ae9137b",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/work/zapp/lambdalogger/logging_service.py",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-9afa2481460b",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/zapp/lambdalogger/README.md",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-2c21e28e9112",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/zapp/lambdalogger/requirements.txt",
         "path_type": "file",
         "source": "user_added",
         "enabled": true
@@ -615,13 +574,2990 @@
     ],
     "repo_policies": [
       {
-        "repo_path": "/Users/p/Desktop/work/zapp/lambdascripts",
+        "repo_path": "/Users/p/Desktop/work/zapp/lambdalogger/lambda_logging_client.py",
+        "push_mode": "blocked",
+        "safety_profile": "secret_heavy",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/Users/p/Desktop/work/zapp/lambdalogger/logging_service.py",
         "push_mode": "blocked",
         "safety_profile": "secret_heavy",
         "allowed_branches": [],
         "allowed_remotes": []
       }
     ],
+    "notes": "",
+    "path_aliases": []
+  },
+  {
+    "service_id": "sys_docs",
+    "workspace_id": "pesu",
+    "display_name": "sys_docs",
+    "kind": "service",
+    "execution_mode": "networked",
+    "ownership_tier": "owned",
+    "tags": [],
+    "favorite_tier": "none",
+    "locations": [
+      {
+        "location_id": "sys_docs-pesu_dev_47-primary",
+        "server_id": "pesu_dev_47",
+        "access_mode": "ssh",
+        "root": "/home/pesu/sys_docs",
+        "role": "primary",
+        "is_primary": true,
+        "path_aliases": [],
+        "runtime": {
+          "expected_ports": [
+            8701,
+            8550
+          ],
+          "healthcheck_command": "curl -sf http://127.0.0.1:8701/api/health",
+          "run_command_hint": "switchboard node start --project-root /home/pesu/sys_docs --port 8701",
+          "monitoring_mode": "manual",
+          "notes": "The node API on 8701 is the local verification surface for this project. The optional dashboard on 8550 is started separately with `bash dashboard/start.sh`."
+        }
+      }
+    ],
+    "repo_paths": [
+      "/home/pesu/sys_docs"
+    ],
+    "docs_paths": [
+      "/home/pesu/sys_docs/dashboard",
+      "/home/pesu/sys_docs/switchboard",
+      "/home/pesu/sys_docs/README.md",
+      "/home/pesu/sys_docs/API.md",
+      "/home/pesu/sys_docs/CHANGELOG.md"
+    ],
+    "log_paths": [
+      "/home/pesu/sys_docs/switchboard/runtime/node.log"
+    ],
+    "allowed_git_pull_paths": [
+      "/home/pesu/sys_docs"
+    ],
+    "exclude_globs": [
+      "/home/pesu/sys_docs/dashboard/.venv"
+    ],
+    "scope_entries": [
+      {
+        "entry_id": "repo-27e02700336a",
+        "kind": "repo",
+        "path": "/home/pesu/sys_docs",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-3869b9fdf935",
+        "kind": "doc",
+        "path": "/home/pesu/sys_docs/dashboard",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-ba73a1a6b5a2",
+        "kind": "doc",
+        "path": "/home/pesu/sys_docs/switchboard",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "log-5d862071822a",
+        "kind": "log",
+        "path": "/home/pesu/sys_docs/switchboard/runtime/node.log",
+        "path_type": "file",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-9feed6bdd997",
+        "kind": "exclude",
+        "path": "/home/pesu/sys_docs/dashboard/.venv",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-8e4377528807",
+        "kind": "doc",
+        "path": "/home/pesu/sys_docs/README.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-dd5903ed6300",
+        "kind": "doc",
+        "path": "/home/pesu/sys_docs/API.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-eb6bbec1375c",
+        "kind": "doc",
+        "path": "/home/pesu/sys_docs/CHANGELOG.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      }
+    ],
+    "managed_docs": [
+      {
+        "doc_id": "readme",
+        "path": "README.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "api",
+        "path": "API.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "changelog",
+        "path": "CHANGELOG.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "handoff",
+        "path": "switchboard/local/control-center-handoff.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-07T07:22:03+00:00"
+      },
+      {
+        "doc_id": "runbook",
+        "path": "switchboard/local/runbook.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-07T07:22:03+00:00"
+      },
+      {
+        "doc_id": "approach_history",
+        "path": "switchboard/local/approach-history.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-07T07:22:03+00:00"
+      },
+      {
+        "doc_id": "doc_index_md",
+        "path": "switchboard/local/doc-index.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-07T07:22:03+00:00"
+      },
+      {
+        "doc_id": "doc_index_json",
+        "path": "switchboard/evidence/doc-index.json",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-07T07:22:03+00:00"
+      }
+    ],
+    "repo_policies": [
+      {
+        "repo_path": "/home/pesu/sys_docs",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      }
+    ],
+    "notes": "Reporting and summary node. Node API is the primary health surface on 8701.",
+    "path_aliases": []
+  },
+  {
+    "service_id": "switch",
+    "workspace_id": "1",
+    "display_name": "switchboard",
+    "kind": "service",
+    "execution_mode": "networked",
+    "ownership_tier": "owned",
+    "tags": [],
+    "favorite_tier": "none",
+    "locations": [
+      {
+        "location_id": "switch-local_mac-primary",
+        "server_id": "local_mac",
+        "access_mode": "local",
+        "root": "/Users/p/Desktop/dashboard",
+        "role": "primary",
+        "is_primary": true,
+        "path_aliases": [],
+        "runtime": {
+          "expected_ports": [
+            8009,
+            5173
+          ],
+          "healthcheck_command": "",
+          "run_command_hint": "",
+          "monitoring_mode": "detect",
+          "notes": ""
+        }
+      }
+    ],
+    "repo_paths": [
+      "/Users/p/Desktop/dashboard"
+    ],
+    "docs_paths": [
+      "/Users/p/Desktop/dashboard/.claude",
+      "/Users/p/Desktop/dashboard/.npm-cache",
+      "/Users/p/Desktop/dashboard/.pytest_cache",
+      "/Users/p/Desktop/dashboard/docs",
+      "/Users/p/Desktop/dashboard/documentation",
+      "/Users/p/Desktop/dashboard/downloads",
+      "/Users/p/Desktop/dashboard/release",
+      "/Users/p/Desktop/dashboard/scripts",
+      "/Users/p/Desktop/dashboard/src",
+      "/Users/p/Desktop/dashboard/state",
+      "/Users/p/Desktop/dashboard/switchboard",
+      "/Users/p/Desktop/dashboard/switchboard.egg-info",
+      "/Users/p/Desktop/dashboard/tests",
+      "/Users/p/Desktop/dashboard/tests_backend",
+      "/Users/p/Desktop/dashboard/.DS_Store",
+      "/Users/p/Desktop/dashboard/.env",
+      "/Users/p/Desktop/dashboard/.env.example",
+      "/Users/p/Desktop/dashboard/.gitignore",
+      "/Users/p/Desktop/dashboard/.npmrc",
+      "/Users/p/Desktop/dashboard/CHANGELOG.md",
+      "/Users/p/Desktop/dashboard/index.html",
+      "/Users/p/Desktop/dashboard/MANIFEST.in",
+      "/Users/p/Desktop/dashboard/package-lock.json",
+      "/Users/p/Desktop/dashboard/package.json",
+      "/Users/p/Desktop/dashboard/pyproject.toml",
+      "/Users/p/Desktop/dashboard/README.md",
+      "/Users/p/Desktop/dashboard/tsconfig.json",
+      "/Users/p/Desktop/dashboard/tsconfig.test.json"
+    ],
+    "log_paths": [
+      "/Users/p/Desktop/dashboard/logs"
+    ],
+    "allowed_git_pull_paths": [
+      "/Users/p/Desktop/dashboard"
+    ],
+    "exclude_globs": [
+      "/Users/p/Desktop/dashboard/.git",
+      "/Users/p/Desktop/dashboard/.venv",
+      "/Users/p/Desktop/dashboard/build",
+      "/Users/p/Desktop/dashboard/dist",
+      "/Users/p/Desktop/dashboard/node_modules"
+    ],
+    "scope_entries": [
+      {
+        "entry_id": "repo-bc5042a30c03",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/dashboard",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-4bb28037cc10",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/.claude",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-33b54dc66223",
+        "kind": "exclude",
+        "path": "/Users/p/Desktop/dashboard/.git",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-3bc401a0fdb4",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/.npm-cache",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-d28a3543c930",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/.pytest_cache",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-2617f833f58c",
+        "kind": "exclude",
+        "path": "/Users/p/Desktop/dashboard/.venv",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-b38746dae479",
+        "kind": "exclude",
+        "path": "/Users/p/Desktop/dashboard/build",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-65beaf372016",
+        "kind": "exclude",
+        "path": "/Users/p/Desktop/dashboard/dist",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-92a0f67dd330",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/docs",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-b2e10a30df3c",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/documentation",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-9711065da48a",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/downloads",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "log-fa974861214f",
+        "kind": "log",
+        "path": "/Users/p/Desktop/dashboard/logs",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-84d67dabe3fc",
+        "kind": "exclude",
+        "path": "/Users/p/Desktop/dashboard/node_modules",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-6dfd131fadf2",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/release",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-e39bd7de3569",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/scripts",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-b674370726f9",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/src",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-8c5f1f46e8fc",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/state",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-1297146fcd47",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/switchboard",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-293b42e12f75",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/switchboard.egg-info",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-b05ca098109b",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/tests",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-573e605a8f0e",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/tests_backend",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-a683ad01ccc5",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/.DS_Store",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-78879a62db90",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/.env",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-0bb7f47ea021",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/.env.example",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-f8d7ee159f4a",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/.gitignore",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-503511533ef1",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/.npmrc",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-27c5a88e7988",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/CHANGELOG.md",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-bbeb8b6c36bd",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/index.html",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-1484c966632d",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/MANIFEST.in",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-8ecc09314615",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/package-lock.json",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-2f6d7f3667c3",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/package.json",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-c60dbd211cd5",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/pyproject.toml",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-1f4cfac10e33",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/README.md",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-3a0459f3fa4d",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/tsconfig.json",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-c0821c808493",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/dashboard/tsconfig.test.json",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      }
+    ],
+    "managed_docs": [
+      {
+        "doc_id": "readme",
+        "path": "README.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "api",
+        "path": "API.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "changelog",
+        "path": "CHANGELOG.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "handoff",
+        "path": "switchboard/local/control-center-handoff.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "runbook",
+        "path": "switchboard/local/runbook.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "approach_history",
+        "path": "switchboard/local/approach-history.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "doc_index_md",
+        "path": "switchboard/local/doc-index.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "doc_index_json",
+        "path": "switchboard/evidence/doc-index.json",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      }
+    ],
+    "repo_policies": [
+      {
+        "repo_path": "/Users/p/Desktop/dashboard",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      }
+    ],
+    "notes": "",
+    "path_aliases": []
+  },
+  {
+    "service_id": "emailagent",
+    "workspace_id": "pesu",
+    "display_name": "emailagent",
+    "kind": "service",
+    "execution_mode": "batch",
+    "ownership_tier": "owned",
+    "tags": [
+      "pesu",
+      ".47"
+    ],
+    "favorite_tier": "none",
+    "locations": [
+      {
+        "location_id": "emailagent-pesu_dev_47-primary",
+        "server_id": "pesu_dev_47",
+        "access_mode": "ssh",
+        "root": "/home/pesu/emailagent",
+        "role": "primary",
+        "is_primary": true,
+        "path_aliases": [],
+        "runtime": {
+          "expected_ports": [
+            8704,
+            8010,
+            8511
+          ],
+          "healthcheck_command": "curl -sf http://127.0.0.1:8704/api/health",
+          "run_command_hint": "cd /home/pesu/emailagent && bash start.sh",
+          "monitoring_mode": "manual",
+          "notes": ""
+        }
+      }
+    ],
+    "repo_paths": [
+      "/home/pesu/emailagent/backend",
+      "/home/pesu/emailagent/config",
+      "/home/pesu/emailagent/ui",
+      "/home/pesu/emailagent/start.sh",
+      "/home/pesu/emailagent/.gitignore"
+    ],
+    "docs_paths": [
+      "/home/pesu/emailagent/docs",
+      "/home/pesu/emailagent/documents",
+      "/home/pesu/emailagent/switchboard",
+      "/home/pesu/emailagent/README.md",
+      "/home/pesu/emailagent/docs/API.md",
+      "/home/pesu/emailagent/docs/CHANGELOG.md"
+    ],
+    "log_paths": [],
+    "allowed_git_pull_paths": [
+      "/home/pesu/emailagent/backend",
+      "/home/pesu/emailagent/config",
+      "/home/pesu/emailagent/ui",
+      "/home/pesu/emailagent/start.sh",
+      "/home/pesu/emailagent/.gitignore"
+    ],
+    "exclude_globs": [
+      "/home/pesu/emailagent/.env",
+      "/home/pesu/emailagent/.env.test",
+      "/home/pesu/emailagent/.git",
+      "/home/pesu/emailagent/.claude",
+      "/home/pesu/emailagent/venv",
+      "/home/pesu/emailagent/backend/api/.venv",
+      "/home/pesu/emailagent/ui/.venv",
+      "/home/pesu/emailagent/logs",
+      "/home/pesu/emailagent/backend/poller/logs",
+      "/home/pesu/emailagent/backend/api/logs",
+      "/home/pesu/emailagent/ui/logs",
+      "/home/pesu/emailagent/switchboard/runtime",
+      "/home/pesu/emailagent/switchboard/pull-bundles",
+      "**/__pycache__",
+      "**/.pytest_cache",
+      "**/*.pyc",
+      "**/node_modules",
+      "**/.next",
+      "**/dist",
+      "**/build",
+      "**/package.json",
+      "**/pnpm-lock.yaml",
+      "**/pnpm-workspace.yaml",
+      "**/vite.config.*",
+      "**/next.config.*",
+      "**/tsconfig.json"
+    ],
+    "scope_entries": [
+      {
+        "entry_id": "repo-69e46f307173",
+        "kind": "repo",
+        "path": "/home/pesu/emailagent/backend",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-9725234f1700",
+        "kind": "repo",
+        "path": "/home/pesu/emailagent/config",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-41dda24bce6b",
+        "kind": "repo",
+        "path": "/home/pesu/emailagent/ui",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-d3192be9597a",
+        "kind": "repo",
+        "path": "/home/pesu/emailagent/start.sh",
+        "path_type": "file",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-b37f876e5f1e",
+        "kind": "repo",
+        "path": "/home/pesu/emailagent/.gitignore",
+        "path_type": "file",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-03658d111a3f",
+        "kind": "doc",
+        "path": "/home/pesu/emailagent/docs",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-5e8352bfee79",
+        "kind": "doc",
+        "path": "/home/pesu/emailagent/documents",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-cdbb7a32713d",
+        "kind": "doc",
+        "path": "/home/pesu/emailagent/switchboard",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-0b68ca1fbcda",
+        "kind": "exclude",
+        "path": "/home/pesu/emailagent/.env",
+        "path_type": "file",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-fd9c03b0fd6c",
+        "kind": "exclude",
+        "path": "/home/pesu/emailagent/.env.test",
+        "path_type": "file",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-8d1232e1c679",
+        "kind": "exclude",
+        "path": "/home/pesu/emailagent/.git",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-ddb02f1af609",
+        "kind": "exclude",
+        "path": "/home/pesu/emailagent/.claude",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-98a7680e95e3",
+        "kind": "exclude",
+        "path": "/home/pesu/emailagent/venv",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-4664216a8e56",
+        "kind": "exclude",
+        "path": "/home/pesu/emailagent/backend/api/.venv",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-0adbd96efe5a",
+        "kind": "exclude",
+        "path": "/home/pesu/emailagent/ui/.venv",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-41a5fe8d8f9d",
+        "kind": "exclude",
+        "path": "/home/pesu/emailagent/logs",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-00caf509cc51",
+        "kind": "exclude",
+        "path": "/home/pesu/emailagent/backend/poller/logs",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-2961e1bbd2c9",
+        "kind": "exclude",
+        "path": "/home/pesu/emailagent/backend/api/logs",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-59a66d6bd3bf",
+        "kind": "exclude",
+        "path": "/home/pesu/emailagent/ui/logs",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-ced175be3314",
+        "kind": "exclude",
+        "path": "/home/pesu/emailagent/switchboard/runtime",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-67dad7af64b3",
+        "kind": "exclude",
+        "path": "/home/pesu/emailagent/switchboard/pull-bundles",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-5f1ad47b9d61",
+        "kind": "exclude",
+        "path": "**/__pycache__",
+        "path_type": "glob",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-12856209f2c5",
+        "kind": "exclude",
+        "path": "**/.pytest_cache",
+        "path_type": "glob",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-90bbe2e0f2aa",
+        "kind": "exclude",
+        "path": "**/*.pyc",
+        "path_type": "glob",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-a264f69d1866",
+        "kind": "exclude",
+        "path": "**/node_modules",
+        "path_type": "glob",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-c76ce169737f",
+        "kind": "exclude",
+        "path": "**/.next",
+        "path_type": "glob",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-a0b49534bc9b",
+        "kind": "exclude",
+        "path": "**/dist",
+        "path_type": "glob",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-efa863d92f52",
+        "kind": "exclude",
+        "path": "**/build",
+        "path_type": "glob",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-017924b52d50",
+        "kind": "exclude",
+        "path": "**/package.json",
+        "path_type": "glob",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-12e25034563d",
+        "kind": "exclude",
+        "path": "**/pnpm-lock.yaml",
+        "path_type": "glob",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-575f8ed5bbd3",
+        "kind": "exclude",
+        "path": "**/pnpm-workspace.yaml",
+        "path_type": "glob",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-abdc84f5f840",
+        "kind": "exclude",
+        "path": "**/vite.config.*",
+        "path_type": "glob",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-1b61925aae6c",
+        "kind": "exclude",
+        "path": "**/next.config.*",
+        "path_type": "glob",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-7765d4dca337",
+        "kind": "exclude",
+        "path": "**/tsconfig.json",
+        "path_type": "glob",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-dcd63147ded4",
+        "kind": "doc",
+        "path": "/home/pesu/emailagent/README.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-080b16266953",
+        "kind": "doc",
+        "path": "/home/pesu/emailagent/docs/API.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-fe73878ccda8",
+        "kind": "doc",
+        "path": "/home/pesu/emailagent/docs/CHANGELOG.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      }
+    ],
+    "managed_docs": [
+      {
+        "doc_id": "readme",
+        "path": "README.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "api",
+        "path": "docs/API.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "changelog",
+        "path": "docs/CHANGELOG.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "handoff",
+        "path": "switchboard/local/control-center-handoff.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-27T07:04:33+00:00"
+      },
+      {
+        "doc_id": "runbook",
+        "path": "switchboard/local/runbook.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-27T07:04:33+00:00"
+      },
+      {
+        "doc_id": "approach_history",
+        "path": "switchboard/local/approach-history.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-27T07:04:33+00:00"
+      },
+      {
+        "doc_id": "doc_index_md",
+        "path": "switchboard/local/doc-index.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-27T07:04:33+00:00"
+      },
+      {
+        "doc_id": "doc_index_json",
+        "path": "switchboard/evidence/doc-index.json",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-27T07:04:33+00:00"
+      }
+    ],
+    "repo_policies": [
+      {
+        "repo_path": "/home/pesu/emailagent/backend",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/home/pesu/emailagent/config",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/home/pesu/emailagent/ui",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/home/pesu/emailagent/start.sh",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/home/pesu/emailagent/.gitignore",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      }
+    ],
+    "notes": "Primary live workload is the poller process. Optional backend listener on 8010 is currently down.",
+    "path_aliases": []
+  },
+  {
+    "service_id": "compareanswers",
+    "workspace_id": "pesu",
+    "display_name": "compareanswers",
+    "kind": "service",
+    "execution_mode": "networked",
+    "ownership_tier": "owned",
+    "tags": [
+      "pesu",
+      ".47"
+    ],
+    "favorite_tier": "none",
+    "locations": [
+      {
+        "location_id": "compareanswers-pesu_dev_47-primary",
+        "server_id": "pesu_dev_47",
+        "access_mode": "ssh",
+        "root": "/home/pesu/compareanswers",
+        "role": "primary",
+        "is_primary": true,
+        "path_aliases": [],
+        "runtime": {
+          "expected_ports": [
+            8703,
+            8507
+          ],
+          "healthcheck_command": "curl -sf http://127.0.0.1:8703/api/health",
+          "run_command_hint": "cd /home/pesu/compareanswers && bash scripts/server_8507.sh restart",
+          "monitoring_mode": "manual",
+          "notes": "The Switchboard node on 8703 is the local verification surface for this project. The live compareanswers app surface is the Flask API on 8507."
+        }
+      }
+    ],
+    "repo_paths": [
+      "/home/pesu/compareanswers"
+    ],
+    "docs_paths": [
+      "/home/pesu/compareanswers/docs",
+      "/home/pesu/compareanswers/switchboard",
+      "/home/pesu/compareanswers/README.md",
+      "/home/pesu/compareanswers/API.md",
+      "/home/pesu/compareanswers/CHANGELOG.md"
+    ],
+    "log_paths": [
+      "/home/pesu/compareanswers/logs/server_8507.log"
+    ],
+    "allowed_git_pull_paths": [
+      "/home/pesu/compareanswers"
+    ],
+    "exclude_globs": [
+      "/home/pesu/compareanswers/.venv"
+    ],
+    "scope_entries": [
+      {
+        "entry_id": "repo-fc5f2f5a2dd9",
+        "kind": "repo",
+        "path": "/home/pesu/compareanswers",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-e79be872b3e2",
+        "kind": "doc",
+        "path": "/home/pesu/compareanswers/docs",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-90b4b6e4dc54",
+        "kind": "doc",
+        "path": "/home/pesu/compareanswers/switchboard",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "log-7578b7c3f48c",
+        "kind": "log",
+        "path": "/home/pesu/compareanswers/logs/server_8507.log",
+        "path_type": "file",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-5282811dbd90",
+        "kind": "exclude",
+        "path": "/home/pesu/compareanswers/.venv",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-fda377eecaba",
+        "kind": "doc",
+        "path": "/home/pesu/compareanswers/README.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-4af54353a3a7",
+        "kind": "doc",
+        "path": "/home/pesu/compareanswers/API.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-7391ced58a3a",
+        "kind": "doc",
+        "path": "/home/pesu/compareanswers/CHANGELOG.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      }
+    ],
+    "managed_docs": [
+      {
+        "doc_id": "readme",
+        "path": "README.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "api",
+        "path": "API.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "changelog",
+        "path": "CHANGELOG.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "handoff",
+        "path": "switchboard/local/control-center-handoff.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "runbook",
+        "path": "switchboard/local/runbook.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "approach_history",
+        "path": "switchboard/local/approach-history.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "doc_index_md",
+        "path": "switchboard/local/doc-index.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "doc_index_json",
+        "path": "switchboard/evidence/doc-index.json",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      }
+    ],
+    "repo_policies": [
+      {
+        "repo_path": "/home/pesu/compareanswers",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      }
+    ],
+    "notes": "8508 is intentionally not modeled here because it belongs to process-documents UI on this host.",
+    "path_aliases": []
+  },
+  {
+    "service_id": "aichat_test",
+    "workspace_id": "pesu",
+    "display_name": "aichat_test",
+    "kind": "service",
+    "execution_mode": "networked",
+    "ownership_tier": "owned",
+    "tags": [
+      "pesu",
+      ".47"
+    ],
+    "favorite_tier": "none",
+    "locations": [
+      {
+        "location_id": "aichat_test-pesu_dev_47-primary",
+        "server_id": "pesu_dev_47",
+        "access_mode": "ssh",
+        "root": "/home/pesu/aichat_test",
+        "role": "primary",
+        "is_primary": true,
+        "path_aliases": [],
+        "runtime": {
+          "expected_ports": [
+            8708,
+            8504
+          ],
+          "healthcheck_command": "curl -sf http://127.0.0.1:8708/api/health",
+          "run_command_hint": "cd /home/pesu/aichat_test && nohup /home/pesu/aichat/project/venv/bin/streamlit run frontendchat_v2.py --server.port 8504 --server.address 0.0.0.0 >> streamlit_8504.log 2>&1 &",
+          "monitoring_mode": "manual",
+          "notes": "The Switchboard node on 8708 is always kept up. The Streamlit frontend on 8504 is intentionally left down by default on this host."
+        }
+      }
+    ],
+    "repo_paths": [
+      "/home/pesu/aichat_test"
+    ],
+    "docs_paths": [
+      "/home/pesu/aichat_test/switchboard",
+      "/home/pesu/aichat_test/README.md",
+      "/home/pesu/aichat_test/API.md",
+      "/home/pesu/aichat_test/CHANGELOG.md"
+    ],
+    "log_paths": [
+      "/home/pesu/aichat_test/project/logs",
+      "/home/pesu/aichat_test/streamlit_8504.log"
+    ],
+    "allowed_git_pull_paths": [
+      "/home/pesu/aichat_test"
+    ],
+    "exclude_globs": [
+      "/home/pesu/aichat_test/project/volumes"
+    ],
+    "scope_entries": [
+      {
+        "entry_id": "repo-ecabac9a8abf",
+        "kind": "repo",
+        "path": "/home/pesu/aichat_test",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-40ac33af08ec",
+        "kind": "doc",
+        "path": "/home/pesu/aichat_test/switchboard",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "log-24816817df62",
+        "kind": "log",
+        "path": "/home/pesu/aichat_test/project/logs",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "log-e4ed3535953d",
+        "kind": "log",
+        "path": "/home/pesu/aichat_test/streamlit_8504.log",
+        "path_type": "file",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-099ca8b86dac",
+        "kind": "exclude",
+        "path": "/home/pesu/aichat_test/project/volumes",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-ce0c02d2e276",
+        "kind": "doc",
+        "path": "/home/pesu/aichat_test/README.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-4c31ff05fec9",
+        "kind": "doc",
+        "path": "/home/pesu/aichat_test/API.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-b0ad7a1a5662",
+        "kind": "doc",
+        "path": "/home/pesu/aichat_test/CHANGELOG.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      }
+    ],
+    "managed_docs": [
+      {
+        "doc_id": "readme",
+        "path": "README.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "api",
+        "path": "API.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "changelog",
+        "path": "CHANGELOG.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "handoff",
+        "path": "switchboard/local/control-center-handoff.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "runbook",
+        "path": "switchboard/local/runbook.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "approach_history",
+        "path": "switchboard/local/approach-history.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "doc_index_md",
+        "path": "switchboard/local/doc-index.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "doc_index_json",
+        "path": "switchboard/evidence/doc-index.json",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      }
+    ],
+    "repo_policies": [
+      {
+        "repo_path": "/home/pesu/aichat_test",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      }
+    ],
+    "notes": "Node stays up on 8708. Test UI on 8504 is currently down and should not be treated as always-on.",
+    "path_aliases": []
+  },
+  {
+    "service_id": "ingest_service",
+    "workspace_id": "pesu",
+    "display_name": "process documents",
+    "kind": "service",
+    "execution_mode": "networked",
+    "ownership_tier": "owned",
+    "tags": [
+      "pesu",
+      ".47"
+    ],
+    "favorite_tier": "none",
+    "locations": [
+      {
+        "location_id": "ingest_service-pesu_dev_47-primary",
+        "server_id": "pesu_dev_47",
+        "access_mode": "ssh",
+        "root": "/home/pesu/process documents",
+        "role": "primary",
+        "is_primary": true,
+        "path_aliases": [],
+        "runtime": {
+          "expected_ports": [
+            8705,
+            8000,
+            8503,
+            8099,
+            8508
+          ],
+          "healthcheck_command": "curl -sf http://127.0.0.1:8705/api/health",
+          "run_command_hint": "cd '/home/pesu/process documents/ui' && bash run_api.sh start",
+          "monitoring_mode": "manual",
+          "notes": "The Switchboard node on 8705 is the local verification surface for this project. The chat API on 8000 and the ingest service on 8099 are separate runtime layers within the same project root."
+        }
+      }
+    ],
+    "repo_paths": [
+      "/home/pesu/process documents"
+    ],
+    "docs_paths": [
+      "/home/pesu/process documents/ui/documentation",
+      "/home/pesu/process documents/switchboard",
+      "/home/pesu/process documents/README.md",
+      "/home/pesu/process documents/API.md",
+      "/home/pesu/process documents/CHANGELOG.md"
+    ],
+    "log_paths": [
+      "/home/pesu/process documents/ingest_service.log",
+      "/home/pesu/process documents/ui/logs"
+    ],
+    "allowed_git_pull_paths": [
+      "/home/pesu/process documents"
+    ],
+    "exclude_globs": [
+      "/home/pesu/process documents/venv",
+      "/home/pesu/process documents/ui/.venv"
+    ],
+    "scope_entries": [
+      {
+        "entry_id": "repo-8c359d65a8dc",
+        "kind": "repo",
+        "path": "/home/pesu/process documents",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-71929683b052",
+        "kind": "doc",
+        "path": "/home/pesu/process documents/ui/documentation",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-556dc7708c58",
+        "kind": "doc",
+        "path": "/home/pesu/process documents/switchboard",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "log-4f1cab7ffa57",
+        "kind": "log",
+        "path": "/home/pesu/process documents/ingest_service.log",
+        "path_type": "file",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "log-ee2b1d3cd961",
+        "kind": "log",
+        "path": "/home/pesu/process documents/ui/logs",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-1841089ba979",
+        "kind": "exclude",
+        "path": "/home/pesu/process documents/venv",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-c934237b1f20",
+        "kind": "exclude",
+        "path": "/home/pesu/process documents/ui/.venv",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-d8e5f1c3dd50",
+        "kind": "doc",
+        "path": "/home/pesu/process documents/README.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-f317e0f6dda5",
+        "kind": "doc",
+        "path": "/home/pesu/process documents/API.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-6052fa7aa84d",
+        "kind": "doc",
+        "path": "/home/pesu/process documents/CHANGELOG.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      }
+    ],
+    "managed_docs": [
+      {
+        "doc_id": "readme",
+        "path": "README.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "api",
+        "path": "API.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "changelog",
+        "path": "CHANGELOG.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "handoff",
+        "path": "switchboard/local/control-center-handoff.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "runbook",
+        "path": "switchboard/local/runbook.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "approach_history",
+        "path": "switchboard/local/approach-history.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "doc_index_md",
+        "path": "switchboard/local/doc-index.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "doc_index_json",
+        "path": "switchboard/evidence/doc-index.json",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      }
+    ],
+    "repo_policies": [
+      {
+        "repo_path": "/home/pesu/process documents",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      }
+    ],
+    "notes": "8000 is the OpenAI/chat API. 8099 is ingest-only and modeled with a read-only /openapi.json probe, not a write-side health action.",
+    "path_aliases": []
+  },
+  {
+    "service_id": "adminchat",
+    "workspace_id": "pesu",
+    "display_name": "adminchat",
+    "kind": "service",
+    "execution_mode": "batch",
+    "ownership_tier": "owned",
+    "tags": [
+      "pesu",
+      ".47"
+    ],
+    "favorite_tier": "none",
+    "locations": [
+      {
+        "location_id": "adminchat-pesu_dev_47-primary",
+        "server_id": "pesu_dev_47",
+        "access_mode": "ssh",
+        "root": "/home/pesu/adminchat",
+        "role": "primary",
+        "is_primary": true,
+        "path_aliases": [],
+        "runtime": {
+          "expected_ports": [
+            8706
+          ],
+          "healthcheck_command": "curl -sf http://127.0.0.1:8706/api/health",
+          "run_command_hint": "cd /home/pesu/adminchat/project && python main.py",
+          "monitoring_mode": "manual",
+          "notes": "The Switchboard node on 8706 is the local verification surface for this project. The pipeline itself is batch-oriented and intentionally not modeled as an always-on HTTP app."
+        }
+      }
+    ],
+    "repo_paths": [
+      "/home/pesu/adminchat"
+    ],
+    "docs_paths": [
+      "/home/pesu/adminchat/switchboard",
+      "/home/pesu/adminchat/project",
+      "/home/pesu/adminchat/README.md",
+      "/home/pesu/adminchat/API.md",
+      "/home/pesu/adminchat/CHANGELOG.md"
+    ],
+    "log_paths": [
+      "/home/pesu/adminchat/project/logs/processing_log.txt"
+    ],
+    "allowed_git_pull_paths": [
+      "/home/pesu/adminchat"
+    ],
+    "exclude_globs": [
+      "/home/pesu/adminchat/project/volumes"
+    ],
+    "scope_entries": [
+      {
+        "entry_id": "repo-83c09ed72924",
+        "kind": "repo",
+        "path": "/home/pesu/adminchat",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-7692ca3728e0",
+        "kind": "doc",
+        "path": "/home/pesu/adminchat/switchboard",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-4f4950608174",
+        "kind": "doc",
+        "path": "/home/pesu/adminchat/project",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "log-fc6c020a565c",
+        "kind": "log",
+        "path": "/home/pesu/adminchat/project/logs/processing_log.txt",
+        "path_type": "file",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-fa00bbf79b0b",
+        "kind": "exclude",
+        "path": "/home/pesu/adminchat/project/volumes",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-e3ce2ee2e2bd",
+        "kind": "doc",
+        "path": "/home/pesu/adminchat/README.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-8b79f9d8ce1c",
+        "kind": "doc",
+        "path": "/home/pesu/adminchat/API.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-6fb610084385",
+        "kind": "doc",
+        "path": "/home/pesu/adminchat/CHANGELOG.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      }
+    ],
+    "managed_docs": [
+      {
+        "doc_id": "readme",
+        "path": "README.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "api",
+        "path": "API.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "changelog",
+        "path": "CHANGELOG.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "handoff",
+        "path": "switchboard/local/control-center-handoff.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "runbook",
+        "path": "switchboard/local/runbook.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "approach_history",
+        "path": "switchboard/local/approach-history.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "doc_index_md",
+        "path": "switchboard/local/doc-index.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "doc_index_json",
+        "path": "switchboard/evidence/doc-index.json",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      }
+    ],
+    "repo_policies": [
+      {
+        "repo_path": "/home/pesu/adminchat",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      }
+    ],
+    "notes": "Code and ingestion workflow are present, but there is no always-on app listener modeled for this host state.",
+    "path_aliases": []
+  },
+  {
+    "service_id": "rag",
+    "workspace_id": "pesu",
+    "display_name": "RAG",
+    "kind": "service",
+    "execution_mode": "docs_only",
+    "ownership_tier": "owned",
+    "tags": [
+      "pesu",
+      ".47"
+    ],
+    "favorite_tier": "none",
+    "locations": [
+      {
+        "location_id": "rag-pesu_dev_47-primary",
+        "server_id": "pesu_dev_47",
+        "access_mode": "ssh",
+        "root": "/home/pesu/RAG",
+        "role": "primary",
+        "is_primary": true,
+        "path_aliases": [],
+        "runtime": {
+          "expected_ports": [
+            8707
+          ],
+          "healthcheck_command": "curl -sf http://127.0.0.1:8707/api/health",
+          "run_command_hint": "cd /home/pesu/RAG/RAG_Local && python app.py",
+          "monitoring_mode": "manual",
+          "notes": "The Switchboard node on 8707 is the local verification surface for this project. The optional repo app is documented but intentionally not treated as always-on."
+        }
+      }
+    ],
+    "repo_paths": [
+      "/home/pesu/RAG"
+    ],
+    "docs_paths": [
+      "/home/pesu/RAG/RAG_Local",
+      "/home/pesu/RAG/switchboard",
+      "/home/pesu/RAG/README.md",
+      "/home/pesu/RAG/API.md",
+      "/home/pesu/RAG/CHANGELOG.md"
+    ],
+    "log_paths": [],
+    "allowed_git_pull_paths": [
+      "/home/pesu/RAG"
+    ],
+    "exclude_globs": [],
+    "scope_entries": [
+      {
+        "entry_id": "repo-73af9172e450",
+        "kind": "repo",
+        "path": "/home/pesu/RAG",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-85233d6c936d",
+        "kind": "doc",
+        "path": "/home/pesu/RAG/RAG_Local",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-eccaefc38aaa",
+        "kind": "doc",
+        "path": "/home/pesu/RAG/switchboard",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-03e1804bdf7a",
+        "kind": "doc",
+        "path": "/home/pesu/RAG/README.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-10e975953e4e",
+        "kind": "doc",
+        "path": "/home/pesu/RAG/API.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-cdecc516bee8",
+        "kind": "doc",
+        "path": "/home/pesu/RAG/CHANGELOG.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      }
+    ],
+    "managed_docs": [
+      {
+        "doc_id": "readme",
+        "path": "README.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "api",
+        "path": "API.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "changelog",
+        "path": "CHANGELOG.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "handoff",
+        "path": "switchboard/local/control-center-handoff.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "runbook",
+        "path": "switchboard/local/runbook.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "approach_history",
+        "path": "switchboard/local/approach-history.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "doc_index_md",
+        "path": "switchboard/local/doc-index.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "doc_index_json",
+        "path": "switchboard/evidence/doc-index.json",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      }
+    ],
+    "repo_policies": [
+      {
+        "repo_path": "/home/pesu/RAG",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      }
+    ],
+    "notes": "8080 is nginx on this host and must not be attributed to RAG.",
+    "path_aliases": []
+  },
+  {
+    "service_id": "aichat_ingestion",
+    "workspace_id": "pesu",
+    "display_name": "aichat_ingestion",
+    "kind": "service",
+    "execution_mode": "batch",
+    "ownership_tier": "owned",
+    "tags": [
+      "pesu",
+      ".47",
+      "ingestion"
+    ],
+    "favorite_tier": "none",
+    "locations": [
+      {
+        "location_id": "aichat_ingestion-pesu_dev_47-primary",
+        "server_id": "pesu_dev_47",
+        "access_mode": "ssh",
+        "root": "/home/pesu/aichat_test/project",
+        "role": "primary",
+        "is_primary": true,
+        "path_aliases": [],
+        "runtime": {
+          "expected_ports": [
+            8709
+          ],
+          "healthcheck_command": "curl -sf http://127.0.0.1:8709/api/health",
+          "run_command_hint": "cd /home/pesu/aichat_test/project && /home/pesu/aichat/project/venv/bin/python main.py",
+          "monitoring_mode": "manual",
+          "notes": "The Switchboard node on 8709 is the local verification surface for this ingestion subtree. The ingestion pipeline itself is batch-oriented and intentionally not modeled as an always-on HTTP app."
+        }
+      }
+    ],
+    "repo_paths": [
+      "/home/pesu/aichat_test/project"
+    ],
+    "docs_paths": [
+      "/home/pesu/aichat_test/project/switchboard",
+      "/home/pesu/aichat_test/project/data",
+      "/home/pesu/aichat_test/project/README.md",
+      "/home/pesu/aichat_test/project/API.md",
+      "/home/pesu/aichat_test/project/CHANGELOG.md"
+    ],
+    "log_paths": [
+      "/home/pesu/aichat_test/project/logs",
+      "/home/pesu/aichat_test/project/logs/processing_log.txt"
+    ],
+    "allowed_git_pull_paths": [
+      "/home/pesu/aichat_test/project"
+    ],
+    "exclude_globs": [
+      "/home/pesu/aichat_test/project/volumes"
+    ],
+    "scope_entries": [
+      {
+        "entry_id": "repo-7f54d802db19",
+        "kind": "repo",
+        "path": "/home/pesu/aichat_test/project",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-ea3e4c4378f1",
+        "kind": "doc",
+        "path": "/home/pesu/aichat_test/project/switchboard",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-cb2255930f39",
+        "kind": "doc",
+        "path": "/home/pesu/aichat_test/project/data",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "log-24816817df62",
+        "kind": "log",
+        "path": "/home/pesu/aichat_test/project/logs",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "log-207be3e911dc",
+        "kind": "log",
+        "path": "/home/pesu/aichat_test/project/logs/processing_log.txt",
+        "path_type": "file",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-099ca8b86dac",
+        "kind": "exclude",
+        "path": "/home/pesu/aichat_test/project/volumes",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-72a47bc5dc34",
+        "kind": "doc",
+        "path": "/home/pesu/aichat_test/project/README.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-be9f10bc786a",
+        "kind": "doc",
+        "path": "/home/pesu/aichat_test/project/API.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-94c59cb3a3c7",
+        "kind": "doc",
+        "path": "/home/pesu/aichat_test/project/CHANGELOG.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      }
+    ],
+    "managed_docs": [
+      {
+        "doc_id": "readme",
+        "path": "README.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "api",
+        "path": "API.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "changelog",
+        "path": "CHANGELOG.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "handoff",
+        "path": "switchboard/local/control-center-handoff.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "runbook",
+        "path": "switchboard/local/runbook.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "approach_history",
+        "path": "switchboard/local/approach-history.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "doc_index_md",
+        "path": "switchboard/local/doc-index.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      },
+      {
+        "doc_id": "doc_index_json",
+        "path": "switchboard/evidence/doc-index.json",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-06T17:06:29+00:00"
+      }
+    ],
+    "repo_policies": [
+      {
+        "repo_path": "/home/pesu/aichat_test/project",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      }
+    ],
+    "notes": "Separate ingestion subtree rooted in /home/pesu/aichat_test/project on the .47 host. Keep this distinct from both aichat and aichat_test.",
+    "path_aliases": []
+  },
+  {
+    "service_id": "c",
+    "workspace_id": "4",
+    "display_name": "excelcarechatbot",
+    "kind": "service",
+    "execution_mode": "networked",
+    "ownership_tier": "owned",
+    "tags": [],
+    "favorite_tier": "none",
+    "locations": [
+      {
+        "location_id": "c-pesu_dev_47-primary",
+        "server_id": "pesu_dev_47",
+        "access_mode": "ssh",
+        "root": "/home/pesu/excelcare",
+        "role": "primary",
+        "is_primary": true,
+        "path_aliases": [],
+        "runtime": {
+          "expected_ports": [
+            8516,
+            8517,
+            8710
+          ],
+          "healthcheck_command": "curl -sf http://127.0.0.1:8516/health && curl -sf http://127.0.0.1:8517/health && curl -sf http://127.0.0.1:8710/api/health",
+          "run_command_hint": "./start.sh (restart with ./restart.sh)",
+          "monitoring_mode": "manual",
+          "notes": "Root scripts own backend/frontend/switchboard startup; backend stays on `127.0.0.1:8516`, frontend binds on `0.0.0.0:8517`, and the Switchboard node stays local on `127.0.0.1:8710`. Logs live in `logs/backend.log`, `logs/frontend.log`, `logs/switchboard.log`, `logs/start.log`, `logs/token_usage_summary.json`, and `logs/token_usage.jsonl`; pid files live in `runtime/backend.pid`, `runtime/frontend.pid`, and `runtime/switchboard.pid`."
+        }
+      }
+    ],
+    "repo_paths": [
+      "/home/pesu/excelcare/restart.sh",
+      "/home/pesu/excelcare/start.sh"
+    ],
+    "docs_paths": [
+      "/home/pesu/excelcare",
+      "/home/pesu/excelcare/README.md",
+      "/home/pesu/excelcare/API.md",
+      "/home/pesu/excelcare/CHANGELOG.md"
+    ],
+    "log_paths": [
+      "/home/pesu/excelcare/logs"
+    ],
+    "allowed_git_pull_paths": [
+      "/home/pesu/excelcare/restart.sh",
+      "/home/pesu/excelcare/start.sh"
+    ],
+    "exclude_globs": [],
+    "scope_entries": [
+      {
+        "entry_id": "doc-db53f13b2dc8",
+        "kind": "doc",
+        "path": "/home/pesu/excelcare",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "log-b58ea89df363",
+        "kind": "log",
+        "path": "/home/pesu/excelcare/logs",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-6a9e7826fedc",
+        "kind": "repo",
+        "path": "/home/pesu/excelcare/restart.sh",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-45f84c980d16",
+        "kind": "repo",
+        "path": "/home/pesu/excelcare/start.sh",
+        "path_type": "file",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-5f03e8d9f335",
+        "kind": "doc",
+        "path": "/home/pesu/excelcare/README.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-f2ff71c18a16",
+        "kind": "doc",
+        "path": "/home/pesu/excelcare/API.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-6d4287107236",
+        "kind": "doc",
+        "path": "/home/pesu/excelcare/CHANGELOG.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      }
+    ],
+    "managed_docs": [
+      {
+        "doc_id": "readme",
+        "path": "README.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "api",
+        "path": "API.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "changelog",
+        "path": "CHANGELOG.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "handoff",
+        "path": "switchboard/local/control-center-handoff.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-18T17:52:24+00:00"
+      },
+      {
+        "doc_id": "runbook",
+        "path": "switchboard/local/runbook.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-18T17:52:24+00:00"
+      },
+      {
+        "doc_id": "approach_history",
+        "path": "switchboard/local/approach-history.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-18T17:52:24+00:00"
+      },
+      {
+        "doc_id": "doc_index_md",
+        "path": "switchboard/local/doc-index.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-18T17:52:24+00:00"
+      },
+      {
+        "doc_id": "doc_index_json",
+        "path": "switchboard/evidence/doc-index.json",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-18T17:52:24+00:00"
+      }
+    ],
+    "repo_policies": [
+      {
+        "repo_path": "/home/pesu/excelcare/restart.sh",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/home/pesu/excelcare/start.sh",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      }
+    ],
+    "notes": "",
+    "path_aliases": []
+  },
+  {
+    "service_id": "finance",
+    "workspace_id": "1",
+    "display_name": "financedash",
+    "kind": "service",
+    "execution_mode": "networked",
+    "ownership_tier": "owned",
+    "tags": [],
+    "favorite_tier": "none",
+    "locations": [
+      {
+        "location_id": "finance-local_mac-primary",
+        "server_id": "local_mac",
+        "access_mode": "local",
+        "root": "/Users/p/Desktop/main/statements",
+        "role": "primary",
+        "is_primary": true,
+        "path_aliases": [],
+        "runtime": {
+          "expected_ports": [],
+          "healthcheck_command": "",
+          "run_command_hint": "",
+          "monitoring_mode": "manual",
+          "notes": ""
+        }
+      }
+    ],
+    "repo_paths": [
+      "/Users/p/Desktop/main/statements/switchboard",
+      "/Users/p/Desktop/main/statements/unionbank_service"
+    ],
+    "docs_paths": [
+      "/Users/p/Desktop/main/statements",
+      "/Users/p/Desktop/main/statements/README.md",
+      "/Users/p/Desktop/main/statements/API.md",
+      "/Users/p/Desktop/main/statements/CHANGELOG.md"
+    ],
+    "log_paths": [],
+    "allowed_git_pull_paths": [
+      "/Users/p/Desktop/main/statements/switchboard",
+      "/Users/p/Desktop/main/statements/unionbank_service"
+    ],
+    "exclude_globs": [],
+    "scope_entries": [
+      {
+        "entry_id": "doc-7ff99dfa064f",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/main/statements",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-6149c0df9d46",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/main/statements/switchboard",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "repo-b471bedff402",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/main/statements/unionbank_service",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-cadb299d7a01",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/main/statements/README.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-465c2901e296",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/main/statements/API.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-8d4bc7a8a6a9",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/main/statements/CHANGELOG.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      }
+    ],
+    "managed_docs": [
+      {
+        "doc_id": "readme",
+        "path": "README.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "api",
+        "path": "API.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "changelog",
+        "path": "CHANGELOG.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "handoff",
+        "path": "switchboard/local/control-center-handoff.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-27T14:34:48+00:00"
+      },
+      {
+        "doc_id": "runbook",
+        "path": "switchboard/local/runbook.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-27T14:34:48+00:00"
+      },
+      {
+        "doc_id": "approach_history",
+        "path": "switchboard/local/approach-history.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-27T14:34:48+00:00"
+      },
+      {
+        "doc_id": "doc_index_md",
+        "path": "switchboard/local/doc-index.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-27T14:34:48+00:00"
+      },
+      {
+        "doc_id": "doc_index_json",
+        "path": "switchboard/evidence/doc-index.json",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-04-27T14:34:48+00:00"
+      }
+    ],
+    "repo_policies": [
+      {
+        "repo_path": "/Users/p/Desktop/main/statements/switchboard",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      },
+      {
+        "repo_path": "/Users/p/Desktop/main/statements/unionbank_service",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      }
+    ],
+    "notes": "",
+    "path_aliases": []
+  },
+  {
+    "service_id": "adaptive",
+    "workspace_id": "pesu",
+    "display_name": "adaptivelearning",
+    "kind": "service",
+    "execution_mode": "networked",
+    "ownership_tier": "owned",
+    "tags": [],
+    "favorite_tier": "none",
+    "locations": [
+      {
+        "location_id": "adaptive-local_mac-primary",
+        "server_id": "local_mac",
+        "access_mode": "local",
+        "root": "/Users/p/Desktop/work/adaptivelearning",
+        "role": "primary",
+        "is_primary": true,
+        "path_aliases": [],
+        "runtime": {
+          "expected_ports": [],
+          "healthcheck_command": "",
+          "run_command_hint": "",
+          "monitoring_mode": "manual",
+          "notes": ""
+        }
+      }
+    ],
+    "repo_paths": [
+      "/Users/p/Desktop/work/adaptivelearning"
+    ],
+    "docs_paths": [
+      "/Users/p/Desktop/work/adaptivelearning/documentation",
+      "/Users/p/Desktop/work/adaptivelearning/backend",
+      "/Users/p/Desktop/work/adaptivelearning/frontend",
+      "/Users/p/Desktop/work/adaptivelearning/switchboard",
+      "/Users/p/Desktop/work/adaptivelearning/AGENTS.md",
+      "/Users/p/Desktop/work/adaptivelearning/CLAUDE.md",
+      "/Users/p/Desktop/work/adaptivelearning/GEMINI.md",
+      "/Users/p/Desktop/work/adaptivelearning/QWEN.md",
+      "/Users/p/Desktop/work/adaptivelearning/opencode.json",
+      "/Users/p/Desktop/work/adaptivelearning/README.md",
+      "/Users/p/Desktop/work/adaptivelearning/API.md",
+      "/Users/p/Desktop/work/adaptivelearning/CHANGELOG.md"
+    ],
+    "log_paths": [],
+    "allowed_git_pull_paths": [
+      "/Users/p/Desktop/work/adaptivelearning"
+    ],
+    "exclude_globs": [
+      "/Users/p/Desktop/work/adaptivelearning/.git",
+      "/Users/p/Desktop/work/adaptivelearning/.pytest_cache",
+      "/Users/p/Desktop/work/adaptivelearning/.venv",
+      "__pycache__",
+      "*.pyc",
+      ".env"
+    ],
+    "scope_entries": [
+      {
+        "entry_id": "repo-98672a11d022",
+        "kind": "repo",
+        "path": "/Users/p/Desktop/work/adaptivelearning",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-4c17b3c0bb80",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/adaptivelearning/documentation",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-e0aa8645b2d9",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/adaptivelearning/backend",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-0ed05a4d2160",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/adaptivelearning/frontend",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-eac2b42c8d91",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/adaptivelearning/switchboard",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-f58c4b772c2e",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/adaptivelearning/AGENTS.md",
+        "path_type": "file",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-f5f845bd6fa2",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/adaptivelearning/CLAUDE.md",
+        "path_type": "file",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-671ac5c12e4c",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/adaptivelearning/GEMINI.md",
+        "path_type": "file",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-a625ffac9d0a",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/adaptivelearning/QWEN.md",
+        "path_type": "file",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-63e52a1249bc",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/adaptivelearning/opencode.json",
+        "path_type": "file",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-80a10fb5b9fe",
+        "kind": "exclude",
+        "path": "/Users/p/Desktop/work/adaptivelearning/.git",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-d4dfddd8bec9",
+        "kind": "exclude",
+        "path": "/Users/p/Desktop/work/adaptivelearning/.pytest_cache",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-183b8aa52cd4",
+        "kind": "exclude",
+        "path": "/Users/p/Desktop/work/adaptivelearning/.venv",
+        "path_type": "dir",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-fff8eb7b30be",
+        "kind": "exclude",
+        "path": "__pycache__",
+        "path_type": "glob",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-0752e00ca9a7",
+        "kind": "exclude",
+        "path": "*.pyc",
+        "path_type": "glob",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "exclude-241b4a771cf1",
+        "kind": "exclude",
+        "path": ".env",
+        "path_type": "glob",
+        "source": "tasks_completed",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-2436501fef6e",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/adaptivelearning/README.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-9685a925c3d1",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/adaptivelearning/API.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      },
+      {
+        "entry_id": "doc-87eae79d3233",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/work/adaptivelearning/CHANGELOG.md",
+        "path_type": "file",
+        "source": "node_manifest",
+        "enabled": true
+      }
+    ],
+    "managed_docs": [
+      {
+        "doc_id": "readme",
+        "path": "README.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "api",
+        "path": "API.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "changelog",
+        "path": "CHANGELOG.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "handoff",
+        "path": "switchboard/local/control-center-handoff.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-05-03T04:32:37+00:00"
+      },
+      {
+        "doc_id": "runbook",
+        "path": "switchboard/local/runbook.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-05-03T04:32:37+00:00"
+      },
+      {
+        "doc_id": "approach_history",
+        "path": "switchboard/local/approach-history.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-05-03T04:32:37+00:00"
+      },
+      {
+        "doc_id": "doc_index_md",
+        "path": "switchboard/local/doc-index.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-05-03T04:32:37+00:00"
+      },
+      {
+        "doc_id": "doc_index_json",
+        "path": "switchboard/evidence/doc-index.json",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": "2026-05-03T04:32:37+00:00"
+      }
+    ],
+    "repo_policies": [
+      {
+        "repo_path": "/Users/p/Desktop/work/adaptivelearning",
+        "push_mode": "allowed",
+        "safety_profile": "generic_python",
+        "allowed_branches": [],
+        "allowed_remotes": []
+      }
+    ],
+    "notes": "",
+    "path_aliases": []
+  },
+  {
+    "service_id": "syspriv",
+    "workspace_id": "1",
+    "display_name": "sys_docs",
+    "kind": "service",
+    "execution_mode": "networked",
+    "ownership_tier": "owned",
+    "tags": [],
+    "favorite_tier": "none",
+    "locations": [
+      {
+        "location_id": "syspriv-local_mac-primary",
+        "server_id": "local_mac",
+        "access_mode": "local",
+        "root": "/Users/p/Desktop/main/sysdocs",
+        "role": "primary",
+        "is_primary": true,
+        "path_aliases": [],
+        "runtime": {
+          "expected_ports": [],
+          "healthcheck_command": "",
+          "run_command_hint": "",
+          "monitoring_mode": "manual",
+          "notes": ""
+        }
+      }
+    ],
+    "repo_paths": [],
+    "docs_paths": [
+      "/Users/p/Desktop/main/sysdocs"
+    ],
+    "log_paths": [],
+    "allowed_git_pull_paths": [],
+    "exclude_globs": [],
+    "scope_entries": [
+      {
+        "entry_id": "doc-15528681ffe4",
+        "kind": "doc",
+        "path": "/Users/p/Desktop/main/sysdocs",
+        "path_type": "dir",
+        "source": "user_added",
+        "enabled": true
+      }
+    ],
+    "managed_docs": [
+      {
+        "doc_id": "readme",
+        "path": "README.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "api",
+        "path": "API.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "changelog",
+        "path": "CHANGELOG.md",
+        "enabled": false,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "handoff",
+        "path": "switchboard/local/control-center-handoff.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "runbook",
+        "path": "switchboard/local/runbook.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "approach_history",
+        "path": "switchboard/local/approach-history.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "doc_index_md",
+        "path": "switchboard/local/doc-index.md",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      },
+      {
+        "doc_id": "doc_index_json",
+        "path": "switchboard/evidence/doc-index.json",
+        "enabled": true,
+        "generated_from": "switchboard/local/tasks-completed.md",
+        "last_generated_at": null
+      }
+    ],
+    "repo_policies": [],
     "notes": "",
     "path_aliases": []
   }

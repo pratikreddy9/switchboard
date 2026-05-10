@@ -1,22 +1,35 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, FileStack, FolderTree, Pencil, RefreshCw, Save, Server, Trash2, X } from 'lucide-react'
+import { ArrowLeft, FileStack, FolderTree, LoaderCircle, Pencil, RefreshCw, Save, Server, Trash2, X } from 'lucide-react'
 import type {
+  ActionLock,
   ManagedDocConfig,
+  NodeActionResult,
+  ProjectEnvironmentView,
   RuntimeCheckResult,
   Service,
   ServiceLocationDraft,
   ServiceRunResult,
   RunRecord,
   ScopeEntry,
+  ServerRecord,
+  TaskLedgerEntry,
 } from '../types/switchboard'
 import {
   deleteService,
+  deployNode,
   getService,
   getServiceScope,
+  getActionLocks,
+  listServers,
   getWorkspaceRuns,
+  inspectNode,
+  listProjects,
+  listPullBundles,
+  restartNode,
   runRuntimeCheck,
   syncFromNode,
   syncToNode,
+  upgradeNode,
   updateService,
   acquireActionLock,
   releaseActionLock,
@@ -30,6 +43,7 @@ import { PullBundlePanel } from '../components/PullBundlePanel'
 import { ConfirmationModal, ACTION_EXPLAIN } from '../components/ConfirmationModal'
 import { TaskLedgerPanel } from '../components/TaskLedgerPanel'
 import { InfoDropdown } from '../components/InfoDropdown'
+import { AccordionSection } from '../components/AccordionSection'
 
 interface Props {
   serviceId: string
@@ -37,6 +51,7 @@ interface Props {
   offline: boolean
   onBack: () => void
   onDeleted: (serviceId: string, workspaceId: string) => void
+  onOpenEnvironmentLab: (environmentId: string) => void
 }
 
 function parsePorts(value: string): number[] {
@@ -46,7 +61,139 @@ function parsePorts(value: string): number[] {
     .filter((port) => Number.isFinite(port) && port > 0 && port <= 65535)
 }
 
-export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDeleted }: Props) {
+const SERVICE_PANEL_KEYS = ['project', 'network', 'runtime', 'managed_docs', 'task_ledger', 'repositories', 'scope', 'pull_bundles', 'secret_paths', 'run_history'] as const
+type ServicePanelKey = (typeof SERVICE_PANEL_KEYS)[number]
+type NodeActionKey = 'inspect' | 'deploy' | 'upgrade' | 'restart'
+type LocationActionKey = NodeActionKey | 'runtime_check' | 'sync_from_node' | 'sync_to_node'
+type PersistedActionKey = 'node_deploy' | 'node_upgrade' | 'node_restart' | 'runtime_check' | 'sync_from_node' | 'sync_to_node'
+type ConfirmActionKey = 'node_inspect' | 'node_deploy' | 'node_upgrade' | 'node_restart' | 'runtime_check' | 'sync_from_node' | 'sync_to_node'
+
+interface ConfirmDetails {
+  preflight?: string[]
+  followUp?: string[]
+  commandPreview?: string[]
+  confirmLabel?: string
+}
+
+interface LocationActionEvent {
+  action: LocationActionKey
+  status: 'running' | 'ok' | 'error'
+  message: string
+  timestamp: string
+  started_at?: string
+  duration_seconds?: number
+}
+
+const ACTION_LOCK_KEY: Record<Exclude<LocationActionKey, 'inspect'>, PersistedActionKey> = {
+  deploy: 'node_deploy',
+  upgrade: 'node_upgrade',
+  restart: 'node_restart',
+  runtime_check: 'runtime_check',
+  sync_from_node: 'sync_from_node',
+  sync_to_node: 'sync_to_node',
+}
+
+const LOCK_KEY_TO_ACTION: Record<PersistedActionKey, Exclude<LocationActionKey, 'inspect'>> = {
+  node_deploy: 'deploy',
+  node_upgrade: 'upgrade',
+  node_restart: 'restart',
+  runtime_check: 'runtime_check',
+  sync_from_node: 'sync_from_node',
+  sync_to_node: 'sync_to_node',
+}
+
+const ACTION_META: Record<LocationActionKey, { label: string; running_label: string; eta_seconds: number }> = {
+  inspect: { label: 'Inspect Node', running_label: 'Inspecting node state', eta_seconds: 12 },
+  deploy: { label: 'Register Manager Root', running_label: 'Registering manager root', eta_seconds: 45 },
+  upgrade: { label: 'Refresh Manager Root', running_label: 'Refreshing manager root', eta_seconds: 45 },
+  restart: { label: 'Check Manager', running_label: 'Checking manager runtime', eta_seconds: 18 },
+  runtime_check: { label: 'Refresh Snapshot', running_label: 'Refreshing runtime snapshot', eta_seconds: 28 },
+  sync_from_node: { label: 'Sync From Node', running_label: 'Syncing from node', eta_seconds: 22 },
+  sync_to_node: { label: 'Sync To Node', running_label: 'Syncing to node', eta_seconds: 22 },
+}
+
+function panelStorageKey(serviceId: string, key: string) {
+  return `service-panel:${serviceId}:${key}`
+}
+
+function pendingSessionKey(actionKey: PersistedActionKey, locationId: string) {
+  return `pending:${actionKey}:${locationId}`
+}
+
+function actionStartKey(locationId: string, action: LocationActionKey) {
+  return `${locationId}:${action}`
+}
+
+function formatDurationLabel(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
+}
+
+function getActionProgress(startedAt: string, etaSeconds: number, nowMs: number) {
+  const startedMs = Number.isNaN(Date.parse(startedAt)) ? nowMs : Date.parse(startedAt)
+  const elapsedSeconds = Math.max(0, Math.floor((nowMs - startedMs) / 1000))
+  const remainingSeconds = Math.max(0, etaSeconds - elapsedSeconds)
+  const overrunSeconds = Math.max(0, elapsedSeconds - etaSeconds)
+  const percent = etaSeconds > 0 ? Math.min(100, Math.round((elapsedSeconds / etaSeconds) * 100)) : 0
+  return { elapsedSeconds, remainingSeconds, overrunSeconds, percent }
+}
+
+function quoteShell(value: string) {
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`
+}
+
+function shellPrefix(host?: string, username?: string, port?: number) {
+  if (!host) return ''
+  const target = username ? `${username}@${host}` : host
+  return port && port !== 22 ? `ssh -p ${port} ${target}` : `ssh ${target}`
+}
+
+function serverShellCommand(server?: ServerRecord, command?: string) {
+  if (!command) return ''
+  if (server?.connection_type === 'ssh' && server.host) {
+    return `${shellPrefix(server.host, server.username, server.port)} ${quoteShell(command)}`
+  }
+  return command
+}
+
+function stripCodeFence(value?: string) {
+  if (!value) return ''
+  const trimmed = value.trim()
+  const match = /^```[a-zA-Z0-9_-]*\n([\s\S]*?)\n```$/.exec(trimmed)
+  return match ? match[1].trim() : trimmed
+}
+
+function isFrameworkOverheadDoc(path?: string) {
+  const normalized = (path ?? '').trim().toLowerCase().replace(/\\/g, '/')
+  if (!normalized) return true
+  return (
+    normalized.includes('/switchboard/local/') ||
+    normalized.includes('/switchboard/evidence/') ||
+    normalized.includes('/switchboard/core/') ||
+    normalized.includes('/switchboard/runtime/') ||
+    normalized.startsWith('switchboard/local/') ||
+    normalized.startsWith('switchboard/evidence/') ||
+    normalized.startsWith('switchboard/core/') ||
+    normalized.startsWith('switchboard/runtime/')
+  )
+}
+
+function isFrameworkMaintenanceTask(task?: TaskLedgerEntry) {
+  if (!task) return false
+  const title = (task.title ?? '').toLowerCase()
+  const summary = (task.summary ?? '').toLowerCase()
+  const tags = Array.isArray(task.tags) ? task.tags.map((tag: string) => tag.toLowerCase()) : []
+  const changedPaths = Array.isArray(task.changed_paths) ? task.changed_paths : []
+  const mentionsSwitchboard = title.includes('switchboard') || summary.includes('switchboard')
+  const mentionsBootstrap = title.includes('bootstrap') || summary.includes('bootstrap')
+  const frameworkOnlyPaths =
+    changedPaths.length > 0 &&
+    changedPaths.every((path: string) => path.startsWith('switchboard/') || path === 'README.md' || path === 'API.md' || path === 'CHANGELOG.md')
+  return mentionsSwitchboard || (mentionsBootstrap && (tags.includes('handoff') || frameworkOnlyPaths))
+}
+
+export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDeleted, onOpenEnvironmentLab }: Props) {
   const [service, setService] = useState<Service | null>(null)
   const [runs, setRuns] = useState<RunRecord[]>([])
   const [scopeEntries, setScopeEntries] = useState<ScopeEntry[]>([])
@@ -62,6 +209,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [editingRuntime, setEditingRuntime] = useState(false)
   const [runtimeDraft, setRuntimeDraft] = useState<ServiceLocationDraft[]>([])
+  const [runtimeExecutionMode, setRuntimeExecutionMode] = useState<Service['execution_mode']>('networked')
   const [savingRuntime, setSavingRuntime] = useState(false)
   const [runtimeMessage, setRuntimeMessage] = useState<string | null>(null)
   const [managedDocsDraft, setManagedDocsDraft] = useState<ManagedDocConfig[]>([])
@@ -71,19 +219,37 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
   const [checkingRuntimeLocation, setCheckingRuntimeLocation] = useState<string | null>(null)
   const [syncingFromLocation, setSyncingFromLocation] = useState<string | null>(null)
   const [syncingToLocation, setSyncingToLocation] = useState<string | null>(null)
-  const [confirmAction, setConfirmAction] = useState<string | null>(null)
+  const [confirmAction, setConfirmAction] = useState<ConfirmActionKey | null>(null)
   const [confirmLocationId, setConfirmLocationId] = useState<string | null>(null)
+  const [confirmDetails, setConfirmDetails] = useState<ConfirmDetails | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const [pendingActions, setPendingActions] = useState<Record<string, boolean>>({})
+  const [servers, setServers] = useState<ServerRecord[]>([])
+  const [, setPendingActions] = useState<Record<string, boolean>>({})
+  const [activeLocks, setActiveLocks] = useState<Record<string, ActionLock>>({})
+  const [actionLockStatus, setActionLockStatus] = useState<'online' | 'offline'>('online')
+  const [actionStartTimes, setActionStartTimes] = useState<Record<string, string>>({})
+  const [panelOpen, setPanelOpen] = useState<Record<string, boolean>>({})
+  const [locationPanels, setLocationPanels] = useState<Record<string, boolean>>({})
+  const [nodeActionResults, setNodeActionResults] = useState<Record<string, NodeActionResult>>({})
+  const [nodeActionLoading, setNodeActionLoading] = useState<Record<string, NodeActionKey | null>>({})
+  const [locationActionEvents, setLocationActionEvents] = useState<Record<string, LocationActionEvent[]>>({})
+  const [bundleHistoryMeta, setBundleHistoryMeta] = useState<{ count: number; latestCreatedAt: string }>({ count: 0, latestCreatedAt: '' })
+  const [projectEnvironments, setProjectEnvironments] = useState<ProjectEnvironmentView[]>([])
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  const [docPreviewId, setDocPreviewId] = useState<string | null>(null)
 
   useEffect(() => {
-    const keys = Object.keys(sessionStorage)
-    const pending: Record<string, boolean> = {}
-    for (const key of keys) {
-      if (key.startsWith('pending:')) pending[key] = true
-    }
-    setPendingActions(pending)
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000)
+    return () => window.clearInterval(timer)
   }, [])
+
+  useEffect(() => {
+    const next: Record<string, boolean> = {}
+    for (const key of SERVICE_PANEL_KEYS) {
+      next[key] = sessionStorage.getItem(panelStorageKey(serviceId, key)) === 'true'
+    }
+    setPanelOpen(next)
+  }, [serviceId])
 
   useEffect(() => {
     if (offline) return
@@ -91,6 +257,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
       if (!isApiError(res)) {
         setService(res)
         setRuntimeDraft(res.locations.map((location) => ({ ...location, runtime: { ...location.runtime } })))
+        setRuntimeExecutionMode(res.execution_mode)
         setManagedDocsDraft(res.managed_docs.map((entry) => ({ ...entry })))
       }
     })
@@ -108,6 +275,89 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
       if (!isApiError(result)) setRuns(result)
     })
   }, [offline, service?.workspace_id])
+
+  useEffect(() => {
+    if (offline || !service?.workspace_id) return
+    listProjects(service.workspace_id).then((result) => {
+      if (!isApiError(result)) setProjectEnvironments(result.environments ?? [])
+    })
+  }, [offline, service?.workspace_id])
+
+  useEffect(() => {
+    if (offline) return
+    listServers().then((result) => {
+      if (!isApiError(result)) setServers(result)
+    })
+  }, [offline])
+
+  useEffect(() => {
+    if (offline) return
+    listPullBundles(serviceId).then((result) => {
+      if (!isApiError(result)) {
+        setBundleHistoryMeta({
+          count: result.length,
+          latestCreatedAt: result[0]?.created_at ?? '',
+        })
+      }
+    })
+  }, [offline, serviceId])
+
+  useEffect(() => {
+    if (offline) return
+    let cancelled = false
+
+    const refresh = async () => {
+      const result = await getActionLocks(serviceId)
+      if (cancelled) return
+      if (isApiError(result)) {
+        setActionLockStatus('offline')
+        setActiveLocks({})
+        setPendingActions({})
+        for (const key of Object.keys(sessionStorage)) {
+          if (key.startsWith('pending:')) sessionStorage.removeItem(key)
+          if (key.startsWith(`service-panel:${serviceId}:`)) sessionStorage.removeItem(key)
+        }
+        return
+      }
+      setActionLockStatus('online')
+      setActiveLocks(Object.fromEntries(result.locks.map((lock) => [lock.action_key, lock])))
+    }
+
+    void refresh()
+    const timer = window.setInterval(() => {
+      void refresh()
+    }, 5000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [offline, serviceId])
+
+  useEffect(() => {
+    if (!service) {
+      setPendingActions({})
+      return
+    }
+    const locationIds = new Set(service.locations.map((location) => location.location_id))
+    const nextPending: Record<string, boolean> = {}
+    for (const key of Object.keys(sessionStorage)) {
+      if (!key.startsWith('pending:')) continue
+      const match = /^pending:([^:]+):(.+)$/.exec(key)
+      if (!match) continue
+      const [, actionKey, locationId] = match
+      if (!locationIds.has(locationId)) continue
+      if (activeLocks[actionKey]) {
+        nextPending[key] = true
+      } else {
+        sessionStorage.removeItem(key)
+        for (const panelKey of SERVICE_PANEL_KEYS) {
+          sessionStorage.removeItem(panelStorageKey(serviceId, panelKey))
+        }
+      }
+    }
+    setPendingActions(nextPending)
+  }, [activeLocks, service])
 
   const docs = runResult?.docs_files ?? []
   const logs = runResult?.logs_files ?? []
@@ -132,6 +382,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
     setScopeEntries(updated.scope_entries)
     setScopeDraft(updated.scope_entries.map((entry) => ({ ...entry })))
     setRuntimeDraft(updated.locations.map((location) => ({ ...location, runtime: { ...location.runtime } })))
+    setRuntimeExecutionMode(updated.execution_mode)
     setManagedDocsDraft(updated.managed_docs.map((entry) => ({ ...entry })))
   }
 
@@ -158,12 +409,123 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
     () => (service?.node_sync ?? []).find((entry) => entry.doc_index)?.doc_index,
     [service?.node_sync],
   )
+  const nodeViewerByLocation = useMemo(() => {
+    const map = new Map<string, NonNullable<Service['node_viewer']>[number]>()
+    for (const entry of service?.node_viewer ?? []) {
+      map.set(entry.location_id, entry)
+    }
+    return map
+  }, [service?.node_viewer])
+
+  const environmentMatchesByLocation = useMemo(() => {
+    const map = new Map<string, ProjectEnvironmentView[]>()
+    for (const environment of projectEnvironments) {
+      for (const deployment of environment.deployments ?? []) {
+        if (deployment.service_id !== service?.service_id) continue
+        const key = deployment.location_id || '__service__'
+        const current = map.get(key) ?? []
+        current.push(environment)
+        map.set(key, current)
+      }
+    }
+    return map
+  }, [projectEnvironments, service?.service_id])
 
   const hasNodeScope = useMemo(
     () =>
       (service?.scope_entries ?? []).some((entry) => entry.enabled && entry.path.endsWith('switchboard/node.manifest.json')),
     [service?.scope_entries],
   )
+
+  const scopeSummary = useMemo(() => {
+    const counts = { repo: 0, code: 0, doc: 0, log: 0, exclude: 0 }
+    for (const entry of scopeEntries) {
+      if (!entry.enabled) continue
+      counts[entry.kind] += 1
+    }
+    return counts
+  }, [scopeEntries])
+
+  const latestTask = service?.task_ledger?.[0]
+  const featuredTask = useMemo(
+    () => (service?.task_ledger ?? []).find((entry) => !isFrameworkMaintenanceTask(entry)) ?? service?.task_ledger?.[0],
+    [service?.task_ledger],
+  )
+  const latestTaskNotes = useMemo(() => {
+    const notes = featuredTask?.notes
+    return Array.isArray(notes) ? notes.filter(Boolean) : []
+  }, [featuredTask?.notes])
+  const latestTaskDependencies = featuredTask?.dependencies ?? []
+  const latestTaskCrossDependencies = featuredTask?.cross_dependencies ?? []
+  const latestTaskDiagram = useMemo(() => stripCodeFence(featuredTask?.diagram), [featuredTask?.diagram])
+
+  const quickDocPreviews = useMemo(
+    () =>
+      [
+        { id: 'readme', label: 'README', content: stripCodeFence(featuredTask?.readme) },
+        { id: 'api', label: 'API', content: stripCodeFence(featuredTask?.api) },
+        { id: 'changelog', label: 'CHANGELOG', content: stripCodeFence(featuredTask?.changelog) },
+      ].filter((entry) => entry.content),
+    [featuredTask?.api, featuredTask?.changelog, featuredTask?.readme],
+  )
+
+  const projectDocEntries = useMemo(() => {
+    const seen = new Set<string>()
+    const entries: Array<{ id: string; label: string; path: string; frameworkWritesEnabled: boolean; generatedAt?: string | null }> = []
+    for (const entry of latestNodeDocIndex?.docs ?? []) {
+      if (isFrameworkOverheadDoc(entry.path)) continue
+      const key = `${entry.doc_id}:${entry.path}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      entries.push({
+        id: entry.doc_id,
+        label: entry.label ?? entry.doc_id.toUpperCase(),
+        path: entry.path,
+        frameworkWritesEnabled: Boolean(entry.enabled),
+        generatedAt: entry.generated_at,
+      })
+    }
+    for (const entry of service?.managed_docs ?? []) {
+      if (isFrameworkOverheadDoc(entry.path)) continue
+      const key = `${entry.doc_id}:${entry.path}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      entries.push({
+        id: entry.doc_id,
+        label: entry.doc_id.toUpperCase(),
+        path: entry.path,
+        frameworkWritesEnabled: Boolean(entry.enabled),
+        generatedAt: entry.last_generated_at,
+      })
+    }
+    return entries
+  }, [latestNodeDocIndex?.docs, service?.managed_docs])
+
+  const quickPreviewById = useMemo(
+    () => Object.fromEntries(quickDocPreviews.map((entry) => [entry.id, entry.content])),
+    [quickDocPreviews],
+  )
+
+  const runtimeAttentionCount = useMemo(
+    () =>
+      (service?.locations ?? []).filter((location) => {
+        const nodeViewer = nodeViewerByLocation.get(location.location_id)
+        return Boolean(nodeViewer?.needs_install || nodeViewer?.needs_upgrade || nodeViewer?.needs_bootstrap)
+      }).length,
+    [nodeViewerByLocation, service?.locations],
+  )
+
+  function togglePanel(key: ServicePanelKey) {
+    setPanelOpen((current) => {
+      const next = !current[key]
+      sessionStorage.setItem(panelStorageKey(serviceId, key), String(next))
+      return { ...current, [key]: next }
+    })
+  }
+
+  function toggleLocationPanel(locationId: string) {
+    setLocationPanels((current) => ({ ...current, [locationId]: !current[locationId] }))
+  }
 
   function updateRuntimeDraftField(
     locationId: string,
@@ -207,6 +569,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
     setSavingRuntime(true)
     setRuntimeMessage(null)
     const result = await updateService(service.service_id, {
+      execution_mode: runtimeExecutionMode,
       locations: runtimeDraft,
     } as Partial<Service>)
     setSavingRuntime(false)
@@ -219,8 +582,162 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
     setRuntimeMessage('Runtime config updated.')
   }
 
+  function setNodeViewerEntry(entry: NonNullable<Service['node_viewer']>[number]) {
+    setService((current) =>
+      current
+        ? {
+            ...current,
+            node_viewer: [entry, ...(current.node_viewer ?? []).filter((candidate) => candidate.location_id !== entry.location_id)],
+          }
+        : current,
+    )
+  }
+
+  function recordLocationAction(
+    locationId: string,
+    event: LocationActionEvent,
+  ) {
+    setLocationActionEvents((current) => ({
+      ...current,
+      [locationId]: [event, ...(current[locationId] ?? [])].slice(0, 6),
+    }))
+  }
+
+  async function refreshActionLocksSnapshot() {
+    if (offline) return
+    const result = await getActionLocks(serviceId)
+    if (isApiError(result)) {
+      setActionLockStatus('offline')
+      setActiveLocks({})
+      setPendingActions({})
+      for (const key of Object.keys(sessionStorage)) {
+        if (key.startsWith('pending:')) sessionStorage.removeItem(key)
+        if (key.startsWith(`service-panel:${serviceId}:`)) sessionStorage.removeItem(key)
+      }
+      return
+    }
+    setActionLockStatus('online')
+    setActiveLocks(Object.fromEntries(result.locks.map((lock) => [lock.action_key, lock])))
+  }
+
+  function setActionStartedAt(locationId: string, action: LocationActionKey, startedAt: string) {
+    setActionStartTimes((current) => ({ ...current, [actionStartKey(locationId, action)]: startedAt }))
+  }
+
+  function clearActionStartedAt(locationId: string, action: LocationActionKey) {
+    setActionStartTimes((current) => {
+      const next = { ...current }
+      delete next[actionStartKey(locationId, action)]
+      return next
+    })
+  }
+
+  function markPendingAction(actionKey: PersistedActionKey, locationId: string, startedAt: string) {
+    const sessionKey = pendingSessionKey(actionKey, locationId)
+    sessionStorage.setItem(sessionKey, 'true')
+    setPendingActions((current) => ({ ...current, [sessionKey]: true }))
+    setActionStartedAt(locationId, LOCK_KEY_TO_ACTION[actionKey], startedAt)
+  }
+
+  function clearPendingAction(actionKey: PersistedActionKey, locationId: string) {
+    const sessionKey = pendingSessionKey(actionKey, locationId)
+    sessionStorage.removeItem(sessionKey)
+    setPendingActions((current) => {
+      const next = { ...current }
+      delete next[sessionKey]
+      return next
+    })
+    clearActionStartedAt(locationId, LOCK_KEY_TO_ACTION[actionKey])
+  }
+
+  async function handleNodeAction(action: 'inspect' | 'deploy' | 'upgrade' | 'restart', locationId: string) {
+    if (!service) return
+    const startedAt = new Date().toISOString()
+    const persistedActionKey = action === 'inspect' ? null : ACTION_LOCK_KEY[action]
+    setNodeActionLoading((current) => ({ ...current, [locationId]: action }))
+    setActionStartedAt(locationId, action, startedAt)
+    if (persistedActionKey) markPendingAction(persistedActionKey, locationId, startedAt)
+    recordLocationAction(locationId, {
+      action,
+      status: 'running',
+      message:
+        action === 'inspect'
+          ? 'Inspecting node state and runtime.'
+          : action === 'deploy'
+            ? 'Registering this root with the Switchboard manager.'
+            : action === 'upgrade'
+            ? 'Refreshing this root under the Switchboard manager.'
+            : 'Checking the Switchboard manager runtime.',
+      timestamp: startedAt,
+      started_at: startedAt,
+    })
+    try {
+      const result =
+        action === 'inspect'
+          ? await inspectNode(service.service_id, locationId)
+          : action === 'deploy'
+            ? await deployNode(service.service_id, locationId)
+            : action === 'upgrade'
+              ? await upgradeNode(service.service_id, locationId)
+              : await restartNode(service.service_id, locationId)
+      if (isApiError(result)) {
+        setRuntimeMessage(result.message)
+        recordLocationAction(locationId, {
+          action,
+          status: 'error',
+          message: result.message,
+          timestamp: new Date().toISOString(),
+          started_at: startedAt,
+          duration_seconds: Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000)),
+        })
+        return
+      }
+      setNodeViewerEntry(result.node)
+      setNodeActionResults((current) => ({ ...current, [locationId]: result }))
+      const successMessage =
+        result.message ||
+        (action === 'inspect'
+          ? 'Node viewer refreshed.'
+          : action === 'deploy'
+            ? 'Manager root registered.'
+            : action === 'upgrade'
+              ? 'Manager root refreshed.'
+              : result.node.runtime_status === 'manager_running'
+                ? 'Manager runtime is running.'
+                : result.node.runtime_status === 'running'
+                ? 'Node runtime started.'
+                : 'Node restart command completed.')
+      setRuntimeMessage(successMessage)
+      recordLocationAction(locationId, {
+        action,
+        status: 'ok',
+        message: successMessage,
+        timestamp: new Date().toISOString(),
+        started_at: startedAt,
+        duration_seconds: Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000)),
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Node action failed unexpectedly.'
+      setRuntimeMessage(message)
+      recordLocationAction(locationId, {
+        action,
+        status: 'error',
+        message,
+        timestamp: new Date().toISOString(),
+        started_at: startedAt,
+        duration_seconds: Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000)),
+      })
+    } finally {
+      setNodeActionLoading((current) => ({ ...current, [locationId]: null }))
+      clearActionStartedAt(locationId, action)
+      if (persistedActionKey) clearPendingAction(persistedActionKey, locationId)
+      void refreshActionLocksSnapshot()
+    }
+  }
+
   function handleCancelRuntimeEdit() {
     setRuntimeDraft(service?.locations.map((location) => ({ ...location, runtime: { ...location.runtime } })) ?? [])
+    setRuntimeExecutionMode(service?.execution_mode ?? 'networked')
     setEditingRuntime(false)
     setRuntimeMessage(null)
   }
@@ -249,12 +766,21 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
   }
 
   async function handleRuntimeCheck(locationId: string) {
+    const startedAt = actionStartTimes[actionStartKey(locationId, 'runtime_check')] ?? new Date().toISOString()
     setCheckingRuntimeLocation(locationId)
     setRuntimeMessage(null)
     const result = await runRuntimeCheck(serviceId, { location_id: locationId })
     setCheckingRuntimeLocation(null)
     if (isApiError(result)) {
       setRuntimeMessage(result.message)
+      recordLocationAction(locationId, {
+        action: 'runtime_check',
+        status: 'error',
+        message: result.message,
+        timestamp: new Date().toISOString(),
+        started_at: startedAt,
+        duration_seconds: Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000)),
+      })
       return
     }
     setService((current) =>
@@ -269,15 +795,32 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         : current,
     )
     setRuntimeMessage('Runtime check completed.')
+    recordLocationAction(locationId, {
+      action: 'runtime_check',
+      status: 'ok',
+      message: 'Runtime snapshot refreshed.',
+      timestamp: new Date().toISOString(),
+      started_at: startedAt,
+      duration_seconds: Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000)),
+    })
   }
 
   async function handleSyncFromNode(locationId: string) {
+    const startedAt = actionStartTimes[actionStartKey(locationId, 'sync_from_node')] ?? new Date().toISOString()
     setSyncingFromLocation(locationId)
     setRuntimeMessage(null)
     const result = await syncFromNode(serviceId, { location_id: locationId })
     setSyncingFromLocation(null)
     if (isApiError(result)) {
       setRuntimeMessage(result.message)
+      recordLocationAction(locationId, {
+        action: 'sync_from_node',
+        status: 'error',
+        message: result.message,
+        timestamp: new Date().toISOString(),
+        started_at: startedAt,
+        duration_seconds: Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000)),
+      })
       return
     }
     handleServiceUpdated(result.service)
@@ -290,15 +833,32 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         : result.service,
     )
     setRuntimeMessage('Synced from node.')
+    recordLocationAction(locationId, {
+      action: 'sync_from_node',
+      status: 'ok',
+      message: 'Imported node scope and task ledger.',
+      timestamp: new Date().toISOString(),
+      started_at: startedAt,
+      duration_seconds: Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000)),
+    })
   }
 
   async function handleSyncToNode(locationId: string) {
+    const startedAt = actionStartTimes[actionStartKey(locationId, 'sync_to_node')] ?? new Date().toISOString()
     setSyncingToLocation(locationId)
     setRuntimeMessage(null)
     const result = await syncToNode(serviceId, { location_id: locationId })
     setSyncingToLocation(null)
     if (isApiError(result)) {
       setRuntimeMessage(result.message)
+      recordLocationAction(locationId, {
+        action: 'sync_to_node',
+        status: 'error',
+        message: result.message,
+        timestamp: new Date().toISOString(),
+        started_at: startedAt,
+        duration_seconds: Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000)),
+      })
       return
     }
     setService((current) =>
@@ -310,31 +870,78 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         : current,
     )
     setRuntimeMessage(result.node_manifest_path ? `Synced to node at ${result.node_manifest_path}.` : 'Synced to node.')
+    recordLocationAction(locationId, {
+      action: 'sync_to_node',
+      status: 'ok',
+      message: result.node_manifest_path ? `Synced to node at ${result.node_manifest_path}.` : 'Synced to node.',
+      timestamp: new Date().toISOString(),
+      started_at: startedAt,
+      duration_seconds: Math.max(0, Math.floor((Date.now() - Date.parse(startedAt)) / 1000)),
+    })
   }
 
-  function initiateAction(actionKey: string, locationId: string) {
+  function initiateAction(actionKey: ConfirmActionKey, locationId: string, details?: ConfirmDetails) {
     setConfirmAction(actionKey)
     setConfirmLocationId(locationId)
+    setConfirmDetails(details ?? null)
     setConfirmOpen(true)
   }
 
   async function handleConfirmAction() {
     if (!confirmAction || !confirmLocationId) return
-    const actionKey = confirmAction
     const locationId = confirmLocationId
-    const compositeKey = `${actionKey}:${locationId}`
-    const sessionKey = `pending:${compositeKey}`
-    
-    sessionStorage.setItem(sessionKey, 'true')
-    setPendingActions(prev => ({ ...prev, [sessionKey]: true }))
     setConfirmOpen(false)
+    setConfirmDetails(null)
 
-    const lockRes = await acquireActionLock(serviceId, actionKey)
-    if (isApiError(lockRes) || lockRes.status !== 'ok') {
-      setRuntimeMessage((lockRes as any)?.message || 'Action is already in progress.')
-      sessionStorage.removeItem(sessionKey)
-      setPendingActions(prev => { const next = { ...prev }; delete next[sessionKey]; return next })
+    if (confirmAction === 'node_inspect') {
+      await handleNodeAction('inspect', locationId)
+      setConfirmAction(null)
+      setConfirmLocationId(null)
       return
+    }
+    if (confirmAction === 'node_deploy') {
+      await handleNodeAction('deploy', locationId)
+      setConfirmAction(null)
+      setConfirmLocationId(null)
+      return
+    }
+    if (confirmAction === 'node_upgrade') {
+      await handleNodeAction('upgrade', locationId)
+      setConfirmAction(null)
+      setConfirmLocationId(null)
+      return
+    }
+    if (confirmAction === 'node_restart') {
+      await handleNodeAction('restart', locationId)
+      setConfirmAction(null)
+      setConfirmLocationId(null)
+      return
+    }
+
+    const actionKey = confirmAction as Extract<LocationActionKey, 'runtime_check' | 'sync_from_node' | 'sync_to_node'>
+    const lockKey = ACTION_LOCK_KEY[actionKey]
+    const startedAt = new Date().toISOString()
+    const requiresClientLock = actionKey === 'runtime_check'
+
+    markPendingAction(lockKey, locationId, startedAt)
+    recordLocationAction(locationId, {
+      action: actionKey,
+      status: 'running',
+      message: ACTION_META[actionKey].running_label,
+      timestamp: startedAt,
+      started_at: startedAt,
+    })
+
+    if (requiresClientLock) {
+      const lockRes = await acquireActionLock(serviceId, actionKey)
+      if (isApiError(lockRes) || lockRes.status !== 'ok') {
+        setRuntimeMessage((lockRes as any)?.message || 'Action is already in progress.')
+        clearPendingAction(lockKey, locationId)
+        void refreshActionLocksSnapshot()
+        setConfirmAction(null)
+        setConfirmLocationId(null)
+        return
+      }
     }
 
     try {
@@ -346,9 +953,11 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         await handleSyncToNode(locationId)
       }
     } finally {
-      await releaseActionLock(serviceId, actionKey)
-      sessionStorage.removeItem(sessionKey)
-      setPendingActions(prev => { const next = { ...prev }; delete next[sessionKey]; return next })
+      if (requiresClientLock) {
+        await releaseActionLock(serviceId, actionKey)
+      }
+      clearPendingAction(lockKey, locationId)
+      void refreshActionLocksSnapshot()
       setConfirmAction(null)
       setConfirmLocationId(null)
     }
@@ -426,16 +1035,6 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
           {service && (
             <div className="hidden md:flex items-center gap-2">
               <InfoDropdown
-                label="Node Commands"
-                title="Switchboard Node Commands"
-                lines={[
-                  'switchboard node snapshot',
-                  'switchboard node start',
-                  'switchboard node stop',
-                  'switchboard node status',
-                ]}
-              />
-              <InfoDropdown
                 label="Health Check Commands"
                 title="Location Health Checks"
                 lines={
@@ -445,14 +1044,15 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                 }
               />
               <InfoDropdown
-                label="Diagnostics"
-                title="Diagnostics & Hints"
+                label="Project Context"
+                title="Latest Project Context"
                 lines={[
-                  `Bootstrap Version: ${service.task_ledger?.[0]?.bootstrap_version || 'Unknown'}`,
-                  ...service.locations.map(
-                    (loc) =>
-                      `[${loc.location_id}] Hint: ${loc.runtime?.run_command_hint || 'None'} | Mode: ${loc.runtime?.monitoring_mode}`
-                  ),
+                  featuredTask?.title ? `Featured entry: ${featuredTask.title}` : 'No project task entry imported yet.',
+                  featuredTask?.summary ? featuredTask.summary : '',
+                  service.notes ? `Service note: ${service.notes}` : '',
+                  ...(latestTaskCrossDependencies.slice(0, 3).map(
+                    (dep) => `Cross dependency: ${dep.name}${dep.port ? `:${dep.port}` : ''} ${dep.notes ? `| ${dep.notes}` : ''}`,
+                  )),
                 ]}
               />
             </div>
@@ -473,16 +1073,6 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         {service && (
           <>
             <InfoDropdown
-              label="Node Commands"
-              title="Switchboard Node Commands"
-              lines={[
-                'switchboard node snapshot',
-                'switchboard node start',
-                'switchboard node stop',
-                'switchboard node status',
-              ]}
-            />
-            <InfoDropdown
               label="Health Checks"
               title="Location Health Checks"
               lines={
@@ -492,14 +1082,15 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
               }
             />
             <InfoDropdown
-              label="Diagnostics"
-              title="Diagnostics & Hints"
+              label="Project Context"
+              title="Latest Project Context"
               lines={[
-                `Bootstrap Version: ${service.task_ledger?.[0]?.bootstrap_version || 'Unknown'}`,
-                ...service.locations.map(
-                  (loc) =>
-                    `[${loc.location_id}] Hint: ${loc.runtime?.run_command_hint || 'None'} | Mode: ${loc.runtime?.monitoring_mode}`
-                ),
+                featuredTask?.title ? `Featured entry: ${featuredTask.title}` : 'No project task entry imported yet.',
+                featuredTask?.summary ? featuredTask.summary : '',
+                service.notes ? `Service note: ${service.notes}` : '',
+                ...(latestTaskCrossDependencies.slice(0, 3).map(
+                  (dep) => `Cross dependency: ${dep.name}${dep.port ? `:${dep.port}` : ''} ${dep.notes ? `| ${dep.notes}` : ''}`,
+                )),
               ]}
             />
           </>
@@ -566,13 +1157,25 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         </div>
       )}
 
-      {/* Ports + firewall */}
-      {runResult && (runResult.ports.length > 0 || runResult.firewall_active !== undefined) && (
-        <section className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
-          <h3 className="text-sm font-medium text-gray-300 mb-3 flex items-center gap-2">
-            <Server className="w-4 h-4 text-cyan-400" />
-            Network
-          </h3>
+      <AccordionSection
+        title="Network"
+        icon={<Server className="w-4 h-4 text-cyan-400" />}
+        open={Boolean(panelOpen.network)}
+        onToggle={() => togglePanel('network')}
+        summary={
+          service?.execution_mode !== 'networked'
+            ? `Execution mode ${service?.execution_mode ?? 'networked'} · port monitoring optional`
+            : runResult
+            ? `${runResult.ports.length} open ports · firewall ${runResult.firewall_status || (runResult.firewall_active ? 'active' : 'inactive')}`
+            : 'No network snapshot captured yet'
+        }
+      >
+        {service?.execution_mode !== 'networked' ? (
+          <div className="text-sm text-gray-400">
+            This service is tracked as <span className="text-cyan-300">{service?.execution_mode ?? 'networked'}</span>, so port-heavy network status is secondary. Use the Runtime panel for deployment root, command hints, bundle flow, and node state.
+          </div>
+        ) : runResult ? (
+          <>
           <div className="flex flex-wrap gap-2 mb-2">
             {runResult.ports.map((p) => (
               <span key={p.port} className="font-mono text-sm bg-gray-800 text-cyan-400 px-3 py-1 rounded-md">
@@ -588,16 +1191,140 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
               {runResult.firewall_status || (runResult.firewall_active ? 'active' : 'inactive')}
             </span>
           </div>
-        </section>
+          </>
+        ) : (
+          <div className="text-sm text-gray-500">No network snapshot captured yet.</div>
+        )}
+      </AccordionSection>
+
+      {service && (
+        <AccordionSection
+          title="Project Snapshot"
+          icon={<FileStack className="h-4 w-4 text-cyan-400" />}
+          open={Boolean(panelOpen.project)}
+          onToggle={() => togglePanel('project')}
+          summary={`${projectDocEntries.length} docs · ${latestTaskDependencies.length} deps · ${latestTaskCrossDependencies.length} cross`}
+        >
+          <div className="grid gap-4 xl:grid-cols-[1.2fr,0.8fr]">
+            <div className="space-y-4">
+              <div className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-3">
+                <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Featured Project Entry</div>
+                <div className="mt-2 text-sm font-medium text-white">{featuredTask?.title || 'No imported project task yet.'}</div>
+                {featuredTask?.summary && <div className="mt-2 text-sm text-gray-300">{featuredTask.summary}</div>}
+                {featuredTask && latestTask && featuredTask.task_id !== latestTask.task_id && (
+                  <div className="mt-2 text-xs text-gray-500">
+                    Latest maintenance entry remains in the task ledger below.
+                  </div>
+                )}
+                {service.notes && <div className="mt-3 text-sm text-cyan-100/80">{service.notes}</div>}
+              </div>
+
+              {latestTaskNotes.length > 0 && (
+                <div className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-3">
+                  <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Operator Notes</div>
+                  <div className="mt-2 space-y-2 text-sm text-gray-300">
+                    {latestTaskNotes.map((note, index) => (
+                      <div key={`${note}:${index}`} className="rounded-lg border border-gray-800 bg-black/20 px-3 py-2">
+                        {note}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {quickDocPreviews.length > 0 && (
+                <div className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Project Doc Quick View</div>
+                    <div className="flex flex-wrap gap-2">
+                      {quickDocPreviews.map((entry) => {
+                        const selected = docPreviewId === entry.id || (!docPreviewId && quickDocPreviews[0]?.id === entry.id)
+                        return (
+                          <button
+                            key={entry.id}
+                            type="button"
+                            onClick={() => setDocPreviewId((current) => (current === entry.id ? null : entry.id))}
+                            className={`rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+                              selected
+                                ? 'border-cyan-500 bg-cyan-500/10 text-cyan-100'
+                                : 'border-gray-700 text-gray-300 hover:border-cyan-500 hover:text-white'
+                            }`}
+                          >
+                            {entry.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  <pre className="mt-3 max-h-80 overflow-auto rounded-lg border border-gray-800 bg-black/20 p-3 text-xs text-gray-200 whitespace-pre-wrap">
+                    {quickPreviewById[docPreviewId || quickDocPreviews[0]?.id || ''] || 'No preview available.'}
+                  </pre>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-3">
+                <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Cross Dependencies</div>
+                {latestTaskCrossDependencies.length === 0 ? (
+                  <div className="mt-2 text-sm text-gray-500">No cross dependencies recorded yet.</div>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {latestTaskCrossDependencies.map((dependency, index) => (
+                      <div key={`${dependency.name}:${index}`} className="rounded-lg border border-gray-800 bg-black/20 px-3 py-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded border border-gray-700 px-1.5 py-0.5 text-[10px] uppercase text-gray-400">{dependency.kind}</span>
+                          <span className="text-sm font-medium text-white">{dependency.name}</span>
+                          {(dependency.host || dependency.port) && (
+                            <span className="font-mono text-xs text-cyan-300">{dependency.host || '*'}:{dependency.port || 'any'}</span>
+                          )}
+                        </div>
+                        {dependency.notes && <div className="mt-1 text-xs text-gray-400">{dependency.notes}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {latestTaskDiagram && (
+                <div className="rounded-xl border border-gray-800 bg-gray-950 px-4 py-3">
+                  <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Project Diagram</div>
+                  <pre className="mt-2 overflow-auto rounded-lg border border-gray-800 bg-black/20 p-3 text-xs text-gray-200 whitespace-pre-wrap">
+                    {latestTaskDiagram}
+                  </pre>
+                </div>
+              )}
+            </div>
+          </div>
+        </AccordionSection>
+      )}
+
+      {service && service.task_ledger && service.task_ledger.length > 0 && (
+        <AccordionSection
+          title="Task Ledger"
+          icon={<FileStack className="h-4 w-4 text-cyan-400" />}
+          open={Boolean(panelOpen.task_ledger)}
+          onToggle={() => togglePanel('task_ledger')}
+          summary={`${service.task_ledger.length} entries · latest ${new Date(service.task_ledger[0].timestamp).toLocaleString()}`}
+        >
+          <TaskLedgerPanel tasks={service.task_ledger} />
+        </AccordionSection>
       )}
 
       {service && (
-        <section className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <AccordionSection
+          title="Runtime"
+          icon={<RefreshCw className="h-4 w-4 text-cyan-400" />}
+          open={Boolean(panelOpen.runtime)}
+          onToggle={() => togglePanel('runtime')}
+          summary={`${service.locations.length} locations · ${runtimeAttentionCount} need attention`}
+        >
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <h3 className="text-sm font-medium text-gray-300">Runtime</h3>
               <div className="mt-1 text-xs text-gray-500">
-                Per-location ports, health checks, run-command hints, and node sync.
+                {service.execution_mode === 'networked'
+                  ? 'Per-location ports, health checks, run-command hints, and node sync.'
+                  : `Per-location deployment state, command hints, and node sync for ${service.execution_mode} services.`}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -627,6 +1354,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                   type="button"
                   onClick={() => {
                     setRuntimeDraft(service.locations.map((location) => ({ ...location, runtime: { ...location.runtime } })))
+                    setRuntimeExecutionMode(service.execution_mode)
                     setEditingRuntime(true)
                     setRuntimeMessage(null)
                   }}
@@ -646,49 +1374,497 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
             </div>
           )}
 
+          <div className="mb-4 rounded-xl border border-gray-800 bg-gray-950 p-3">
+            <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Execution Mode</div>
+            {editingRuntime ? (
+              <select
+                value={runtimeExecutionMode}
+                onChange={(event) => setRuntimeExecutionMode(event.target.value as Service['execution_mode'])}
+                className="mt-2 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500"
+              >
+                <option value="networked">networked</option>
+                <option value="batch">batch</option>
+                <option value="lambda">lambda</option>
+                <option value="docs_only">docs_only</option>
+              </select>
+            ) : (
+              <div className="mt-2 inline-flex rounded-full border border-cyan-900/40 bg-cyan-950/20 px-3 py-1 text-sm text-cyan-200">
+                {service.execution_mode}
+              </div>
+            )}
+          </div>
+
           <div className="space-y-4">
             {(editingRuntime ? runtimeDraft : service.locations).map((location) => {
               const latestRuntime = runtimeChecksByLocation.get(location.location_id)
               const latestSync = nodeSyncByLocation.get(location.location_id)
+              const nodeViewer = nodeViewerByLocation.get(location.location_id)
+              const serverMeta = servers.find((server) => server.server_id === location.server_id)
+              const nodeTransition = nodeActionResults[location.location_id]
+              const nodeAction = nodeActionLoading[location.location_id]
+              const recentLocationEvents = locationActionEvents[location.location_id] ?? []
+              const locationOpen = Boolean(locationPanels[location.location_id])
               const portsValue = location.runtime.expected_ports.join(', ')
+              const matchedEnvironments = environmentMatchesByLocation.get(location.location_id) ?? environmentMatchesByLocation.get('__service__') ?? []
+              const apiLabEnvironment = matchedEnvironments[0] ?? null
+              const managerManaged = Boolean(nodeViewer?.manager_managed)
+              const remoteNodeActionBlocked = serverMeta?.connection_type === 'ssh'
+              const rootManifestVersion = nodeViewer?.installed_version || ''
+              const managerVersion = nodeViewer?.manager_version || ''
+              const rootManifestStale = Boolean(managerManaged && managerVersion && rootManifestVersion && managerVersion !== rootManifestVersion)
+              const managerRoot = nodeViewer?.manager_root || '/Users/p/Desktop/dashboard'
+              const managerRootId = nodeViewer?.manager_root_id || serviceId
+              const normalizeCommand = `switchboard node normalize-root --manager-root ${quoteShell(managerRoot)} --project-root ${quoteShell(location.root)} --root-id ${quoteShell(managerRootId)} --service-id ${quoteShell(serviceId)} --display-name ${quoteShell(service.display_name)}`
+              const nodeControlLabel = remoteNodeActionBlocked
+                ? 'Remote Manager Required'
+                : managerManaged
+                ? 'Refresh Manager Root'
+                : !nodeViewer?.node_present
+                  ? 'Register Manager Root'
+                  : 'Refresh Manager Root'
+              const runtimeControlLabel = remoteNodeActionBlocked
+                ? 'Remote Manager Required'
+                : managerManaged
+                ? 'Check Manager'
+                : 'Normalize First'
+              const syncBlocked = nodeViewer?.node_present === true && !nodeViewer.bootstrap_ready
+              const nodePort = nodeViewer?.runtime_port ?? 8010
+              const nodeStartCommand = managerManaged
+                ? `switchboard node manager-status --manager-root ${quoteShell(managerRoot)} --port ${nodePort}`
+                : normalizeCommand
+              const nodeManifestPath = `${location.root}/switchboard/node.manifest.json`
+              const runtimePidPath = `${location.root}/switchboard/runtime/node.pid`
+              const runtimeScopePath = `${location.root}/switchboard/evidence/scope.snapshot.json`
+              const inspectCommand = serverShellCommand(serverMeta, `test -f ${quoteShell(nodeManifestPath)} && cat ${quoteShell(nodeManifestPath)}; test -f ${quoteShell(runtimePidPath)} && ps -p "$(cat ${quoteShell(runtimePidPath)})" -o command=; ss -ltnp 2>/dev/null || lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null`)
+              const deployAction = nodeViewer?.node_present ? 'node_upgrade' : 'node_deploy'
+              const remoteManagerMessage = 'Remote service-level node runtime actions are blocked here. Run switchboard node normalize-root on the remote manager host after read-only preflight.'
+              const deployCommandPreview = remoteNodeActionBlocked
+                ? [
+                    `POST /services/${serviceId}/node/${nodeViewer?.node_present ? 'upgrade' : 'deploy'} {"location_id":"${location.location_id}"}`,
+                    remoteManagerMessage,
+                  ]
+                : [
+                    `POST /services/${serviceId}/node/${nodeViewer?.node_present ? 'upgrade' : 'deploy'} {"location_id":"${location.location_id}"}`,
+                    normalizeCommand,
+                  ]
+              const restartCommandPreview = remoteNodeActionBlocked
+                ? [
+                    `POST /services/${serviceId}/node/restart {"location_id":"${location.location_id}"}`,
+                    remoteManagerMessage,
+                  ]
+                : [
+                    `POST /services/${serviceId}/node/restart {"location_id":"${location.location_id}"}`,
+                    managerManaged
+                      ? `switchboard node manager-status --manager-root ${quoteShell(managerRoot)} --port ${nodePort}`
+                      : normalizeCommand,
+                  ]
+              const runtimeCheckCommandPreview = [
+                `POST /services/${serviceId}/runtime/check {"location_id":"${location.location_id}"}`,
+                serverShellCommand(serverMeta, `ss -ltnp 2>/dev/null || lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null`),
+                location.runtime.healthcheck_command
+                  ? serverShellCommand(serverMeta, location.runtime.healthcheck_command)
+                  : 'Health check skipped because no command is configured.',
+              ].filter(Boolean)
+              const syncFromCommandPreview = [
+                `POST /services/${serviceId}/node/sync-from {"location_id":"${location.location_id}"}`,
+                serverShellCommand(serverMeta, `cat ${quoteShell(nodeManifestPath)}; test -f ${quoteShell(runtimeScopePath)} && cat ${quoteShell(runtimeScopePath)}`),
+              ].filter(Boolean)
+              const syncToCommandPreview = [
+                `POST /services/${serviceId}/node/sync-to {"location_id":"${location.location_id}"}`,
+                serverShellCommand(serverMeta, `mkdir -p ${quoteShell(`${location.root}/switchboard/evidence`)} && cat > ${quoteShell(nodeManifestPath)} && cat > ${quoteShell(runtimeScopePath)}`),
+              ].filter(Boolean)
+              const inspectDetails: ConfirmDetails = {
+                preflight: [
+                  serverMeta?.vpn_required ? 'VPN access must already be up for this server.' : 'Server route should already be reachable.',
+                  'This reads node manifest, pid/log state, and active listeners only.',
+                  nodeViewer?.node_present ? `Tracked node manifest already exists at ${nodeManifestPath}.` : 'No tracked node manifest is cached yet; inspect will confirm whether one exists on disk.',
+                ],
+                commandPreview: [`POST /services/${serviceId}/node/inspect {"location_id":"${location.location_id}"}`, inspectCommand].filter(Boolean),
+                followUp: [
+                  'Check the refreshed Node Viewer block for actual runtime port, pid, bootstrap state, and errors.',
+                  'If the node port changed, later restart actions will reuse the discovered port instead of blindly defaulting.',
+                ],
+                confirmLabel: 'Inspect Server State',
+              }
+              const deployDetails: ConfirmDetails = {
+                preflight: [
+                  serverMeta?.vpn_required ? 'VPN access must already be up for this server.' : 'Server route should already be reachable.',
+                  remoteNodeActionBlocked
+                    ? 'Remote service-level node actions are blocked; use that machine’s manager workflow.'
+                    : managerManaged
+                    ? 'This root is manager-owned; the action refreshes the root registration and canonical Switchboard files without starting a separate node.'
+                    : 'This will register the project root under the local manager and write the canonical Switchboard files.',
+                  'Make sure this project root is the correct owner before writing control-center files under switchboard/.',
+                ],
+                commandPreview: deployCommandPreview,
+                followUp: [
+                  managerManaged
+                    ? 'The single local manager remains the only Switchboard runtime for this machine.'
+                    : 'Run Inspect Node afterward to confirm the root is manager-owned.',
+                  'Bootstrap can still remain not ready until the first task-ledger/bootstrap write happens.',
+                ],
+                confirmLabel: nodeControlLabel,
+              }
+              const restartDetails: ConfirmDetails = {
+                preflight: [
+                  serverMeta?.vpn_required ? 'VPN access must already be up for this server.' : 'Server route should already be reachable.',
+                  remoteNodeActionBlocked
+                    ? 'Remote service-level node runtime actions are blocked; use that machine’s manager workflow.'
+                    : managerManaged
+                    ? `This checks the single manager port ${nodePort}; it will not start a project-specific node.`
+                    : 'This local root must be normalized before runtime checks; no project-specific node will be started.',
+                  managerManaged ? 'Manager-owned roots do not get their own node runtime.' : 'One-port mode blocks per-project runtime starts from this page.',
+                ],
+                commandPreview: restartCommandPreview,
+                followUp: [
+                  'Check the action timeline for live elapsed time and ETA while restart runs.',
+                  'If restart still fails, inspect node logs immediately from the refreshed Node Viewer.',
+                ],
+                confirmLabel: runtimeControlLabel,
+              }
+              const runtimeCheckDetails: ConfirmDetails = {
+                preflight: [
+                  serverMeta?.vpn_required ? 'VPN access must already be up for this server.' : 'Server route should already be reachable.',
+                  'Snapshot reads listeners, exposure, process ownership, and optional health output.',
+                  location.runtime.healthcheck_command ? 'A health command is configured and will be executed as part of this snapshot.' : 'No health command is configured, so health will stay skipped.',
+                ],
+                commandPreview: runtimeCheckCommandPreview,
+                followUp: [
+                  'Use the refreshed ownership list below to see which tracked service/location each detected port belongs to.',
+                  'Unexpected public listeners should be investigated before any new deploy or restart step.',
+                ],
+                confirmLabel: 'Refresh Runtime Snapshot',
+              }
+              const syncFromDetails: ConfirmDetails = {
+                preflight: [
+                  serverMeta?.vpn_required ? 'VPN access must already be up for this server.' : 'Server route should already be reachable.',
+                  syncBlocked ? 'Bootstrap is still not ready, so sync from node is blocked until the node writes its first bootstrap/task-ledger entry.' : 'Node bootstrap is ready, so manifest and scope data can be imported.',
+                  'This will update control-center records from the selected node location.',
+                ],
+                commandPreview: syncFromCommandPreview,
+                followUp: [
+                  'Review imported runtime config, scope, and managed-doc metadata after the sync completes.',
+                  'If the node is stale, refresh or redeploy it before trusting imported state.',
+                ],
+                confirmLabel: 'Sync From Node',
+              }
+              const syncToDetails: ConfirmDetails = {
+                preflight: [
+                  serverMeta?.vpn_required ? 'VPN access must already be up for this server.' : 'Server route should already be reachable.',
+                  syncBlocked ? 'Bootstrap is still not ready, so sync to node is blocked until the node writes its first bootstrap/task-ledger entry.' : 'Node bootstrap is ready, so scope and runtime metadata can be mirrored.',
+                  'This writes the control-center service scope and runtime metadata into the selected project root.',
+                ],
+                commandPreview: syncToCommandPreview,
+                followUp: [
+                  'Inspect the node again if you want to verify the written manifest and scope snapshot immediately.',
+                  'Use the dedicated API Lab page separately for environment-level runtime review and API flow runs.',
+                ],
+                confirmLabel: 'Sync To Node',
+              }
+              const persistedActionKey = (Object.keys(LOCK_KEY_TO_ACTION) as PersistedActionKey[]).find((actionKey) =>
+                Boolean(activeLocks[actionKey]),
+              ) ?? null
+              const localAction: LocationActionKey | null =
+                nodeAction ??
+                (checkingRuntimeLocation === location.location_id
+                  ? 'runtime_check'
+                  : syncingFromLocation === location.location_id
+                    ? 'sync_from_node'
+                    : syncingToLocation === location.location_id
+                      ? 'sync_to_node'
+                      : null)
+              const activeAction = localAction ?? (persistedActionKey ? LOCK_KEY_TO_ACTION[persistedActionKey] : null)
+              const activeActionStartedAt =
+                activeAction === null
+                  ? null
+                  : actionStartTimes[actionStartKey(location.location_id, activeAction)] ??
+                    (persistedActionKey ? activeLocks[persistedActionKey]?.started_at : null) ??
+                    new Date().toISOString()
+              const activeActionMeta = activeAction ? ACTION_META[activeAction] : null
+              const activeActionProgress =
+                activeAction && activeActionStartedAt && activeActionMeta
+                  ? getActionProgress(activeActionStartedAt, activeActionMeta.eta_seconds, nowMs)
+                  : null
+              const locationBusy = activeAction !== null
               return (
                 <div key={location.location_id} className="rounded-xl border border-gray-800 bg-gray-950 p-4">
-                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <div className="text-xs uppercase tracking-[0.16em] text-gray-500">{location.location_id}</div>
-                      <div className="mt-1 text-sm font-medium text-white">{location.server_id}</div>
-                      <div className="mt-1 font-mono text-xs text-gray-400 break-all">{location.root}</div>
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <button
+                        type="button"
+                        onClick={() => toggleLocationPanel(location.location_id)}
+                        className="min-w-0 flex-1 text-left"
+                      >
+                        <div className="text-xs uppercase tracking-[0.16em] text-gray-500">{location.location_id}</div>
+                        <div className="mt-1 text-sm font-medium text-white">{location.server_id}</div>
+                        <div className="mt-1 font-mono text-xs text-gray-400 break-all">{location.root}</div>
+                        <div className="mt-2 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.16em]">
+                          {serverMeta && (
+                            <>
+                              <span className={`rounded-full border px-2 py-1 ${serverMeta.vpn_required ? 'border-amber-400/30 bg-amber-400/10 text-amber-200' : 'border-gray-700 bg-gray-900 text-gray-400'}`}>
+                                {serverMeta.vpn_required ? 'VPN required' : 'No VPN needed'}
+                              </span>
+                              <span className={`rounded-full border px-2 py-1 ${serverMeta.deployment_mode === 'local_bundle_only' ? 'border-cyan-400/30 bg-cyan-400/10 text-cyan-200' : 'border-gray-700 bg-gray-900 text-gray-400'}`}>
+                                {serverMeta.deployment_mode === 'local_bundle_only' ? 'Local bundle only' : 'Native agent allowed'}
+                              </span>
+                            </>
+                          )}
+                          <span className="rounded-full border border-gray-700 bg-gray-900 px-2 py-1 text-gray-300">
+                            {managerManaged ? `manager ${managerVersion || 'active'}` : `node ${rootManifestVersion || 'not installed'}`}
+                          </span>
+                          {rootManifestStale && (
+                            <span className="rounded-full border border-amber-700 bg-amber-950/30 px-2 py-1 text-amber-200">
+                              root manifest {rootManifestVersion}
+                            </span>
+                          )}
+                          <span className="rounded-full border border-gray-700 bg-gray-900 px-2 py-1 text-gray-300">
+                            bootstrap {nodeViewer?.bootstrap_ready ? 'ready' : 'not ready'}
+                          </span>
+                          <span className="rounded-full border border-gray-700 bg-gray-900 px-2 py-1 text-gray-300">
+                            runtime {nodeViewer?.runtime_status || 'missing'}
+                          </span>
+                        </div>
+                      </button>
+                      <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => initiateAction('node_inspect', location.location_id, inspectDetails)}
+                        disabled={offline || locationBusy}
+                        className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
+                      >
+                        {activeAction === 'inspect' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
+                        {activeAction === 'inspect' ? 'Inspecting…' : 'Inspect Node'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => initiateAction(deployAction, location.location_id, deployDetails)}
+                        disabled={offline || remoteNodeActionBlocked || locationBusy}
+                        data-attention={nodeViewer?.needs_install ? 'true' : 'false'}
+                        className={`inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-xs transition-colors disabled:opacity-50 ${
+                          nodeViewer?.needs_install
+                            ? 'border-amber-700 text-amber-200 shadow-[0_0_0_1px_rgba(250,204,21,0.2),0_0_18px_rgba(250,204,21,0.12)]'
+                            : 'border-gray-700 text-gray-200 hover:border-cyan-500 hover:text-white'
+                        }`}
+                      >
+                        {activeAction === 'deploy' || activeAction === 'upgrade' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
+                        {activeAction === 'deploy'
+                          ? 'Registering…'
+                          : activeAction === 'upgrade'
+                            ? 'Refreshing…'
+                            : nodeControlLabel}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => initiateAction('node_restart', location.location_id, restartDetails)}
+                        disabled={offline || remoteNodeActionBlocked || !managerManaged || locationBusy}
+                        className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
+                      >
+                        {activeAction === 'restart' ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
+                        {activeAction === 'restart' ? 'Checking…' : runtimeControlLabel}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => initiateAction('runtime_check', location.location_id, runtimeCheckDetails)}
+                        disabled={offline || locationBusy}
+                        className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
+                      >
+                        <RefreshCw className={`h-3.5 w-3.5 ${checkingRuntimeLocation === location.location_id || activeLocks.runtime_check ? 'animate-spin' : ''}`} />
+                        {checkingRuntimeLocation === location.location_id || activeLocks.runtime_check ? 'Refreshing…' : actionLockStatus === 'offline' ? 'Backend Offline' : 'Refresh Snapshot'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => initiateAction('sync_from_node', location.location_id, syncFromDetails)}
+                        disabled={offline || locationBusy || syncBlocked}
+                        className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
+                      >
+                        {syncingFromLocation === location.location_id || activeLocks.sync_from_node ? 'Syncing…' : actionLockStatus === 'offline' ? 'Backend Offline' : 'Sync From Node'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => initiateAction('sync_to_node', location.location_id, syncToDetails)}
+                        disabled={offline || locationBusy || syncBlocked}
+                        className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
+                      >
+                        {syncingToLocation === location.location_id || activeLocks.sync_to_node ? 'Syncing…' : actionLockStatus === 'offline' ? 'Backend Offline' : 'Sync To Node'}
+                      </button>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => initiateAction('runtime_check', location.location_id)}
-                        disabled={offline || checkingRuntimeLocation === location.location_id || pendingActions[`pending:runtime_check:${location.location_id}`]}
-                        className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
-                      >
-                        <RefreshCw className={`h-3.5 w-3.5 ${checkingRuntimeLocation === location.location_id || pendingActions[`pending:runtime_check:${location.location_id}`] ? 'animate-spin' : ''}`} />
-                        {checkingRuntimeLocation === location.location_id || pendingActions[`pending:runtime_check:${location.location_id}`] ? 'Checking…' : 'Run Runtime Check'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSyncFromNode(location.location_id)}
-                        disabled={offline || syncingFromLocation === location.location_id}
-                        className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
-                      >
-                        {syncingFromLocation === location.location_id ? 'Syncing…' : 'Sync From Node'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSyncToNode(location.location_id)}
-                        disabled={offline || syncingToLocation === location.location_id}
-                        className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-200 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
-                      >
-                        {syncingToLocation === location.location_id ? 'Syncing…' : 'Sync To Node'}
-                      </button>
                     </div>
+
+                    {actionLockStatus === 'offline' && (
+                      <div className="rounded-xl border border-rose-700/40 bg-rose-950/20 p-3">
+                        <div className="text-xs uppercase tracking-[0.16em] text-rose-300">Backend Offline</div>
+                        <div className="mt-1 text-sm text-rose-100">
+                          Action locks could not be refreshed from the control-center backend. Stale session progress was cleared instead of being treated as real runtime activity.
+                        </div>
+                      </div>
+                    )}
+
+                    {nodeViewer?.needs_bootstrap && (
+                      <div className="rounded-xl border border-amber-700/40 bg-amber-950/20 p-3">
+                        <div className="text-xs uppercase tracking-[0.16em] text-amber-300">Bootstrap Still Missing</div>
+                        <div className="mt-1 text-sm text-amber-100">
+                          The node runtime is up, but bootstrap metadata has not been written yet.
+                        </div>
+                        <div className="mt-2 text-xs text-amber-200/80">
+                          Current state: {managerManaged ? `manager ${managerVersion || 'active'}` : `node ${rootManifestVersion || 'not installed'}`} · runtime {nodeViewer.runtime_status} · bootstrap not ready. Sync actions stay blocked until the first task-ledger/bootstrap entry is produced.
+                        </div>
+                      </div>
+                    )}
+
+                    {(activeAction !== null || recentLocationEvents.length > 0) && (
+                      <div className="rounded-xl border border-gray-800 bg-gray-900/70 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Action Timeline</div>
+                          {activeAction !== null && activeActionMeta && activeActionProgress && activeActionStartedAt && (
+                            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-900/40 bg-cyan-950/20 px-2 py-1 text-[11px] uppercase tracking-[0.14em] text-cyan-200">
+                              <LoaderCircle className="h-3 w-3 animate-spin" />
+                              {activeActionMeta.running_label}
+                            </div>
+                          )}
+                        </div>
+                        {activeAction !== null && activeActionMeta && activeActionProgress && activeActionStartedAt && (
+                          <div className="mt-3 rounded-lg border border-cyan-900/30 bg-cyan-950/20 p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-cyan-100">
+                              <div>{activeActionMeta.running_label}</div>
+                              <div className="text-xs text-cyan-100/70">
+                                Started {new Date(activeActionStartedAt).toLocaleTimeString()} · elapsed {formatDurationLabel(activeActionProgress.elapsedSeconds)}
+                              </div>
+                            </div>
+                            <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-900">
+                              <div
+                                className="h-full rounded-full bg-cyan-400 transition-[width]"
+                                style={{ width: `${Math.max(8, activeActionProgress.percent)}%` }}
+                              />
+                            </div>
+                            <div className="mt-2 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-400">
+                              <span>
+                                {activeActionProgress.overrunSeconds > 0
+                                  ? `Past estimate by ${formatDurationLabel(activeActionProgress.overrunSeconds)}`
+                                  : `ETA about ${formatDurationLabel(activeActionProgress.remainingSeconds)} remaining`}
+                              </span>
+                              {persistedActionKey && activeLocks[persistedActionKey]?.expires_at && (
+                                <span>Lock expires {new Date(activeLocks[persistedActionKey].expires_at).toLocaleTimeString()}</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        <div className="mt-3 space-y-2">
+                          {recentLocationEvents.map((event, index) => (
+                            <div key={`${event.timestamp}:${event.action}:${index}`} className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-gray-800 bg-black/20 px-3 py-2 text-xs">
+                              <div className="min-w-0">
+                                <div className={`uppercase tracking-[0.14em] ${
+                                  event.status === 'error'
+                                    ? 'text-red-300'
+                                    : event.status === 'running'
+                                      ? 'text-cyan-300'
+                                      : 'text-emerald-300'
+                                }`}>
+                                  {event.action.split('_').join(' ')}
+                                </div>
+                                <div className="mt-1 text-gray-300">{event.message}</div>
+                                {event.duration_seconds !== undefined && (
+                                  <div className="mt-1 text-gray-500">Duration {formatDurationLabel(event.duration_seconds)}</div>
+                                )}
+                              </div>
+                              <div className="text-gray-500">{new Date(event.timestamp).toLocaleTimeString()}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="rounded-xl border border-cyan-900/40 bg-cyan-950/20 p-3">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div>
+                          <div className="text-xs uppercase tracking-[0.16em] text-cyan-300">Dedicated API Lab</div>
+                          {apiLabEnvironment ? (
+                            <>
+                              <div className="mt-1 text-sm text-cyan-100">
+                                {apiLabEnvironment.display_name} opens as its own full-page environment viewer.
+                              </div>
+                              <div className="mt-1 text-xs text-cyan-100/70">
+                                Use it for runtime snapshots, API flows, dependency review, and run history outside this runtime card.
+                              </div>
+                            </>
+                          ) : (
+                            <div className="mt-1 text-sm text-cyan-100/80">
+                              No project environment is linked to this location yet. Add one in Projects &amp; Environments to unlock the dedicated API Lab page.
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => apiLabEnvironment && onOpenEnvironmentLab(apiLabEnvironment.environment_id)}
+                          disabled={!apiLabEnvironment}
+                          className="inline-flex items-center gap-1 rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100 transition-colors hover:border-cyan-400 hover:text-white disabled:opacity-50"
+                        >
+                          Open Full Page
+                        </button>
+                      </div>
+                    </div>
+
+                    {locationOpen && (
+                      <>
+
+                  <div className="mt-4 rounded-xl border border-gray-800 bg-gray-900 p-3">
+                    <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Node Viewer</div>
+                    {nodeViewer ? (
+                      <div className="mt-2 grid gap-2 text-sm text-gray-300 md:grid-cols-2">
+                        <div><span className="text-gray-500">Root manifest:</span> {rootManifestVersion || 'not installed'}</div>
+                        <div><span className="text-gray-500">Manager version:</span> {managerManaged ? managerVersion || 'active' : 'not manager-owned'}</div>
+                        <div><span className="text-gray-500">Bootstrap:</span> {nodeViewer.bootstrap_version || 'not ready'}</div>
+                        <div><span className="text-gray-500">Manager owned:</span> {nodeViewer.manager_managed ? 'yes' : 'no'}</div>
+                        <div><span className="text-gray-500">Manager root:</span> {nodeViewer.manager_root_id || 'unregistered'}</div>
+                        <div><span className="text-gray-500">Runtime:</span> {nodeViewer.runtime_status}</div>
+                        <div><span className="text-gray-500">Manifest:</span> <span className="font-mono text-xs">{nodeViewer.manifest_path}</span></div>
+                        <div><span className="text-gray-500">Port:</span> {nodeViewer.runtime_port}</div>
+                        <div><span className="text-gray-500">Runtime ready:</span> {nodeViewer.runtime_ready ? 'yes' : 'no'}</div>
+                        {nodeViewer.last_error && <div className="md:col-span-2 text-amber-200">{nodeViewer.last_error}</div>}
+                        {nodeViewer.manager_managed && (
+                          <div className="md:col-span-2 text-xs text-cyan-200">
+                            This root is owned by the local Switchboard manager; service actions do not install or start a per-project node runtime.
+                          </div>
+                        )}
+                        {rootManifestStale && (
+                          <div className="md:col-span-2 text-xs text-amber-200">
+                            Root manifest version trails the manager. Refresh Manager Root will normalize this root and update its manifest.
+                          </div>
+                        )}
+                        {nodeViewer.node_present && !nodeViewer.manager_managed && !nodeViewer.installed_release_asset_id && (
+                          <div className="md:col-span-2 text-xs text-amber-200">
+                            Exact GitHub release identity is not recorded on this node yet. Inspect can confirm package version, but release-asset equality stays unknown until the node is installed from a tracked GitHub release.
+                          </div>
+                        )}
+                        {nodeViewer.node_present && !nodeViewer.bootstrap_ready && (
+                          <div className="md:col-span-2 text-xs text-amber-200">
+                            Node scaffold is present, but sync stays blocked until bootstrap writes the first task entry.
+                          </div>
+                        )}
+                        <div className="md:col-span-2 rounded-lg border border-gray-800 bg-black/20 px-3 py-2">
+                          <div className="text-[11px] uppercase tracking-[0.14em] text-gray-500">{managerManaged ? 'Manager Command' : 'Normalize Command'}</div>
+                          <pre className="mt-2 overflow-x-auto text-xs text-cyan-200">{nodeStartCommand}</pre>
+                          <div className="mt-2 text-xs text-gray-500">
+                            One-port mode keeps Switchboard runtime ownership on the manager. Project roots are normalized, snapshotted, and verified under that manager instead of running separate node listeners.
+                          </div>
+                        </div>
+                        {nodeTransition?.before && nodeTransition?.after && (
+                          <div className="md:col-span-2 mt-2 rounded-lg border border-amber-900/40 bg-amber-950/20 px-3 py-2 text-xs text-amber-100">
+                            <div className="uppercase tracking-[0.14em] text-amber-300">Latest action delta</div>
+                            <div className="mt-1 flex flex-wrap gap-4">
+                              <span>Root manifest: {nodeTransition.before.installed_version || 'none'} → {nodeTransition.after.installed_version || 'none'}</span>
+                              <span>Bootstrap: {nodeTransition.before.bootstrap_ready ? 'ready' : 'not ready'} → {nodeTransition.after.bootstrap_ready ? 'ready' : 'not ready'}</span>
+                              <span>Runtime: {nodeTransition.before.runtime_status} → {nodeTransition.after.runtime_status}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="mt-2 text-sm text-gray-500">No node viewer data cached yet. Use Inspect Node.</div>
+                    )}
                   </div>
 
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    {(runtimeExecutionMode === 'networked' || location.runtime.expected_ports.length > 0 || (service?.task_ledger?.[0]?.runtime_services?.length ?? 0) > 0) && (
                     <div className="text-sm text-gray-300">
                       <div className="mb-1">Expected ports</div>
                       {editingRuntime ? (
@@ -715,6 +1891,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                         </div>
                       )}
                     </div>
+                    )}
 
                     <label className="text-sm text-gray-300">
                       <div className="mb-1">Monitoring mode</div>
@@ -736,6 +1913,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                     </label>
                   </div>
 
+                  {runtimeExecutionMode !== 'docs_only' && (
                   <label className="mt-3 block text-sm text-gray-300">
                     <div className="mb-1">Health check command</div>
                     {editingRuntime ? (
@@ -750,6 +1928,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                       </pre>
                     )}
                   </label>
+                  )}
 
                   <label className="mt-3 block text-sm text-gray-300">
                     <div className="mb-1">Run command hint</div>
@@ -792,13 +1971,19 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                           </div>
                           <div>
                             <span className="text-gray-500">Detected ports:</span>{' '}
-                            {latestRuntime.detected_ports.length > 0
+                            {runtimeExecutionMode !== 'networked' && latestRuntime.detected_ports.length === 0
+                              ? 'not required'
+                              : latestRuntime.detected_ports.length > 0
                               ? latestRuntime.detected_ports.map((port) => `:${port.port}`).join(', ')
                               : 'none'}
                           </div>
                           <div>
                             <span className="text-gray-500">Missing ports:</span>{' '}
-                            {latestRuntime.missing_ports.length > 0 ? latestRuntime.missing_ports.join(', ') : 'none'}
+                            {runtimeExecutionMode !== 'networked' && latestRuntime.missing_ports.length === 0
+                              ? 'not required'
+                              : latestRuntime.missing_ports.length > 0
+                                ? latestRuntime.missing_ports.join(', ')
+                                : 'none'}
                           </div>
                           <div>
                             <span className="text-gray-500">Health:</span> {latestRuntime.healthcheck_status}
@@ -810,6 +1995,42 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                           <div>
                             <span className="text-gray-500">Node present:</span> {latestRuntime.node_present ? 'yes' : 'no'}
                           </div>
+                          {latestRuntime.process_findings && latestRuntime.process_findings.length > 0 && (
+                            <div className="rounded-lg border border-gray-800 bg-black/20 p-2">
+                              <div className="text-xs uppercase tracking-[0.14em] text-gray-500">Port ownership</div>
+                              <div className="mt-2 space-y-2">
+                                {latestRuntime.process_findings.map((finding, index) => {
+                                  const exposure = latestRuntime.exposed_ports?.find((entry) => entry.port === finding.port)
+                                  const ownerLabel = finding.owner_display_name || finding.owner_root || finding.process_name || 'Untracked process'
+                                  return (
+                                    <div key={`${finding.port ?? 'na'}:${finding.pid ?? index}`} className="rounded-lg border border-gray-800 px-3 py-2">
+                                      <div className="flex flex-wrap items-center gap-2 text-sm text-gray-200">
+                                        <span className="font-mono text-cyan-300">:{finding.port ?? 'unknown'}</span>
+                                        <span>{ownerLabel}</span>
+                                        {exposure && (
+                                          <span className="rounded-full border border-gray-700 bg-gray-900 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-gray-300">
+                                            {exposure.exposure}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="mt-1 text-xs text-gray-500">
+                                        {finding.owner_service_id ? `service ${finding.owner_service_id}` : finding.process_name || 'unknown process'}
+                                        {finding.owner_root ? ` · ${finding.owner_root}` : ''}
+                                        {finding.pid ? ` · pid ${finding.pid}` : ''}
+                                        {finding.bind_address ? ` · ${finding.bind_address}` : ''}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )}
+                          {latestRuntime.exposed_ports && latestRuntime.exposed_ports.length > 0 && (
+                            <div>
+                              <span className="text-gray-500">Exposed ports:</span>{' '}
+                              {latestRuntime.exposed_ports.map((port) => `${port.port}:${port.exposure}`).join(', ')}
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="mt-2 text-sm text-gray-500">No runtime check captured yet.</div>
@@ -839,179 +2060,40 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                       )}
                     </div>
                   </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               )
             })}
           </div>
-        </section>
+        </AccordionSection>
       )}
 
-      {service && (
-        <section className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-medium text-gray-300">Managed Docs</h3>
-              <div className="mt-1 text-xs text-gray-500">
-                Framework-owned derived docs generated from <code>switchboard/local/tasks-completed.md</code>.
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {editingManagedDocs ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={handleCancelManagedDocsEdit}
-                    disabled={savingManagedDocs}
-                    className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-300 transition-colors hover:border-gray-500 hover:text-white disabled:opacity-50"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveManagedDocs}
-                    disabled={offline || savingManagedDocs}
-                    className="inline-flex items-center gap-1 rounded-lg bg-white px-3 py-2 text-xs font-medium text-black transition-colors hover:bg-gray-200 disabled:opacity-50"
-                  >
-                    <Save className="h-3.5 w-3.5" />
-                    {savingManagedDocs ? 'Saving…' : 'Save Managed Docs'}
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setManagedDocsDraft(service.managed_docs.map((entry) => ({ ...entry })))
-                    setEditingManagedDocs(true)
-                    setManagedDocsMessage(null)
-                  }}
-                  disabled={offline}
-                  className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-300 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                  Edit Managed Docs
-                </button>
-              )}
-            </div>
-          </div>
-
-          {managedDocsMessage && (
-            <div className="mb-4 rounded-xl border border-gray-800 bg-gray-950 px-3 py-2 text-sm text-gray-300">
-              {managedDocsMessage}
-            </div>
-          )}
-
-          <div className="grid gap-3 md:grid-cols-2">
-            {(editingManagedDocs ? managedDocsDraft : service.managed_docs).map((entry, index) => (
-              <div key={`${entry.doc_id}:${index}`} className="rounded-xl border border-gray-800 bg-gray-950 p-4">
-                {editingManagedDocs ? (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm font-medium text-white">{entry.doc_id}</div>
-                      <label className="inline-flex items-center gap-2 text-xs text-gray-300">
-                        <input
-                          type="checkbox"
-                          checked={entry.enabled}
-                          onChange={(event) =>
-                            setManagedDocsDraft((current) =>
-                              current.map((candidate, candidateIndex) =>
-                                candidateIndex === index ? { ...candidate, enabled: event.target.checked } : candidate,
-                              ),
-                            )
-                          }
-                        />
-                        Enabled
-                      </label>
-                    </div>
-                    <input
-                      value={entry.path}
-                      onChange={(event) =>
-                        setManagedDocsDraft((current) =>
-                          current.map((candidate, candidateIndex) =>
-                            candidateIndex === index ? { ...candidate, path: event.target.value } : candidate,
-                          ),
-                        )
-                      }
-                      className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-xs text-white outline-none focus:border-cyan-500"
-                    />
-                  </div>
-                ) : (
-                  <div className="space-y-2 text-sm text-gray-300">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-medium text-white">{entry.doc_id}</span>
-                      <span
-                        className={`rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-[0.16em] ${
-                          entry.enabled
-                            ? 'border-cyan-900 bg-cyan-950/60 text-cyan-300'
-                            : 'border-gray-700 text-gray-500'
-                        }`}
-                      >
-                        {entry.enabled ? 'enabled' : 'disabled'}
-                      </span>
-                    </div>
-                    <div className="font-mono text-xs text-gray-400 break-all">{entry.path}</div>
-                    <div className="text-xs text-gray-500">
-                      Generated: {entry.last_generated_at ? new Date(entry.last_generated_at).toLocaleString() : 'not yet'}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-4 rounded-xl border border-gray-800 bg-gray-950 p-4">
-            <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Latest Doc Index</div>
-            {latestNodeDocIndex ? (
-              <div className="mt-2 space-y-3 text-sm text-gray-300">
-                <div>
-                  <span className="text-gray-500">Generated:</span>{' '}
-                  {latestNodeDocIndex.generated ? new Date(latestNodeDocIndex.generated).toLocaleString() : 'unknown'}
-                </div>
-                <div className="grid gap-2 md:grid-cols-2">
-                  {latestNodeDocIndex.docs.map((entry) => (
-                    <div key={`${entry.doc_id}:${entry.path}`} className="rounded-lg border border-gray-800 bg-gray-900 px-3 py-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="font-medium text-white">{entry.label ?? entry.doc_id}</span>
-                        <span className="text-xs text-gray-500">{entry.enabled ? 'enabled' : 'disabled'}</span>
-                      </div>
-                      <div className="mt-1 font-mono text-[11px] text-gray-400 break-all">{entry.path}</div>
-                      <div className="mt-1 text-[11px] text-gray-500">
-                        Contributors: {entry.contributor_timestamps.length > 0 ? entry.contributor_timestamps.length : 0}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="mt-2 text-sm text-gray-500">No doc index metadata synced from the node yet.</div>
-            )}
-          </div>
-        </section>
-      )}
-
-      {service && service.task_ledger && service.task_ledger.length > 0 && (
-        <section className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
-          <TaskLedgerPanel tasks={service.task_ledger} />
-        </section>
-      )}
-
-      {/* Repos */}
-      <section className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
-        <h3 className="text-sm font-medium text-gray-300 mb-3">Repositories</h3>
+      <AccordionSection
+        title="Repositories"
+        icon={<FolderTree className="h-4 w-4 text-cyan-400" />}
+        open={Boolean(panelOpen.repositories)}
+        onToggle={() => togglePanel('repositories')}
+        summary={`${repos.length} tracked repositories`}
+      >
         <RepoSummary
           serviceId={serviceId}
           repos={repos}
           allowedPaths={service?.allowed_git_pull_paths}
           disabled={offline}
         />
-      </section>
+      </AccordionSection>
 
-      <section className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
+      <AccordionSection
+        title="Project Files"
+        icon={<FolderTree className="h-4 w-4 text-cyan-400" />}
+        open={Boolean(panelOpen.scope)}
+        onToggle={() => togglePanel('scope')}
+        summary={`${projectDocEntries.length} project docs · ${scopeSummary.repo} repo · ${scopeSummary.code} code · ${scopeSummary.doc} doc · ${scopeSummary.log} log`}
+      >
         <div className="mb-3 flex items-center justify-between gap-3">
-          <h3 className="flex items-center gap-2 text-sm font-medium text-gray-300">
-            <FolderTree className="h-4 w-4 text-cyan-400" />
-            Scope
-          </h3>
+          <div className="text-xs text-gray-500">Project docs, quick previews, managed-doc controls, and saved scope live in one compact place. Root project docs stay in scope; framework local/evidence overhead stays out.</div>
           <div className="flex items-center gap-2">
             {editingScope ? (
               <>
@@ -1051,6 +2133,157 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
             )}
           </div>
         </div>
+        <div className="mb-4 rounded-xl border border-gray-800 bg-gray-950 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Project Docs</div>
+              <div className="mt-1 text-xs text-gray-500">
+                README/API/CHANGELOG and other project-facing docs synced from the node. These should be included in quick review and pull bundles.
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {editingManagedDocs ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleCancelManagedDocsEdit}
+                    disabled={savingManagedDocs}
+                    className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-300 transition-colors hover:border-gray-500 hover:text-white disabled:opacity-50"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Cancel Docs
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveManagedDocs}
+                    disabled={offline || savingManagedDocs}
+                    className="inline-flex items-center gap-1 rounded-lg bg-white px-3 py-2 text-xs font-medium text-black transition-colors hover:bg-gray-200 disabled:opacity-50"
+                  >
+                    <Save className="h-3.5 w-3.5" />
+                    {savingManagedDocs ? 'Saving…' : 'Save Docs'}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManagedDocsDraft(service?.managed_docs.map((entry) => ({ ...entry })) ?? [])
+                    setEditingManagedDocs(true)
+                    setManagedDocsMessage(null)
+                  }}
+                  disabled={offline}
+                  className="inline-flex items-center gap-1 rounded-lg border border-gray-700 px-3 py-2 text-xs text-gray-300 transition-colors hover:border-cyan-500 hover:text-white disabled:opacity-50"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Edit Docs
+                </button>
+              )}
+            </div>
+          </div>
+          {managedDocsMessage && (
+            <div className="mt-3 rounded-xl border border-gray-800 bg-black/20 px-3 py-2 text-sm text-gray-300">
+              {managedDocsMessage}
+            </div>
+          )}
+          <div className="mt-3 space-y-2">
+            {projectDocEntries.length === 0 ? (
+              <div className="text-sm text-gray-500">No project-facing docs have been synced yet.</div>
+            ) : (
+              projectDocEntries.map((entry) => {
+                const hasPreview = Boolean(quickPreviewById[entry.id])
+                const selected = docPreviewId === entry.id || (!docPreviewId && quickDocPreviews[0]?.id === entry.id && hasPreview)
+                return (
+                  <div key={`${entry.id}:${entry.path}`} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-gray-800 bg-black/20 px-3 py-2 text-sm">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-white">{entry.label}</span>
+                        <span className="rounded-full border border-cyan-900 bg-cyan-950/60 px-2 py-0.5 text-[11px] uppercase tracking-[0.14em] text-cyan-300">
+                          tracked
+                        </span>
+                        <span className={`rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-[0.14em] ${entry.frameworkWritesEnabled ? 'border-emerald-900 bg-emerald-950/60 text-emerald-300' : 'border-gray-700 text-gray-500'}`}>
+                          {entry.frameworkWritesEnabled ? 'framework writes on' : 'project-owned'}
+                        </span>
+                      </div>
+                      <div className="mt-1 font-mono text-[11px] text-gray-400 break-all">{entry.path}</div>
+                    </div>
+                    {hasPreview && (
+                      <button
+                        type="button"
+                        onClick={() => setDocPreviewId((current) => (current === entry.id ? null : entry.id))}
+                        className={`rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+                          selected
+                            ? 'border-cyan-500 bg-cyan-500/10 text-cyan-100'
+                            : 'border-gray-700 text-gray-300 hover:border-cyan-500 hover:text-white'
+                        }`}
+                      >
+                        {selected ? 'Hide Preview' : 'Quick View'}
+                      </button>
+                    )}
+                  </div>
+                )
+              })
+            )}
+          </div>
+          {(editingManagedDocs ? managedDocsDraft : service?.managed_docs ?? []).filter((entry) => !isFrameworkOverheadDoc(entry.path)).length > 0 && (
+            <div className="mt-4 space-y-2">
+              <div className="text-xs uppercase tracking-[0.16em] text-gray-500">Framework Write Policy</div>
+              <div className="text-xs text-gray-500">
+                These entries only control whether Switchboard may rewrite the root file. They do not decide whether the project doc exists, shows up in quick view, or gets included in scope and pull bundles.
+              </div>
+              {(editingManagedDocs ? managedDocsDraft : service?.managed_docs ?? [])
+                .filter((entry) => !isFrameworkOverheadDoc(entry.path))
+                .map((entry, index) => (
+                  <div key={`${entry.doc_id}:${entry.path}:${index}`} className="grid gap-2 rounded-lg border border-gray-800 bg-black/20 px-3 py-2 md:grid-cols-[auto,1fr,auto] md:items-center">
+                    <div className="text-xs font-medium uppercase tracking-[0.14em] text-gray-300">{entry.doc_id}</div>
+                    {editingManagedDocs ? (
+                      <input
+                        value={entry.path}
+                        onChange={(event) =>
+                          setManagedDocsDraft((current) =>
+                            current.map((candidate, candidateIndex) =>
+                              candidateIndex === index ? { ...candidate, path: event.target.value } : candidate,
+                            ),
+                          )
+                        }
+                        className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-xs text-white outline-none focus:border-cyan-500"
+                      />
+                    ) : (
+                      <div className="font-mono text-[11px] text-gray-400 break-all">{entry.path}</div>
+                    )}
+                    {editingManagedDocs ? (
+                      <label className="inline-flex items-center gap-2 text-xs text-gray-300">
+                        <input
+                          type="checkbox"
+                          checked={entry.enabled}
+                          onChange={(event) =>
+                            setManagedDocsDraft((current) =>
+                              current.map((candidate, candidateIndex) =>
+                                candidateIndex === index ? { ...candidate, enabled: event.target.checked } : candidate,
+                              ),
+                            )
+                          }
+                        />
+                        Enabled
+                      </label>
+                    ) : (
+                      <div className="text-[11px] text-gray-500">
+                        {entry.enabled
+                          ? entry.last_generated_at
+                            ? `Framework last wrote ${new Date(entry.last_generated_at).toLocaleString()}`
+                            : 'Framework writes enabled for this file'
+                          : 'Project-owned source file. Framework writes disabled.'}
+                      </div>
+                    )}
+                  </div>
+                ))}
+            </div>
+          )}
+          {quickDocPreviews.length > 0 && (
+            <pre className="mt-4 max-h-80 overflow-auto rounded-lg border border-gray-800 bg-black/20 p-3 text-xs text-gray-200 whitespace-pre-wrap">
+              {quickPreviewById[docPreviewId || quickDocPreviews[0]?.id || ''] || 'No preview available.'}
+            </pre>
+          )}
+        </div>
         {scopeMessage && (
           <div className="mb-3 rounded-xl border border-gray-800 bg-gray-950 px-3 py-2 text-sm text-gray-300">
             {scopeMessage}
@@ -1059,9 +2292,9 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
         {(editingScope ? scopeDraft : scopeEntries).length === 0 ? (
           <div className="text-sm text-gray-500">No saved scope entries yet.</div>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-2">
             {(editingScope ? scopeDraft : scopeEntries).map((entry, index) => (
-              <div key={`${entry.entry_id ?? entry.kind}:${entry.path}:${index}`} className="rounded-xl border border-gray-800 bg-gray-950 px-3 py-3">
+              <div key={`${entry.entry_id ?? entry.kind}:${entry.path}:${index}`} className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-2.5">
                 {editingScope ? (
                   <div className="space-y-3">
                     <input
@@ -1090,6 +2323,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                         className="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-xs text-white outline-none focus:border-cyan-500"
                       >
                         <option value="repo">Repo</option>
+                        <option value="code">Code</option>
                         <option value="doc">Doc</option>
                         <option value="log">Log</option>
                         <option value="exclude">Exclude</option>
@@ -1139,16 +2373,21 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="font-mono text-xs text-gray-300 break-all">{entry.path}</div>
-                      <div className="mt-1 text-xs uppercase tracking-[0.16em] text-gray-500">
-                        {entry.path_type} · {entry.source}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-gray-700 px-2 py-0.5 text-[11px] uppercase tracking-[0.16em] text-cyan-300">
+                          {entry.kind}
+                        </span>
+                        <span className={`rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-[0.16em] ${entry.enabled ? 'border-emerald-900 text-emerald-300' : 'border-gray-700 text-gray-500'}`}>
+                          {entry.enabled ? 'enabled' : 'disabled'}
+                        </span>
+                        <span className="text-[11px] uppercase tracking-[0.16em] text-gray-500">
+                          {entry.path_type} · {entry.source}
+                        </span>
                       </div>
+                      <div className="mt-1 font-mono text-xs text-gray-300 break-all">{entry.path}</div>
                     </div>
-                    <span className="rounded-full border border-gray-700 px-2 py-0.5 text-[11px] uppercase tracking-[0.16em] text-cyan-300">
-                      {entry.kind}
-                    </span>
                   </div>
                 )}
               </div>
@@ -1171,6 +2410,7 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
                 className="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500"
               >
                 <option value="repo">Repo</option>
+                <option value="code">Code</option>
                 <option value="doc">Doc</option>
                 <option value="log">Log</option>
                 <option value="exclude">Exclude</option>
@@ -1194,33 +2434,56 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
             </div>
           </div>
         )}
-      </section>
-
-      {/* Downloads */}
-      <section className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
-        <h3 className="text-sm font-medium text-gray-300 mb-3">Files</h3>
-        <DownloadPanel serviceId={serviceId} docs={docs} logs={logs} disabled={offline} />
-      </section>
+        <div className="mt-4 rounded-xl border border-gray-800 bg-gray-950 p-4">
+          <div className="mb-3 text-xs uppercase tracking-[0.16em] text-gray-500">Collected Files</div>
+          <div className="mb-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-lg border border-gray-800 bg-gray-900 px-3 py-3">
+              <div className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Repositories</div>
+              <div className="mt-1 text-lg font-medium text-white">{repos.length}</div>
+            </div>
+            <div className="rounded-lg border border-gray-800 bg-gray-900 px-3 py-3">
+              <div className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Documents</div>
+              <div className="mt-1 text-lg font-medium text-white">{docs.length}</div>
+            </div>
+            <div className="rounded-lg border border-gray-800 bg-gray-900 px-3 py-3">
+              <div className="text-[10px] uppercase tracking-[0.14em] text-gray-500">Logs</div>
+              <div className="mt-1 text-lg font-medium text-white">{logs.length}</div>
+            </div>
+          </div>
+          <DownloadPanel serviceId={serviceId} docs={docs} logs={logs} disabled={offline} />
+        </div>
+      </AccordionSection>
 
       {service && (
-        <section className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-4">
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-gray-300">
-            <FileStack className="h-4 w-4 text-cyan-400" />
-            Pull bundles
-          </h3>
+        <AccordionSection
+          title="Pull Bundles"
+          icon={<FileStack className="h-4 w-4 text-cyan-400" />}
+          open={Boolean(panelOpen.pull_bundles)}
+          onToggle={() => togglePanel('pull_bundles')}
+          summary={bundleHistoryMeta.count > 0 ? `${bundleHistoryMeta.count} bundles · latest ${new Date(bundleHistoryMeta.latestCreatedAt).toLocaleString()}` : 'No bundle history yet'}
+        >
           <PullBundlePanel service={service} disabled={offline} />
-        </section>
+        </AccordionSection>
       )}
 
-      {/* Secret paths */}
-      <section className="mb-6">
+      <AccordionSection
+        title="Secret Paths"
+        icon={<FileStack className="h-4 w-4 text-cyan-400" />}
+        open={Boolean(panelOpen.secret_paths)}
+        onToggle={() => togglePanel('secret_paths')}
+        summary="Protected path exposure checks"
+      >
         <SecretPathGuard serviceId={serviceId} disabled={offline} />
-      </section>
+      </AccordionSection>
 
-      {/* Run history */}
-      {runs.length > 0 && (
-        <section className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-          <h3 className="text-sm font-medium text-gray-300 mb-3">Run History</h3>
+      <AccordionSection
+        title="Run History"
+        icon={<RefreshCw className="h-4 w-4 text-cyan-400" />}
+        open={Boolean(panelOpen.run_history)}
+        onToggle={() => togglePanel('run_history')}
+        summary={runs.length > 0 ? `${runs.length} runs · latest ${new Date(runs[0].timestamp).toLocaleString()}` : 'No run history yet'}
+      >
+        {runs.length > 0 ? (
           <ul className="space-y-2">
             {runs.slice(0, 5).map((r) => (
               <li key={r.run_id} className="flex items-center justify-between text-sm">
@@ -1231,8 +2494,10 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
               </li>
             ))}
           </ul>
-        </section>
-      )}
+        ) : (
+          <div className="text-sm text-gray-500">No run history captured yet.</div>
+        )}
+      </AccordionSection>
 
       {confirmOpen && confirmAction && ACTION_EXPLAIN[confirmAction] && (
         <ConfirmationModal
@@ -1241,8 +2506,17 @@ export function ServiceDetailPage({ serviceId, runResult, offline, onBack, onDel
           willDo={ACTION_EXPLAIN[confirmAction].happens}
           willNotChange={ACTION_EXPLAIN[confirmAction].untouched}
           writesTo={ACTION_EXPLAIN[confirmAction].writesTo}
+          preflight={confirmDetails?.preflight}
+          followUp={confirmDetails?.followUp}
+          commandPreview={confirmDetails?.commandPreview}
+          confirmLabel={confirmDetails?.confirmLabel}
           onConfirm={handleConfirmAction}
-          onCancel={() => setConfirmOpen(false)}
+          onCancel={() => {
+            setConfirmOpen(false)
+            setConfirmAction(null)
+            setConfirmLocationId(null)
+            setConfirmDetails(null)
+          }}
         />
       )}
     </div>

@@ -159,6 +159,7 @@ function TreeRow({
           disabled={disabled}
         >
           <option value="repo">Repo</option>
+          <option value="code">Code</option>
           <option value="doc">Doc</option>
           <option value="log">Log</option>
           <option value="exclude">Exclude</option>
@@ -192,6 +193,7 @@ export function ProjectOnboardingPanel({ workspaceId, serverIds, disabled, onCre
   const [runCommandHint, setRunCommandHint] = useState('')
   const [monitoringMode, setMonitoringMode] = useState<RuntimeConfig['monitoring_mode']>('manual')
   const [runtimeNotes, setRuntimeNotes] = useState('')
+  const [executionMode, setExecutionMode] = useState<CreateServiceRequest['execution_mode']>('networked')
 
   useEffect(() => {
     if (disabled) return
@@ -443,6 +445,7 @@ export function ProjectOnboardingPanel({ workspaceId, serverIds, disabled, onCre
     const payload: CreateServiceRequest = {
       service_id: nextServiceId,
       display_name: nextDisplayName,
+      execution_mode: executionMode,
       locations: [
         {
           location_id: `${nextServiceId}-${serverId}-primary`,
@@ -489,6 +492,7 @@ export function ProjectOnboardingPanel({ workspaceId, serverIds, disabled, onCre
     setRunCommandHint('')
     setMonitoringMode('manual')
     setRuntimeNotes('')
+    setExecutionMode('networked')
     resetTreeState()
   }
 
@@ -496,9 +500,9 @@ export function ProjectOnboardingPanel({ workspaceId, serverIds, disabled, onCre
     <section className="rounded-2xl border border-gray-800 bg-gray-900">
       <div className="flex items-center justify-between gap-3 px-4 py-3">
         <div>
-          <div className="text-sm font-medium text-white">Add Project</div>
+          <div className="text-sm font-medium text-white">Add Service</div>
           <div className="text-xs text-gray-500">
-            Open one path, see everything inside it, and save the scope you want.
+            Open one project path, inspect everything inside it, and save only the scope you want.
           </div>
         </div>
         <button
@@ -514,9 +518,15 @@ export function ProjectOnboardingPanel({ workspaceId, serverIds, disabled, onCre
 
       {open && (
         <div className="border-t border-gray-800 px-4 py-4">
+          <div className="mb-4 rounded-xl border border-cyan-900/30 bg-cyan-950/20 px-4 py-3 text-sm text-cyan-100">
+            This creates one tracked service from a filesystem root. Group it under a business project later in the
+            <span className="font-medium text-white"> Projects &amp; Environments </span>
+            section below.
+          </div>
+
           <div className="grid gap-3 lg:grid-cols-[1.3fr,1fr,1.2fr,auto]">
             <label className="text-sm text-gray-300">
-              <div className="mb-1">Service name</div>
+              <div className="mb-1">Tracked service name</div>
               <input
                 value={displayName}
                 onChange={(event) => {
@@ -530,7 +540,7 @@ export function ProjectOnboardingPanel({ workspaceId, serverIds, disabled, onCre
               />
             </label>
             <label className="text-sm text-gray-300">
-              <div className="mb-1">Service id</div>
+              <div className="mb-1">Tracked service id</div>
               <input
                 value={serviceId}
                 onChange={(event) => setServiceId(slugify(event.target.value))}
@@ -582,12 +592,26 @@ export function ProjectOnboardingPanel({ workspaceId, serverIds, disabled, onCre
           </label>
 
           <div className="mt-4 rounded-xl border border-gray-800 bg-gray-950 p-4">
-            <div className="text-sm font-medium text-white">Runtime Config</div>
+            <div className="text-sm font-medium text-white">Runtime Setup</div>
             <div className="mt-1 text-xs text-gray-500">
               Store the expected ports, health check command, and run-command hint for this location.
             </div>
 
             <div className="mt-4 grid gap-3 lg:grid-cols-2">
+              <label className="text-sm text-gray-300">
+                <div className="mb-1">Execution mode</div>
+                <select
+                  value={executionMode}
+                  onChange={(event) => setExecutionMode(event.target.value as CreateServiceRequest['execution_mode'])}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white outline-none focus:border-cyan-500"
+                  disabled={disabled}
+                >
+                  <option value="networked">networked</option>
+                  <option value="batch">batch</option>
+                  <option value="lambda">lambda</option>
+                  <option value="docs_only">docs_only</option>
+                </select>
+              </label>
               <label className="text-sm text-gray-300">
                 <div className="mb-1">Expected ports</div>
                 <input
@@ -688,7 +712,7 @@ export function ProjectOnboardingPanel({ workspaceId, serverIds, disabled, onCre
                 Open a root path to browse folders and files.
               </div>
             ) : (
-              <div role="tree" aria-label="Project scope tree" className="max-h-[34rem] overflow-auto">
+              <div role="tree" aria-label="Service scope tree" className="max-h-[34rem] overflow-auto">
                 {renderNode(rootNode.path, 0)}
               </div>
             )}

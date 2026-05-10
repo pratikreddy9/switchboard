@@ -3,14 +3,17 @@ import { ArrowRight, FolderKanban, Server, Shield, ChevronDown, ChevronRight, Bo
 import type { Workspace, WorkspaceLatest, ServerRecord } from '../types/switchboard'
 import { StatusBadge } from '../components/StatusBadge'
 import { ServerCRUDPanel } from '../components/ServerCRUDPanel'
+import { CompaniesPanel } from '../components/CompaniesPanel'
+import { GitHubBackupPanel } from '../components/GitHubBackupPanel'
 import { TECH_STACK_LINES, HOW_TO_USE_LINES } from '../App'
-import { listWorkspaces } from '../api/client'
+import { listServers } from '../api/client'
 
 interface Props {
   workspaces: Workspace[]
   latestResults: Record<string, WorkspaceLatest>
   online: boolean | null
   onOpenWorkspace: (workspaceId: string) => void
+  onReloadCompanies: () => void
 }
 
 export function ControlCenterPage({
@@ -18,6 +21,7 @@ export function ControlCenterPage({
   latestResults,
   online,
   onOpenWorkspace,
+  onReloadCompanies,
 }: Props) {
   const [servers, setServers] = useState<ServerRecord[]>([])
   const [techOpen, setTechOpen] = useState(false)
@@ -30,9 +34,9 @@ export function ControlCenterPage({
   }, [online])
 
   async function loadServers() {
-    const res = await fetch('/api/servers').then(r => r.json())
-    if (res && res.servers) {
-      setServers(res.servers)
+    const res = await listServers()
+    if (Array.isArray(res)) {
+      setServers(res)
     }
   }
 
@@ -41,17 +45,13 @@ export function ControlCenterPage({
       <section className="rounded-2xl border border-gray-800 bg-gradient-to-br from-gray-900 via-gray-950 to-slate-900 p-6">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <div className="text-xs uppercase tracking-[0.2em] text-cyan-400">Framework</div>
-            <h1 className="mt-2 text-3xl font-semibold text-white">Switchboard Control Center</h1>
+            <h1 className="text-3xl font-semibold text-white">Switchboard Control Center</h1>
             <p className="mt-2 max-w-2xl text-sm text-gray-400 mb-4">
-              Central view for umbrella workspaces, server pulls, repo actions, docs, and logs.
+              Clean control surface for companies, servers, nodes, pulls, and review workflows.
             </p>
           </div>
           <div className="rounded-xl border border-gray-800 bg-black/20 px-4 py-3 text-sm text-gray-300">
-            <div>Mode: control center</div>
-            <div className="mt-1 text-xs text-gray-500">
-              Backend: {online === null ? 'checking' : online ? 'live' : 'offline fallback'}
-            </div>
+            Backend: {online === null ? 'checking' : online ? 'live' : 'offline fallback'}
           </div>
         </div>
       </section>
@@ -98,7 +98,11 @@ export function ControlCenterPage({
         )}
       </section>
 
-      <ServerCRUDPanel servers={servers} offline={!online} onReload={loadServers} />
+      <CompaniesPanel companies={workspaces} offline={!online} onReload={onReloadCompanies} />
+
+      <ServerCRUDPanel servers={servers} companies={workspaces} offline={!online} onReload={loadServers} />
+
+      <GitHubBackupPanel disabled={!online} />
 
       <section className="grid gap-4 md:grid-cols-2">
         {workspaces.map((workspace) => {
@@ -115,7 +119,7 @@ export function ControlCenterPage({
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="text-xs uppercase tracking-[0.18em] text-gray-500">
-                    {workspace.workspace_id}
+                    Company · {workspace.workspace_id}
                   </div>
                   <div className="mt-1 text-xl font-semibold text-white">{workspace.display_name}</div>
                 </div>
@@ -148,12 +152,16 @@ export function ControlCenterPage({
 
               <div className="mt-5 flex items-center justify-between text-sm">
                 <span className="text-gray-500">
-                  {latest?.summary.timestamp && serviceCount > 0
-                    ? `Last run ${new Date(latest.summary.timestamp).toLocaleString()}`
-                    : 'No live run captured yet'}
+                  {(() => {
+                    const ts = latest?.summary.timestamp
+                    const d = ts ? new Date(ts) : null
+                    return d && !isNaN(d.getTime()) && serviceCount > 0
+                      ? `Last run ${d.toLocaleString()}`
+                      : 'No live run captured yet'
+                  })()}
                 </span>
                 <span className="flex items-center gap-2 text-cyan-400 transition-transform group-hover:translate-x-0.5">
-                  Open workspace
+                  Open company
                   <ArrowRight className="h-4 w-4" />
                 </span>
               </div>

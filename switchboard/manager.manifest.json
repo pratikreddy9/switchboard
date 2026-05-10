@@ -1,0 +1,277 @@
+{
+  "mode": "manager",
+  "manager_id": "manager-d5e528e36a",
+  "manager_root": "/Users/p/Desktop/dashboard",
+  "runtime_port": 8010,
+  "managed_roots": [
+    {
+      "root_id": "adaptive_learning",
+      "project_root": "/Users/p/Desktop/work/adaptivelearning",
+      "service_id": "adaptive_learning",
+      "display_name": "Adaptive Learning",
+      "role": "minion",
+      "enabled": true,
+      "last_seen_version": "1.12.4",
+      "manifest_updated_at": "2026-05-05T07:29:14+00:00",
+      "verify_status": "ok",
+      "design_principles": {
+        "global": [
+          "Read back Pratik's request before acting.",
+          "Ask in simple English when intent is unclear.",
+          "Make the smallest useful change.",
+          "Touch only files required by the request.",
+          "Do not invent future features.",
+          "Keep output short and avoid ceremony.",
+          "Never delete for cleanup; move or zip instead.",
+          "Verify with observable checks."
+        ],
+        "project": [],
+        "effective": [
+          "Read back Pratik's request before acting.",
+          "Ask in simple English when intent is unclear.",
+          "Make the smallest useful change.",
+          "Touch only files required by the request.",
+          "Do not invent future features.",
+          "Keep output short and avoid ceremony.",
+          "Never delete for cleanup; move or zip instead.",
+          "Verify with observable checks."
+        ]
+      },
+      "registered_at": "2026-05-05T07:29:38+00:00"
+    },
+    {
+      "root_id": "dashboard_core",
+      "project_root": "/Users/p/Desktop/dashboard",
+      "service_id": "switch",
+      "display_name": "switchboard",
+      "role": "core",
+      "enabled": true,
+      "last_seen_version": "1.12.4",
+      "manifest_updated_at": "2026-05-05T07:29:14+00:00",
+      "verify_status": "ok",
+      "design_principles": {
+        "global": [
+          "Read back Pratik's request before acting.",
+          "Ask in simple English when intent is unclear.",
+          "Make the smallest useful change.",
+          "Touch only files required by the request.",
+          "Do not invent future features.",
+          "Keep output short and avoid ceremony.",
+          "Never delete for cleanup; move or zip instead.",
+          "Verify with observable checks."
+        ],
+        "project": [],
+        "effective": [
+          "Read back Pratik's request before acting.",
+          "Ask in simple English when intent is unclear.",
+          "Make the smallest useful change.",
+          "Touch only files required by the request.",
+          "Do not invent future features.",
+          "Keep output short and avoid ceremony.",
+          "Never delete for cleanup; move or zip instead.",
+          "Verify with observable checks."
+        ]
+      },
+      "registered_at": "2026-05-05T07:29:38+00:00"
+    },
+    {
+      "root_id": "finance",
+      "project_root": "/Users/p/Desktop/main/statements",
+      "service_id": "finance",
+      "display_name": "financedash",
+      "role": "minion",
+      "enabled": true,
+      "last_seen_version": "1.12.4",
+      "manifest_updated_at": "2026-05-05T07:29:14+00:00",
+      "verify_status": "ok",
+      "design_principles": {
+        "global": [
+          "Read back Pratik's request before acting.",
+          "Ask in simple English when intent is unclear.",
+          "Make the smallest useful change.",
+          "Touch only files required by the request.",
+          "Do not invent future features.",
+          "Keep output short and avoid ceremony.",
+          "Never delete for cleanup; move or zip instead.",
+          "Verify with observable checks."
+        ],
+        "project": [],
+        "effective": [
+          "Read back Pratik's request before acting.",
+          "Ask in simple English when intent is unclear.",
+          "Make the smallest useful change.",
+          "Touch only files required by the request.",
+          "Do not invent future features.",
+          "Keep output short and avoid ceremony.",
+          "Never delete for cleanup; move or zip instead.",
+          "Verify with observable checks."
+        ]
+      },
+      "registered_at": "2026-05-05T07:29:38+00:00"
+    },
+    {
+      "root_id": "lambdalogger",
+      "project_root": "/Users/p/Desktop/work/zapp/lambdalogger",
+      "service_id": "lambdalogger",
+      "display_name": "lambdalogger",
+      "role": "minion",
+      "enabled": true,
+      "last_seen_version": "1.12.4",
+      "manifest_updated_at": "2026-05-05T07:29:14+00:00",
+      "verify_status": "ok",
+      "design_principles": {
+        "global": [
+          "Read back Pratik's request before acting.",
+          "Ask in simple English when intent is unclear.",
+          "Make the smallest useful change.",
+          "Touch only files required by the request.",
+          "Do not invent future features.",
+          "Keep output short and avoid ceremony.",
+          "Never delete for cleanup; move or zip instead.",
+          "Verify with observable checks."
+        ],
+        "project": [],
+        "effective": [
+          "Read back Pratik's request before acting.",
+          "Ask in simple English when intent is unclear.",
+          "Make the smallest useful change.",
+          "Touch only files required by the request.",
+          "Do not invent future features.",
+          "Keep output short and avoid ceremony.",
+          "Never delete for cleanup; move or zip instead.",
+          "Verify with observable checks."
+        ]
+      },
+      "registered_at": "2026-05-05T07:29:38+00:00"
+    },
+    {
+      "root_id": "lambdascripts",
+      "project_root": "/Users/p/Desktop/work/zapp/lambdascripts",
+      "service_id": "lambdascripts",
+      "display_name": "lambdascripts",
+      "role": "minion",
+      "enabled": true,
+      "last_seen_version": "1.12.4",
+      "manifest_updated_at": "2026-05-05T07:29:14+00:00",
+      "verify_status": "ok",
+      "design_principles": {
+        "global": [
+          "Read back Pratik's request before acting.",
+          "Ask in simple English when intent is unclear.",
+          "Make the smallest useful change.",
+          "Touch only files required by the request.",
+          "Do not invent future features.",
+          "Keep output short and avoid ceremony.",
+          "Never delete for cleanup; move or zip instead.",
+          "Verify with observable checks."
+        ],
+        "project": [],
+        "effective": [
+          "Read back Pratik's request before acting.",
+          "Ask in simple English when intent is unclear.",
+          "Make the smallest useful change.",
+          "Touch only files required by the request.",
+          "Do not invent future features.",
+          "Keep output short and avoid ceremony.",
+          "Never delete for cleanup; move or zip instead.",
+          "Verify with observable checks."
+        ]
+      },
+      "registered_at": "2026-05-05T07:29:38+00:00"
+    },
+    {
+      "root_id": "syspriv",
+      "project_root": "/Users/p/Desktop/main/sysdocs",
+      "service_id": "syspriv",
+      "display_name": "sys_docs",
+      "role": "minion",
+      "enabled": true,
+      "last_seen_version": "1.12.4",
+      "manifest_updated_at": "2026-05-05T07:29:15+00:00",
+      "verify_status": "ok",
+      "design_principles": {
+        "global": [
+          "Read back Pratik's request before acting.",
+          "Ask in simple English when intent is unclear.",
+          "Make the smallest useful change.",
+          "Touch only files required by the request.",
+          "Do not invent future features.",
+          "Keep output short and avoid ceremony.",
+          "Never delete for cleanup; move or zip instead.",
+          "Verify with observable checks."
+        ],
+        "project": [],
+        "effective": [
+          "Read back Pratik's request before acting.",
+          "Ask in simple English when intent is unclear.",
+          "Make the smallest useful change.",
+          "Touch only files required by the request.",
+          "Do not invent future features.",
+          "Keep output short and avoid ceremony.",
+          "Never delete for cleanup; move or zip instead.",
+          "Verify with observable checks."
+        ]
+      },
+      "registered_at": "2026-05-05T07:29:38+00:00"
+    },
+    {
+      "root_id": "unionbank_service",
+      "project_root": "/Users/p/Desktop/main/statements/unionbank_service",
+      "service_id": "unionbank-service",
+      "display_name": "Union Bank Service",
+      "role": "minion",
+      "enabled": true,
+      "last_seen_version": "1.12.4",
+      "manifest_updated_at": "2026-05-05T07:29:15+00:00",
+      "verify_status": "ok",
+      "design_principles": {
+        "global": [
+          "Read back Pratik's request before acting.",
+          "Ask in simple English when intent is unclear.",
+          "Make the smallest useful change.",
+          "Touch only files required by the request.",
+          "Do not invent future features.",
+          "Keep output short and avoid ceremony.",
+          "Never delete for cleanup; move or zip instead.",
+          "Verify with observable checks."
+        ],
+        "project": [],
+        "effective": [
+          "Read back Pratik's request before acting.",
+          "Ask in simple English when intent is unclear.",
+          "Make the smallest useful change.",
+          "Touch only files required by the request.",
+          "Do not invent future features.",
+          "Keep output short and avoid ceremony.",
+          "Never delete for cleanup; move or zip instead.",
+          "Verify with observable checks."
+        ]
+      },
+      "registered_at": "2026-05-05T07:29:38+00:00"
+    }
+  ],
+  "design_principles": {
+    "global": [
+      "Read back Pratik's request before acting.",
+      "Ask in simple English when intent is unclear.",
+      "Make the smallest useful change.",
+      "Touch only files required by the request.",
+      "Do not invent future features.",
+      "Keep output short and avoid ceremony.",
+      "Never delete for cleanup; move or zip instead.",
+      "Verify with observable checks."
+    ],
+    "project": [],
+    "effective": [
+      "Read back Pratik's request before acting.",
+      "Ask in simple English when intent is unclear.",
+      "Make the smallest useful change.",
+      "Touch only files required by the request.",
+      "Do not invent future features.",
+      "Keep output short and avoid ceremony.",
+      "Never delete for cleanup; move or zip instead.",
+      "Verify with observable checks."
+    ]
+  },
+  "updated_at": "2026-05-05T07:29:38+00:00"
+}

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,19 @@ CORE_DIR_NAME = "core"
 LOCAL_DIR_NAME = "local"
 EVIDENCE_DIR_NAME = "evidence"
 ROUTING_TAGS = ("task", "handoff", "runbook", "decision", "scope")
+AGENT_CONTRACT_VERSION = "2026-04-29"
+AGENT_CONTRACT_MARKER = "switchboard-managed-agent-contract"
+MANAGER_MANIFEST_NAME = "manager.manifest.json"
+GLOBAL_DESIGN_PRINCIPLES = [
+    "Read back Pratik's request before acting.",
+    "Ask in simple English when intent is unclear.",
+    "Make the smallest useful change.",
+    "Touch only files required by the request.",
+    "Do not invent future features.",
+    "Keep output short and avoid ceremony.",
+    "Never delete for cleanup; move or zip instead.",
+    "Verify with observable checks.",
+]
 MANAGED_DOC_DEFAULTS: tuple[tuple[str, str, bool], ...] = (
     ("readme", "README.md", False),
     ("api", "API.md", False),
@@ -48,6 +62,7 @@ def node_paths(project_root: Path) -> dict[str, Path]:
         "local": root / LOCAL_DIR_NAME,
         "evidence": root / EVIDENCE_DIR_NAME,
         "manifest": root / "node.manifest.json",
+        "manager_manifest": root / MANAGER_MANIFEST_NAME,
         "core_readme": root / CORE_DIR_NAME / "README.md",
         "playbook": root / CORE_DIR_NAME / "playbook.md",
         "design_principles": root / CORE_DIR_NAME / "design-principles.md",
@@ -55,6 +70,8 @@ def node_paths(project_root: Path) -> dict[str, Path]:
         "agent_instructions": root / CORE_DIR_NAME / "agent-instructions.md",
         "bootstrap_prompt": root / CORE_DIR_NAME / "bootstrap-standardize-prompt.md",
         "runtime_prompt": root / CORE_DIR_NAME / "runtime-update-prompt.md",
+        "agent_contract_md": root / CORE_DIR_NAME / "agent-contract.md",
+        "agent_contract_json": root / CORE_DIR_NAME / "agent-contract.json",
         "tasks_completed": root / LOCAL_DIR_NAME / "tasks-completed.md",
         "handoff": root / LOCAL_DIR_NAME / "control-center-handoff.md",
         "runbook": root / LOCAL_DIR_NAME / "runbook.md",
@@ -65,9 +82,18 @@ def node_paths(project_root: Path) -> dict[str, Path]:
         "repo_safety_history": root / EVIDENCE_DIR_NAME / "repo-safety-history.json",
         "pull_bundle_history": root / EVIDENCE_DIR_NAME / "pull-bundle-history.json",
         "scope_snapshot": root / EVIDENCE_DIR_NAME / "scope.snapshot.json",
+        "update_gate": root / EVIDENCE_DIR_NAME / "update-gate.json",
         "runtime": root / "runtime",
         "start_script": root / "start.sh",
         "run_script": root / "run.sh",
+        "agents_md": project_root / "AGENTS.md",
+        "claude_md": project_root / "CLAUDE.md",
+        "gemini_md": project_root / "GEMINI.md",
+        "qwen_md": project_root / "QWEN.md",
+        "gemini_settings": project_root / ".gemini" / "settings.json",
+        "qwen_settings": project_root / ".qwen" / "settings.json",
+        "opencode_config": project_root / "opencode.json",
+        "opencode_agent": project_root / ".opencode" / "agents" / "switchboard.md",
     }
 
 
@@ -103,6 +129,13 @@ def load_node_manifest(project_root: str | Path) -> dict[str, Any]:
     if not paths["manifest"].exists():
         raise FileNotFoundError(f"Node manifest not found: {paths['manifest']}")
     return _read_json(paths["manifest"], {})
+
+
+def load_manager_manifest(manager_root: str | Path) -> dict[str, Any]:
+    paths = node_paths(Path(manager_root).resolve())
+    if not paths["manager_manifest"].exists():
+        raise FileNotFoundError(f"Manager manifest not found: {paths['manager_manifest']}")
+    return _read_json(paths["manager_manifest"], {})
 
 
 def _default_display_name(service_id: str) -> str:
@@ -201,6 +234,15 @@ def _core_templates(service_id: str, display_name: str) -> dict[str, str]:
             "- `Tags:` with only `task`, `handoff`, `runbook`, `decision`, `scope`\n"
             "- `Summary:` one concise sentence\n"
             "- `Changed Paths:` comma-separated paths\n\n"
+            "- `Agent:` the agent or CLI that made the update\n"
+            "- `Tool:` the tool surface used, such as `codex-cli` or `claude-code`\n"
+            "- `Read Back:` one short sentence proving requirements were restated before work\n"
+            "- `Scope Check:` one short sentence saying scope changed and was updated, or did not change\n\n"
+            "## Hard Gate\n\n"
+            "- An update is incomplete until `switchboard node verify-update --project-root <path>` returns `ok`.\n"
+            "- `update Switchboard` means task ledger, scope/excludes check, snapshot, manifest/scope verification, and Control Center verification.\n"
+            "- Never delete for cleanup. Move or zip instead.\n"
+            "- Keep output short and do not add ceremony.\n\n"
             "## Optional Blocks\n\n"
             "- `Version:` single version string that becomes the canonical version source across derived docs\n"
             "- `Readme:` markdown block for project overview/state\n"
@@ -211,9 +253,12 @@ def _core_templates(service_id: str, display_name: str) -> dict[str, str]:
             "- `Runtime:` lines for `expected_ports`, `healthcheck_command`, `run_command_hint`, `monitoring_mode`, and `notes`\n\n"
             "## Canonical Workflow\n\n"
             "1. Read this playbook.\n"
-            "2. Edit only `switchboard/local/tasks-completed.md` for normal updates.\n"
-            "3. Run `switchboard node snapshot --project-root <path>`.\n"
-            "4. Do not hand-edit derived docs unless explicitly instructed.\n\n"
+            "2. Read back the request before changing files.\n"
+            "3. Edit only `switchboard/local/tasks-completed.md` for normal Switchboard updates.\n"
+            "4. Include `Read Back`, `Scope Check`, `Agent`, and `Tool` in the latest task entry.\n"
+            "5. Run `switchboard node snapshot --project-root <path>`.\n"
+            "6. Run `switchboard node verify-update --project-root <path>`.\n"
+            "7. Do not hand-edit derived docs unless explicitly instructed.\n\n"
             "## Sync Rules\n\n"
             "- Nodes do not call back into the control center.\n"
             "- Nodes do not SSH into the control-center machine.\n"
@@ -258,16 +303,21 @@ def _core_templates(service_id: str, display_name: str) -> dict[str, str]:
             "- Update only `switchboard/local/tasks-completed.md`.\n"
             "- Use one entry per meaningful update.\n"
             "- Include timestamp, title, summary, changed paths, and routing tags.\n"
+            "- Include `Agent`, `Tool`, `Read Back`, and `Scope Check`.\n"
             "- Use only these routing tags: `task`, `handoff`, `runbook`, `decision`, `scope`.\n"
             "- If project-facing docs changed, add `Version`, `Readme`, `API`, and `Changelog` blocks as needed.\n"
             "- If scope changed, include a `Scope Entries` block in the entry.\n"
             "- If runtime config changed, include a `Runtime:` block in the entry.\n"
-            "- Finish by running `switchboard node snapshot --project-root <path>` so derived docs and JSON stay synchronized.\n\n"
+            "- Finish by running `switchboard node snapshot --project-root <path>` and `switchboard node verify-update --project-root <path>`.\n\n"
             "Entry format:\n"
             "## 2026-04-01T12:00:00+00:00 | Example title\n"
             "- Tags: task, handoff\n"
             "- Summary: Short summary.\n"
             "- Changed Paths: src/app.py, switchboard/local/tasks-completed.md\n"
+            "- Agent: Codex\n"
+            "- Tool: codex-cli\n"
+            "- Read Back: Restated the request before editing.\n"
+            "- Scope Check: Project shape did not change; existing scope remains valid.\n"
             "- Version: 1.1\n"
             "- Readme:\n"
             "  ## Overview\n"
@@ -291,6 +341,220 @@ def _core_templates(service_id: str, display_name: str) -> dict[str, str]:
     }
 
 
+def _normalize_principles(value: Any) -> list[str]:
+    if isinstance(value, dict):
+        value = value.get("project", [])
+    if not isinstance(value, list):
+        return []
+    normalized: list[str] = []
+    for item in value:
+        text = str(item).strip()
+        if text and text not in normalized:
+            normalized.append(text)
+    return normalized
+
+
+def _effective_principles(project_principles: list[str] | None = None) -> dict[str, list[str]]:
+    project = _normalize_principles(project_principles or [])
+    effective = [*GLOBAL_DESIGN_PRINCIPLES]
+    for item in project:
+        if item not in effective:
+            effective.append(item)
+    return {
+        "global": list(GLOBAL_DESIGN_PRINCIPLES),
+        "project": project,
+        "effective": effective,
+    }
+
+
+def _agent_contract_payload(service_id: str, display_name: str, project_principles: list[str] | None = None) -> dict[str, Any]:
+    principles = _effective_principles(project_principles)
+    return {
+        "version": AGENT_CONTRACT_VERSION,
+        "service_id": service_id,
+        "display_name": display_name,
+        "supported_agents": [
+            "codex",
+            "claude-code",
+            "gemini-cli",
+            "qwen-code",
+            "opencode",
+            "generic",
+        ],
+        "principles": principles["effective"],
+        "principle_layers": principles,
+        "canonical_update_gate": [
+            "Record one entry in switchboard/local/tasks-completed.md.",
+            "Include Agent, Tool, Read Back, and Scope Check.",
+            "Update Scope Entries when project shape changed.",
+            "Run switchboard node snapshot --project-root <path>.",
+            "Run switchboard node verify-update --project-root <path>.",
+            "Verify manifest, scope snapshot, and Control Center view.",
+        ],
+        "pull_scope": {
+            "include": ["source", "config", "docs", "ui", "backend"],
+            "exclude": ["secrets", "virtualenvs", "logs", "runtime files", "caches", "removed tech"],
+        },
+    }
+
+
+def _agent_contract_markdown(payload: dict[str, Any]) -> str:
+    lines = [
+        "# Switchboard Agent Contract",
+        "",
+        f"<!-- {AGENT_CONTRACT_MARKER}: {payload['version']} -->",
+        "",
+        "This file is generated by Switchboard and is the shared contract for Codex, Claude Code, Gemini CLI, Qwen Code, opencode, and generic agents.",
+        "",
+        "## Principles",
+        "",
+    ]
+    lines.extend(f"- {item}" for item in payload["principles"])
+    lines.extend(["", "## Canonical Update Gate", ""])
+    lines.extend(f"- {item}" for item in payload["canonical_update_gate"])
+    lines.extend(
+        [
+            "",
+            "## Tool Files",
+            "",
+            "- Codex and generic agents read `AGENTS.md`.",
+            "- Claude Code reads `CLAUDE.md`.",
+            "- Gemini CLI reads `GEMINI.md` through `.gemini/settings.json`.",
+            "- Qwen Code reads `QWEN.md` through `.qwen/settings.json`.",
+            "- opencode reads `opencode.json` and `.opencode/agents/switchboard.md`.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _agent_entrypoint_text(tool_name: str) -> str:
+    return (
+        f"# Switchboard {tool_name} Instructions\n\n"
+        f"<!-- {AGENT_CONTRACT_MARKER}: {AGENT_CONTRACT_VERSION} -->\n\n"
+        "Read `switchboard/core/agent-contract.md` before acting.\n\n"
+        "Hard rules:\n"
+        "- Read back Pratik's request before acting.\n"
+        "- Ask in simple English if intent is unclear.\n"
+        "- Make the smallest useful change and touch only required files.\n"
+        "- Keep output short; no ceremony.\n"
+        "- Never delete for cleanup; move or zip instead.\n"
+        "- A Switchboard update is incomplete until task ledger, scope check, snapshot, and `verify-update` are done.\n"
+    )
+
+
+def _claude_entrypoint_text() -> str:
+    return (
+        "# Switchboard Claude Code Instructions\n\n"
+        f"<!-- {AGENT_CONTRACT_MARKER}: {AGENT_CONTRACT_VERSION} -->\n\n"
+        "@switchboard/core/agent-contract.md\n\n"
+        "Claude-specific rule: do not create extra handoff markdown files such as `NOTE_FOR_GPT.md`; use `switchboard/local/tasks-completed.md`.\n"
+    )
+
+
+def _opencode_agent_text() -> str:
+    return (
+        "---\n"
+        "description: Switchboard contract gate for project updates\n"
+        "mode: subagent\n"
+        "permission:\n"
+        "  edit: ask\n"
+        "  bash: ask\n"
+        "---\n\n"
+        f"<!-- {AGENT_CONTRACT_MARKER}: {AGENT_CONTRACT_VERSION} -->\n\n"
+        "Read `switchboard/core/agent-contract.md`. Validate that the latest Switchboard update includes the task ledger entry, scope check, snapshot, and verify-update result.\n"
+    )
+
+
+def _write_managed_text(path: Path, content: str) -> str:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        existing = path.read_text(encoding="utf-8", errors="replace")
+        if AGENT_CONTRACT_MARKER not in existing:
+            return "preserved_unmanaged"
+    path.write_text(content, encoding="utf-8")
+    return "written"
+
+
+def _merge_unique_strings(existing: Any, additions: list[str]) -> list[str]:
+    values = existing if isinstance(existing, list) else ([existing] if isinstance(existing, str) else [])
+    merged = [str(item) for item in values if str(item).strip()]
+    for item in additions:
+        if item not in merged:
+            merged.append(item)
+    return merged
+
+
+def _merge_context_settings(path: Path, filename: str) -> str:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload: dict[str, Any] = {}
+    if path.exists():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return "preserved_invalid_json"
+        if isinstance(existing, dict):
+            payload = existing
+    context = payload.get("context")
+    if not isinstance(context, dict):
+        context = {}
+    context["fileName"] = _merge_unique_strings(context.get("fileName"), [filename])
+    context["includeDirectories"] = _merge_unique_strings(context.get("includeDirectories"), ["switchboard/core"])
+    context["loadFromIncludeDirectories"] = True
+    payload["context"] = context
+    _write_json(path, payload)
+    return "written"
+
+
+def _merge_opencode_config(path: Path) -> str:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload: dict[str, Any] = {}
+    if path.exists():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return "preserved_invalid_json"
+        if isinstance(existing, dict):
+            payload = existing
+    payload.setdefault("$schema", "https://opencode.ai/config.json")
+    payload["instructions"] = _merge_unique_strings(payload.get("instructions"), ["./switchboard/core/agent-contract.md"])
+    permission = payload.get("permission")
+    if not isinstance(permission, dict):
+        permission = {}
+    existing_bash = permission.get("bash", "ask")
+    bash_rules = existing_bash if isinstance(existing_bash, dict) else {"*": existing_bash}
+    bash_rules = {
+        **bash_rules,
+        "rm *": "deny",
+        "rm -rf *": "deny",
+        "git reset --hard *": "deny",
+        "git checkout -- *": "deny",
+    }
+    permission["bash"] = bash_rules
+    payload["permission"] = permission
+    _write_json(path, payload)
+    return "written"
+
+
+def _write_agent_contract_files(project_root: Path, service_id: str, display_name: str, project_principles: list[str] | None = None) -> dict[str, str]:
+    paths = node_paths(project_root)
+    payload = _agent_contract_payload(service_id, display_name, project_principles)
+    results = {
+        "agent_contract_md": _write_managed_text(paths["agent_contract_md"], _agent_contract_markdown(payload)),
+        "agent_contract_json": "written",
+        "AGENTS.md": _write_managed_text(paths["agents_md"], _agent_entrypoint_text("Agent")),
+        "CLAUDE.md": _write_managed_text(paths["claude_md"], _claude_entrypoint_text()),
+        "GEMINI.md": _write_managed_text(paths["gemini_md"], _agent_entrypoint_text("Gemini CLI")),
+        "QWEN.md": _write_managed_text(paths["qwen_md"], _agent_entrypoint_text("Qwen Code")),
+        ".opencode/agents/switchboard.md": _write_managed_text(paths["opencode_agent"], _opencode_agent_text()),
+        ".gemini/settings.json": _merge_context_settings(paths["gemini_settings"], "GEMINI.md"),
+        ".qwen/settings.json": _merge_context_settings(paths["qwen_settings"], "QWEN.md"),
+        "opencode.json": _merge_opencode_config(paths["opencode_config"]),
+    }
+    _write_json(paths["agent_contract_json"], payload)
+    return results
+
+
 def _tasks_completed_template() -> str:
     return (
         "# Tasks Completed\n\n"
@@ -300,6 +564,10 @@ def _tasks_completed_template() -> str:
         "- `Tags:` using only `task`, `handoff`, `runbook`, `decision`, `scope`\n"
         "- `Summary:`\n"
         "- `Changed Paths:` comma-separated\n"
+        "- `Agent:`\n"
+        "- `Tool:`\n"
+        "- `Read Back:` one short sentence\n"
+        "- `Scope Check:` one short sentence\n"
         "- optional `Version:`\n"
         "- optional `Readme:` markdown block\n"
         "- optional `API:` markdown block\n"
@@ -313,6 +581,10 @@ def _tasks_completed_template() -> str:
         "    - Tags: task, handoff\n"
         "    - Summary: Standardized the project docs.\n"
         "    - Changed Paths: switchboard/core/README.md, switchboard/local/tasks-completed.md\n"
+        "    - Agent: Codex\n"
+        "    - Tool: codex-cli\n"
+        "    - Read Back: Restated the request before editing.\n"
+        "    - Scope Check: Project shape did not change; existing scope remains valid.\n"
         "    - Version: 1.1\n"
         "    - Readme:\n"
         "      ## Overview\n"
@@ -332,13 +604,25 @@ def _tasks_completed_template() -> str:
 
 
 def _node_start_script(project_root: Path) -> str:
-    default_port = "8010"
     return f"""#!/bin/bash
 set -euo pipefail
 
 PROJECT_ROOT="{project_root}"
 DEFAULT_HOST="127.0.0.1"
-DEFAULT_PORT="{default_port}"
+DEFAULT_PORT="$(python3 - <<'PY'
+import json
+from pathlib import Path
+
+manifest_path = Path(r"{project_root}") / "switchboard" / "node.manifest.json"
+default_port = 8010
+try:
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    value = payload.get("runtime_port", default_port)
+    print(int(value))
+except Exception:
+    print(default_port)
+PY
+)"
 
 echo "Switchboard Node"
 echo "Project root: $PROJECT_ROOT"
@@ -401,6 +685,395 @@ def load_pull_bundle_history(project_root: str | Path) -> dict[str, Any]:
     return _read_json(paths["pull_bundle_history"], {"generated": "", "bundles": []})
 
 
+def _manager_id(manager_root: Path) -> str:
+    digest = hashlib.sha1(str(manager_root).encode("utf-8")).hexdigest()[:10]
+    return f"manager-{digest}"
+
+
+def _manager_base_manifest(manager_root: Path, existing: dict[str, Any] | None = None, runtime_port: int = 8711) -> dict[str, Any]:
+    existing = existing or {}
+    return {
+        "mode": "manager",
+        "manager_id": existing.get("manager_id", _manager_id(manager_root)),
+        "manager_root": str(manager_root),
+        "runtime_port": int(existing.get("runtime_port", runtime_port) or runtime_port),
+        "managed_roots": existing.get("managed_roots", []),
+        "design_principles": _effective_principles(_normalize_principles(existing.get("design_principles", {}))),
+        "updated_at": utc_now_iso(),
+    }
+
+
+def _read_update_gate_status(project_root: Path) -> str:
+    paths = node_paths(project_root)
+    payload = _read_json(paths["update_gate"], {}) if paths["update_gate"].exists() else {}
+    return str(payload.get("status", "not_run") or "not_run")
+
+
+def _manager_root_record(project_root: Path, root_id: str | None = None, role: str = "minion", snapshot: bool = False) -> dict[str, Any]:
+    project_root = project_root.resolve()
+    if snapshot:
+        snapshot_node(project_root)
+    manifest = load_node_manifest(project_root)
+    service_id = str(manifest.get("service_id") or slugify(project_root.name))
+    return {
+        "root_id": root_id or service_id,
+        "project_root": str(project_root),
+        "service_id": service_id,
+        "display_name": str(manifest.get("display_name") or _default_display_name(service_id)),
+        "role": role,
+        "enabled": True,
+        "last_seen_version": str(manifest.get("installed_version", "")),
+        "manifest_updated_at": str(manifest.get("updated_at", "")),
+        "verify_status": _read_update_gate_status(project_root),
+        "design_principles": manifest.get("design_principles", _effective_principles()),
+        "registered_at": utc_now_iso(),
+    }
+
+
+def _unique_root_id(existing_roots: list[dict[str, Any]], requested_root_id: str, project_root: Path) -> str:
+    used = {str(item.get("root_id", "")) for item in existing_roots}
+    if requested_root_id not in used:
+        return requested_root_id
+    for item in existing_roots:
+        if str(item.get("root_id", "")) == requested_root_id and Path(str(item.get("project_root", ""))).resolve() == project_root.resolve():
+            return requested_root_id
+    digest = hashlib.sha1(str(project_root.resolve()).encode("utf-8")).hexdigest()[:8]
+    return f"{requested_root_id}-{digest}"
+
+
+def init_manager_node(manager_root: str | Path, project_roots: list[str | Path] | None = None, runtime_port: int = 8711, snapshot: bool = False) -> dict[str, Any]:
+    manager_root = Path(manager_root).resolve()
+    manager_root.mkdir(parents=True, exist_ok=True)
+    paths = node_paths(manager_root)
+    paths["node_root"].mkdir(parents=True, exist_ok=True)
+    existing = _read_json(paths["manager_manifest"], {}) if paths["manager_manifest"].exists() else {}
+    manifest = _manager_base_manifest(manager_root, existing, runtime_port=runtime_port)
+    _write_json(paths["manager_manifest"], manifest)
+    for root in project_roots or []:
+        manifest = register_manager_root(manager_root, root, snapshot=snapshot)["manifest"]
+    return {"manager_root": str(manager_root), "manifest_path": str(paths["manager_manifest"]), "manifest": manifest}
+
+
+def register_manager_root(
+    manager_root: str | Path,
+    project_root: str | Path,
+    root_id: str | None = None,
+    role: str = "minion",
+    snapshot: bool = True,
+) -> dict[str, Any]:
+    manager_root = Path(manager_root).resolve()
+    project_root = Path(project_root).resolve()
+    paths = node_paths(manager_root)
+    if not paths["manager_manifest"].exists():
+        init_manager_node(manager_root)
+    manifest = load_manager_manifest(manager_root)
+    roots = [dict(item) for item in manifest.get("managed_roots", []) if isinstance(item, dict)]
+    record = _manager_root_record(project_root, root_id=root_id, role=role, snapshot=snapshot)
+    record["root_id"] = _unique_root_id(roots, str(record["root_id"]), project_root)
+    roots = [item for item in roots if Path(str(item.get("project_root", ""))).resolve() != project_root]
+    roots.append(record)
+    roots.sort(key=lambda item: str(item.get("root_id", "")))
+    manifest["managed_roots"] = roots
+    manifest["updated_at"] = utc_now_iso()
+    _write_json(paths["manager_manifest"], manifest)
+    return {"status": "ok", "record": record, "manifest": manifest}
+
+
+def list_manager_roots(manager_root: str | Path) -> dict[str, Any]:
+    manifest = load_manager_manifest(manager_root)
+    return {"manager": manifest, "roots": manifest.get("managed_roots", [])}
+
+
+def _manager_record_by_id(manager_root: str | Path, root_id: str) -> dict[str, Any]:
+    manifest = load_manager_manifest(manager_root)
+    for record in manifest.get("managed_roots", []):
+        if isinstance(record, dict) and str(record.get("root_id", "")) == root_id:
+            return record
+    raise KeyError(f"Manager root not found: {root_id}")
+
+
+def _manager_record_by_project_root(manager_root: str | Path, project_root: str | Path) -> dict[str, Any] | None:
+    target = Path(project_root).resolve()
+    manifest = load_manager_manifest(manager_root)
+    for record in manifest.get("managed_roots", []):
+        if not isinstance(record, dict):
+            continue
+        try:
+            if Path(str(record.get("project_root", ""))).resolve() == target:
+                return record
+        except OSError:
+            continue
+    return None
+
+
+def manager_root_manifest(manager_root: str | Path, root_id: str) -> dict[str, Any]:
+    record = _manager_record_by_id(manager_root, root_id)
+    project_root = Path(str(record["project_root"])).resolve()
+    return {"root": record, "manifest": load_node_manifest(project_root)}
+
+
+def manager_root_snapshot(manager_root: str | Path, root_id: str) -> dict[str, Any]:
+    record = _manager_record_by_id(manager_root, root_id)
+    project_root = Path(str(record["project_root"])).resolve()
+    snapshot = snapshot_node(project_root)
+    register_manager_root(manager_root, project_root, root_id=root_id, role=str(record.get("role", "minion")), snapshot=False)
+    return {"root": _manager_record_by_id(manager_root, root_id), "snapshot": snapshot}
+
+
+def manager_root_verify_update(manager_root: str | Path, root_id: str) -> dict[str, Any]:
+    record = _manager_record_by_id(manager_root, root_id)
+    project_root = Path(str(record["project_root"])).resolve()
+    result = verify_node_update(project_root)
+    register_manager_root(manager_root, project_root, root_id=root_id, role=str(record.get("role", "minion")), snapshot=False)
+    return {"root": _manager_record_by_id(manager_root, root_id), "verify_update": result}
+
+
+def manager_root_health(manager_root: str | Path, root_id: str) -> dict[str, Any]:
+    record = _manager_record_by_id(manager_root, root_id)
+    project_root = Path(str(record["project_root"])).resolve()
+    manifest = load_node_manifest(project_root)
+    return {
+        "status": "ok",
+        "mode": "manager-root",
+        "root_id": root_id,
+        "service_id": manifest.get("service_id", ""),
+        "project_root": str(project_root),
+        "version": __version__,
+        "verify_status": _read_update_gate_status(project_root),
+    }
+
+
+def manager_all_root_health(manager_root: str | Path) -> dict[str, Any]:
+    roots = list_manager_roots(manager_root)["roots"]
+    results = []
+    for record in roots:
+        if not isinstance(record, dict) or not record.get("enabled", True):
+            continue
+        root_id = str(record.get("root_id", ""))
+        try:
+            results.append(manager_root_health(manager_root, root_id))
+        except Exception as exc:
+            results.append({"root_id": root_id, "status": "partial", "message": str(exc)})
+    return {"status": "ok" if all(item.get("status") == "ok" for item in results) else "partial", "roots": results}
+
+
+def manager_all_root_snapshot(manager_root: str | Path) -> dict[str, Any]:
+    roots = list_manager_roots(manager_root)["roots"]
+    results = []
+    for record in roots:
+        if not isinstance(record, dict) or not record.get("enabled", True):
+            continue
+        root_id = str(record.get("root_id", ""))
+        try:
+            results.append(manager_root_snapshot(manager_root, root_id))
+        except Exception as exc:
+            results.append({"root": record, "status": "partial", "message": str(exc)})
+    return {"status": "ok" if all(item.get("snapshot", {}).get("manifest") for item in results) else "partial", "roots": results}
+
+
+def manager_install_root(
+    manager_root: str | Path,
+    project_root: str | Path,
+    root_id: str | None = None,
+    role: str = "minion",
+    service_id: str | None = None,
+    display_name: str | None = None,
+) -> dict[str, Any]:
+    installed = install_node(project_root, service_id=service_id, display_name=display_name)
+    registered = register_manager_root(manager_root, project_root, root_id=root_id, role=role, snapshot=False)
+    return {"status": "ok", "installed": installed, "registered": registered["record"]}
+
+
+def normalize_manager_root(
+    manager_root: str | Path,
+    project_root: str | Path,
+    root_id: str | None = None,
+    role: str = "minion",
+    service_id: str | None = None,
+    display_name: str | None = None,
+) -> dict[str, Any]:
+    manager_root = Path(manager_root).resolve()
+    project_root = Path(project_root).resolve()
+    if not node_paths(manager_root)["manager_manifest"].exists():
+        init_manager_node(manager_root)
+
+    existing_record = _manager_record_by_project_root(manager_root, project_root)
+    selected_root_id = root_id or (str(existing_record.get("root_id", "")) if existing_record else None)
+    selected_role = str(existing_record.get("role", role)) if existing_record else role
+
+    if existing_record is None:
+        install_result = manager_install_root(
+            manager_root,
+            project_root,
+            root_id=selected_root_id,
+            role=selected_role,
+            service_id=service_id,
+            display_name=display_name,
+        )
+    else:
+        install_result = manager_upgrade_root(manager_root, selected_root_id or str(existing_record["root_id"]))
+
+    normalized_root_id = str(install_result["registered"]["root_id"])
+    snapshot = manager_root_snapshot(manager_root, normalized_root_id)
+    verify = manager_root_verify_update(manager_root, normalized_root_id)
+    status = str(verify.get("verify_update", {}).get("status") or "partial")
+    archive = None
+    if status == "ok":
+        archive = manager_archive_old_scaffolding(manager_root, root_id=normalized_root_id)
+    return {
+        "status": status,
+        "manager_root": str(manager_root),
+        "project_root": str(project_root),
+        "root_id": normalized_root_id,
+        "install": install_result,
+        "snapshot": snapshot,
+        "verify_update": verify.get("verify_update", {}),
+        "registered": verify.get("root", install_result["registered"]),
+        "archive": archive,
+    }
+
+
+def manager_upgrade_root(manager_root: str | Path, root_id: str) -> dict[str, Any]:
+    record = _manager_record_by_id(manager_root, root_id)
+    project_root = Path(str(record["project_root"])).resolve()
+    upgraded = upgrade_node(project_root)
+    registered = register_manager_root(manager_root, project_root, root_id=root_id, role=str(record.get("role", "minion")), snapshot=False)
+    return {"status": "ok", "upgraded": upgraded, "registered": registered["record"]}
+
+
+def manager_all_root_normalize(manager_root: str | Path) -> dict[str, Any]:
+    roots = list_manager_roots(manager_root)["roots"]
+    results = []
+    for record in roots:
+        if not isinstance(record, dict) or not record.get("enabled", True):
+            continue
+        root_id = str(record.get("root_id", ""))
+        project_root = str(record.get("project_root", ""))
+        try:
+            results.append(
+                normalize_manager_root(
+                    manager_root,
+                    project_root,
+                    root_id=root_id,
+                    role=str(record.get("role", "minion")),
+                    service_id=str(record.get("service_id") or "") or None,
+                    display_name=str(record.get("display_name") or "") or None,
+                )
+            )
+        except Exception as exc:
+            results.append({"status": "partial", "root_id": root_id, "project_root": project_root, "message": str(exc)})
+    return {"status": "ok" if all(item.get("status") == "ok" for item in results) else "partial", "roots": results}
+
+
+def manager_all_root_upgrade(manager_root: str | Path) -> dict[str, Any]:
+    roots = list_manager_roots(manager_root)["roots"]
+    results = []
+    for record in roots:
+        if not isinstance(record, dict) or not record.get("enabled", True):
+            continue
+        root_id = str(record.get("root_id", ""))
+        try:
+            results.append(manager_upgrade_root(manager_root, root_id))
+        except Exception as exc:
+            results.append({"status": "partial", "root_id": root_id, "message": str(exc)})
+    return {"status": "ok" if all(item.get("status") == "ok" for item in results) else "partial", "roots": results}
+
+
+def manager_all_root_verify_update(manager_root: str | Path) -> dict[str, Any]:
+    roots = list_manager_roots(manager_root)["roots"]
+    results = []
+    for record in roots:
+        if not isinstance(record, dict) or not record.get("enabled", True):
+            continue
+        root_id = str(record.get("root_id", ""))
+        try:
+            results.append(manager_root_verify_update(manager_root, root_id))
+        except Exception as exc:
+            results.append({"root": record, "verify_update": {"status": "partial", "message": str(exc)}})
+    ok = all(item.get("verify_update", {}).get("status") == "ok" for item in results)
+    return {"status": "ok" if ok else "partial", "roots": results}
+
+
+def manager_archive_old_scaffolding(manager_root: str | Path, root_id: str | None = None) -> dict[str, Any]:
+    manager_root = Path(manager_root).resolve()
+    archive_root = manager_root / NODE_DIR_NAME / "manager" / "archives" / f"{utc_now_iso().replace(':', '-')}--old-node-scaffolding"
+    roots = list_manager_roots(manager_root)["roots"]
+    selected = [
+        record for record in roots
+        if isinstance(record, dict)
+        and record.get("enabled", True)
+        and (root_id is None or str(record.get("root_id", "")) == root_id)
+    ]
+    if root_id is not None and not selected:
+        raise KeyError(f"Manager root not found: {root_id}")
+    moved: list[dict[str, Any]] = []
+    for record in selected:
+        project_root = Path(str(record["project_root"])).resolve()
+        paths = node_paths(project_root)
+        per_root_archive = archive_root / str(record.get("root_id", "root"))
+        for key in ("runtime", "start_script", "run_script"):
+            source = paths[key]
+            if not source.exists():
+                moved.append({"root_id": record.get("root_id", ""), "source": str(source), "status": "missing"})
+                continue
+            target = per_root_archive / source.relative_to(project_root)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(source), str(target))
+            moved.append({"root_id": record.get("root_id", ""), "source": str(source), "target": str(target), "status": "moved"})
+    report = {
+        "status": "ok",
+        "generated": utc_now_iso(),
+        "manager_root": str(manager_root),
+        "archive_root": str(archive_root),
+        "root_id": root_id or "",
+        "moved": moved,
+        "preserved": [
+            "switchboard/core",
+            "switchboard/local",
+            "switchboard/evidence",
+            "switchboard/node.manifest.json",
+            "root-level agent contract files",
+        ],
+    }
+    _write_json(archive_root / "archive-report.json", report)
+    (archive_root / "archive-report.md").write_text(
+        "# Switchboard Old Node Scaffolding Archive\n\n"
+        f"- Generated: {report['generated']}\n"
+        f"- Manager root: `{report['manager_root']}`\n"
+        f"- Archive root: `{report['archive_root']}`\n"
+        f"- Moved entries: {len([item for item in moved if item['status'] == 'moved'])}\n"
+        "- Preserved canonical files: core, local, evidence, manifest, and agent files.\n",
+        encoding="utf-8",
+    )
+    return report
+
+
+def manager_safe_action(manager_root: str | Path, action: str, root_id: str | None = None) -> dict[str, Any]:
+    if action == "status":
+        if root_id:
+            return manager_root_health(manager_root, root_id)
+        return manager_all_root_health(manager_root)
+    if action == "snapshot":
+        if root_id:
+            return manager_root_snapshot(manager_root, root_id)
+        return manager_all_root_snapshot(manager_root)
+    if action in {"upgrade", "release-update"}:
+        if root_id:
+            return manager_upgrade_root(manager_root, root_id)
+        return manager_all_root_upgrade(manager_root)
+    if action == "verify-update":
+        if root_id:
+            return manager_root_verify_update(manager_root, root_id)
+        return manager_all_root_verify_update(manager_root)
+    if action == "archive-old-scaffolding":
+        return manager_archive_old_scaffolding(manager_root, root_id=root_id)
+    return {
+        "status": "permission_limited",
+        "message": "Only status, snapshot, upgrade, release-update, verify-update, and archive-old-scaffolding are allowed.",
+        "action": action,
+    }
+
+
 def _manifest_payload(project_root: Path, service_id: str, display_name: str, existing: dict[str, Any] | None = None) -> dict[str, Any]:
     existing = existing or {}
     paths = node_paths(project_root)
@@ -419,6 +1092,7 @@ def _manifest_payload(project_root: Path, service_id: str, display_name: str, ex
         "project_root": str(project_root),
         "mode": "node",
         "installed_version": __version__,
+        "runtime_port": int(existing.get("runtime_port", 8010) or 8010),
         "repo_paths": existing.get("repo_paths", [str(project_root)]),
         "docs_paths": docs_paths,
         "log_paths": existing.get("log_paths", []),
@@ -439,6 +1113,8 @@ def _manifest_payload(project_root: Path, service_id: str, display_name: str, ex
         "dependencies": existing.get("dependencies", []),
         "cross_dependencies": existing.get("cross_dependencies", []),
         "diagram": existing.get("diagram", ""),
+        "design_principles": _effective_principles(_normalize_principles(existing.get("design_principles", {}))),
+        "installed_release": existing.get("installed_release", {}),
         "doc_index": existing.get("doc_index", {"generated": "", "docs": []}),
         "evidence_paths": {
             "completed_tasks": str(paths["completed_tasks_json"].relative_to(project_root)),
@@ -446,6 +1122,7 @@ def _manifest_payload(project_root: Path, service_id: str, display_name: str, ex
             "repo_safety_history": str(paths["repo_safety_history"].relative_to(project_root)),
             "pull_bundle_history": str(paths["pull_bundle_history"].relative_to(project_root)),
             "scope_snapshot": str(paths["scope_snapshot"].relative_to(project_root)),
+            "update_gate": str(paths["update_gate"].relative_to(project_root)),
         },
         "updated_at": utc_now_iso(),
     }
@@ -590,6 +1267,8 @@ def parse_tasks_completed(path: Path) -> list[dict[str, Any]]:
         task_id = ""
         agent = ""
         tool = ""
+        read_back = ""
+        scope_check = ""
         bootstrap_version = ""
         sections: dict[str, list[str]] = {
             "notes": [],
@@ -642,6 +1321,14 @@ def parse_tasks_completed(path: Path) -> list[dict[str, Any]]:
                 tool = line.split(":", 1)[1].strip()
                 current_section = None
                 continue
+            if line.startswith("- Read Back:"):
+                read_back = line.split(":", 1)[1].strip()
+                current_section = None
+                continue
+            if line.startswith("- Scope Check:"):
+                scope_check = line.split(":", 1)[1].strip()
+                current_section = None
+                continue
             if line.startswith("- Bootstrap Version:"):
                 bootstrap_version = line.split(":", 1)[1].strip()
                 current_section = None
@@ -691,6 +1378,8 @@ def parse_tasks_completed(path: Path) -> list[dict[str, Any]]:
                 "task_id": task_id or None,
                 "agent": agent,
                 "tool": tool,
+                "read_back": read_back,
+                "scope_check": scope_check,
                 "bootstrap_version": bootstrap_version,
                 "notes": [line for line in sections["notes"] if line.strip()],
                 "scope_entries": _normalize_scope_lines(sections["scope"]),
@@ -728,6 +1417,10 @@ def _render_entry(entry: dict[str, Any]) -> str:
         lines.append(f"- Agent: {entry['agent']}")
     if entry.get("tool"):
         lines.append(f"- Tool: {entry['tool']}")
+    if entry.get("read_back"):
+        lines.append(f"- Read Back: {entry['read_back']}")
+    if entry.get("scope_check"):
+        lines.append(f"- Scope Check: {entry['scope_check']}")
     if entry.get("version"):
         lines.append(f"- Version: {entry['version']}")
     if entry.get("bootstrap_version"):
@@ -917,6 +1610,13 @@ def install_node(project_root: str | Path, service_id: str | None = None, displa
 
     for filename, content in _core_templates(service_id, display_name).items():
         _write_text(paths["core"] / filename, content)
+    principle_layers = manifest.get("design_principles", _effective_principles())
+    agent_contract_files = _write_agent_contract_files(project_root, service_id, display_name, principle_layers.get("project", []))
+    manifest["agent_contract"] = {
+        "version": AGENT_CONTRACT_VERSION,
+        "files": agent_contract_files,
+    }
+    _write_json(paths["manifest"], manifest)
 
     _write_executable(paths["start_script"], _node_start_script(project_root))
     _write_executable(paths["run_script"], _node_start_script(project_root))
@@ -937,6 +1637,8 @@ def install_node(project_root: str | Path, service_id: str | None = None, displa
         _write_json(paths["pull_bundle_history"], {"generated": "", "bundles": []})
     if not paths["scope_snapshot"].exists():
         _write_json(paths["scope_snapshot"], _evidence_defaults(service_id, project_root, manifest))
+    if not paths["update_gate"].exists():
+        _write_json(paths["update_gate"], {"generated": "", "status": "not_run", "checks": []})
 
     snapshot = snapshot_node(project_root)
     return {"project_root": str(project_root), "node_root": str(paths["node_root"]), "manifest": snapshot["manifest"]}
@@ -958,6 +1660,26 @@ def snapshot_node(project_root: str | Path) -> dict[str, Any]:
         install_node(project_root)
 
     manifest = load_node_manifest(project_root)
+    service_id = str(manifest.get("service_id") or slugify(project_root.name))
+    display_name = str(manifest.get("display_name") or _default_display_name(service_id))
+    principle_layers = _effective_principles(_normalize_principles(manifest.get("design_principles", {})))
+    manifest["design_principles"] = principle_layers
+    agent_contract_files = _write_agent_contract_files(project_root, service_id, display_name, principle_layers.get("project", []))
+    manifest["agent_contract"] = {
+        "version": AGENT_CONTRACT_VERSION,
+        "files": agent_contract_files,
+    }
+    evidence_paths = manifest.setdefault("evidence_paths", {})
+    evidence_paths.update(
+        {
+            "completed_tasks": str(paths["completed_tasks_json"].relative_to(project_root)),
+            "doc_index": str(paths["doc_index_json"].relative_to(project_root)),
+            "repo_safety_history": str(paths["repo_safety_history"].relative_to(project_root)),
+            "pull_bundle_history": str(paths["pull_bundle_history"].relative_to(project_root)),
+            "scope_snapshot": str(paths["scope_snapshot"].relative_to(project_root)),
+            "update_gate": str(paths["update_gate"].relative_to(project_root)),
+        }
+    )
     tasks = parse_tasks_completed(paths["tasks_completed"])
     tasks_json = {
         "generated": utc_now_iso(),
@@ -1121,6 +1843,169 @@ def snapshot_node(project_root: str | Path) -> dict[str, Any]:
         "scope_snapshot": scope_snapshot,
         "doc_index": doc_index,
     }
+
+
+def _parse_iso_datetime(value: str) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _scope_path_is_suspicious(path: str) -> bool:
+    token = str(path).replace("\\", "/").lower().rstrip("/")
+    parts = [part for part in token.split("/") if part]
+    basename = parts[-1] if parts else token
+    if basename == ".env":
+        return True
+    if basename.startswith(".env.") and basename not in {".env.example", ".env.sample", ".env.template"}:
+        return True
+    suspicious_tokens = (
+        "/venv",
+        "/.venv",
+        "node_modules",
+        "/logs",
+        "logs/",
+        "switchboard/runtime",
+        "/runtime",
+        "__pycache__",
+        ".pytest_cache",
+        ".npm-cache",
+        "/build",
+        "/dist",
+        "/cache",
+    )
+    return any(item in token for item in suspicious_tokens)
+
+
+def verify_node_update(project_root: str | Path, write: bool = True) -> dict[str, Any]:
+    project_root = Path(project_root).resolve()
+    paths = node_paths(project_root)
+    checks: list[dict[str, Any]] = []
+
+    def add_check(check_id: str, ok: bool, message: str) -> None:
+        checks.append({"check_id": check_id, "status": "ok" if ok else "failed", "message": message})
+
+    manifest = _read_json(paths["manifest"], {}) if paths["manifest"].exists() else {}
+    tasks = parse_tasks_completed(paths["tasks_completed"])
+    latest = tasks[-1] if tasks else None
+    latest_timestamp = str(latest.get("timestamp", "")) if latest else ""
+    latest_dt = _parse_iso_datetime(latest_timestamp)
+
+    add_check("tasks_completed_exists", paths["tasks_completed"].exists(), "Canonical task ledger exists.")
+    add_check("latest_task_exists", latest is not None, "At least one task entry exists.")
+
+    if latest:
+        missing = [
+            label
+            for label, present in (
+                ("Tags", bool(latest.get("tags"))),
+                ("Summary", bool(latest.get("summary"))),
+                ("Changed Paths", bool(latest.get("changed_paths"))),
+                ("Agent", bool(latest.get("agent"))),
+                ("Tool", bool(latest.get("tool"))),
+                ("Read Back", bool(latest.get("read_back"))),
+                ("Scope Check", bool(latest.get("scope_check"))),
+            )
+            if not present
+        ]
+        add_check(
+            "latest_task_required_fields",
+            not missing,
+            "Latest task has required fields." if not missing else f"Latest task is missing: {', '.join(missing)}.",
+        )
+        changed_paths = [str(item).replace("\\", "/") for item in latest.get("changed_paths", [])]
+        ledger_changed = any(path == "switchboard/local/tasks-completed.md" or path.endswith("/switchboard/local/tasks-completed.md") for path in changed_paths)
+        add_check("ledger_recorded_as_changed", ledger_changed, "Latest task records the canonical ledger as changed.")
+        if "scope" in latest.get("tags", []):
+            add_check("scope_tag_has_entries", bool(latest.get("scope_entries")), "Scope-tagged tasks include Scope Entries.")
+    else:
+        add_check("latest_task_required_fields", False, "No latest task to validate.")
+        add_check("ledger_recorded_as_changed", False, "No latest task to validate.")
+
+    for check_id, path in (
+        ("manifest_exists", paths["manifest"]),
+        ("completed_tasks_json_exists", paths["completed_tasks_json"]),
+        ("scope_snapshot_exists", paths["scope_snapshot"]),
+    ):
+        add_check(check_id, path.exists(), f"{path.relative_to(project_root)} exists.")
+
+    if latest_dt is None:
+        add_check("latest_timestamp_parseable", False, "Latest task timestamp is not parseable ISO datetime.")
+    else:
+        add_check("latest_timestamp_parseable", True, "Latest task timestamp is parseable.")
+        freshness_sources = (
+            ("manifest_fresh", paths["manifest"], "updated_at"),
+            ("completed_tasks_json_fresh", paths["completed_tasks_json"], "generated"),
+            ("scope_snapshot_fresh", paths["scope_snapshot"], "generated"),
+        )
+        for check_id, path, field in freshness_sources:
+            payload = _read_json(path, {}) if path.exists() else {}
+            generated_dt = _parse_iso_datetime(str(payload.get(field, "")))
+            add_check(
+                check_id,
+                bool(generated_dt and generated_dt >= latest_dt),
+                f"{path.relative_to(project_root)} is newer than the latest task entry.",
+            )
+
+    scope_snapshot = _read_json(paths["scope_snapshot"], {}) if paths["scope_snapshot"].exists() else {}
+    scope_entries = scope_snapshot.get("scope_entries", [])
+    add_check("scope_entries_present", bool(scope_entries), "Scope snapshot has at least one scope entry.")
+    suspicious = [
+        str(entry.get("path", ""))
+        for entry in scope_entries
+        if isinstance(entry, dict)
+        and entry.get("enabled", True)
+        and str(entry.get("kind", "")) in {"repo", "doc"}
+        and _scope_path_is_suspicious(str(entry.get("path", "")))
+    ]
+    add_check(
+        "scope_entries_safe",
+        not suspicious,
+        "No suspicious enabled pull entries." if not suspicious else f"Suspicious enabled pull entries: {', '.join(suspicious[:8])}.",
+    )
+
+    required_agent_paths = [
+        paths["agent_contract_md"],
+        paths["agent_contract_json"],
+        paths["agents_md"],
+        paths["claude_md"],
+        paths["gemini_md"],
+        paths["qwen_md"],
+        paths["gemini_settings"],
+        paths["qwen_settings"],
+        paths["opencode_config"],
+        paths["opencode_agent"],
+    ]
+    missing_agent_files = [str(path.relative_to(project_root)) for path in required_agent_paths if not path.exists()]
+    add_check(
+        "agent_contract_files_present",
+        not missing_agent_files,
+        "All Switchboard agent contract files exist." if not missing_agent_files else f"Missing agent contract files: {', '.join(missing_agent_files)}.",
+    )
+
+    status = "ok" if all(check["status"] == "ok" for check in checks) else "incomplete"
+    result = {
+        "generated": utc_now_iso(),
+        "status": status,
+        "service_id": manifest.get("service_id", ""),
+        "project_root": str(project_root),
+        "latest_task": {
+            "timestamp": latest_timestamp,
+            "title": latest.get("title", "") if latest else "",
+            "agent": latest.get("agent", "") if latest else "",
+            "tool": latest.get("tool", "") if latest else "",
+        },
+        "checks": checks,
+    }
+    if write:
+        _write_json(paths["update_gate"], result)
+    return result
 
 
 def resolve_static_app_dir() -> Path | None:

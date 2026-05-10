@@ -13,6 +13,11 @@ export function ServiceCard({ service, result, onClick }: Props) {
   const ports = result?.ports ?? []
   const firewallActive = result?.firewall_active ?? false
   const dirty = result?.repo_summaries?.some((r) => r.dirty) ?? false
+  const nodeViewer = service.node_viewer?.[0]
+  const rootManifestVersion = nodeViewer?.installed_version || ''
+  const managerVersion = nodeViewer?.manager_version || ''
+  const managerManaged = Boolean(nodeViewer?.manager_managed)
+  const rootManifestStale = Boolean(managerManaged && managerVersion && rootManifestVersion && managerVersion !== rootManifestVersion)
 
   return (
     <button
@@ -46,8 +51,33 @@ export function ServiceCard({ service, result, onClick }: Props) {
         </div>
       )}
 
+      {nodeViewer && (
+        <div className="mb-3 flex flex-wrap gap-1">
+          <span className="text-xs px-2 py-0.5 rounded border border-cyan-900/40 bg-cyan-950/20 text-cyan-200">
+            {service.execution_mode}
+          </span>
+          <span className={`text-xs px-2 py-0.5 rounded border ${
+            rootManifestStale || nodeViewer.needs_install || nodeViewer.needs_upgrade
+              ? 'border-amber-700 bg-amber-950/30 text-amber-200'
+              : managerManaged
+                ? 'border-cyan-900/40 bg-cyan-950/20 text-cyan-200'
+                : 'border-gray-800 bg-gray-900 text-gray-400'
+          }`}>
+            {managerManaged ? `manager ${managerVersion || 'active'}` : `node ${rootManifestVersion || 'missing'}`}
+          </span>
+          {rootManifestStale && (
+            <span className="text-xs px-2 py-0.5 rounded border border-amber-700 bg-amber-950/30 text-amber-200">
+              root manifest {rootManifestVersion}
+            </span>
+          )}
+          <span className="text-xs px-2 py-0.5 rounded border border-gray-800 bg-gray-900 text-gray-400">
+            bootstrap {nodeViewer.bootstrap_version || 'pending'}
+          </span>
+        </div>
+      )}
+
       {/* Ports */}
-      {ports.length > 0 && (
+      {service.execution_mode === 'networked' && ports.length > 0 && (
         <div className="flex flex-wrap gap-1 mb-2">
           {ports.map((p) => (
             <span key={p.port} className="text-xs font-mono bg-gray-800 text-cyan-400 px-2 py-0.5 rounded">
@@ -69,7 +99,7 @@ export function ServiceCard({ service, result, onClick }: Props) {
             <GitBranch className="w-3 h-3" /> Dirty
           </span>
         )}
-        {result && (
+        {result?.collected_at && !isNaN(new Date(result.collected_at).getTime()) && (
           <span className="ml-auto text-xs text-gray-600">
             {new Date(result.collected_at).toLocaleTimeString()}
           </span>

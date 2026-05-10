@@ -9,13 +9,12 @@
     "favorite_tier": "primary",
     "servers": [
       "local_mac",
-      "zapp_test_114",
-      "zapp_prod_253"
+      "zapp_prod_253",
+      "zapp_test_114"
     ],
     "services": [
-      "docgenerator",
-      "lambdalogger",
-      "zapplambda"
+      "lambdascripts",
+      "lambdalogger"
     ],
     "notes": "Seed workspace for document generation, lambda logging, and lambda source lanes."
   },
@@ -32,9 +31,45 @@
       "pesu_dev_47"
     ],
     "services": [
-      "e",
-      "aichat"
+      "aichat",
+      "sys_docs",
+      "emailagent",
+      "compareanswers",
+      "aichat_test",
+      "ingest_service",
+      "adminchat",
+      "rag",
+      "aichat_ingestion",
+      "adaptive"
     ],
     "notes": "Seed workspace for the first named PESU lanes only."
+  },
+  {
+    "workspace_id": "1",
+    "name": "P",
+    "tags": [
+      "company"
+    ],
+    "favorite_tier": "primary",
+    "servers": [],
+    "services": [
+      "switch",
+      "finance",
+      "syspriv"
+    ],
+    "notes": "moi"
+  },
+  {
+    "workspace_id": "4",
+    "name": "excelcare",
+    "tags": [
+      "company"
+    ],
+    "favorite_tier": "primary",
+    "servers": [],
+    "services": [
+      "c"
+    ],
+    "notes": "pesu hospitals."
   }
 ]

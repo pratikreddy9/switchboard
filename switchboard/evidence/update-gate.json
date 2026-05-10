@@ -1,0 +1,89 @@
+{
+  "generated": "2026-05-05T07:29:38+00:00",
+  "status": "ok",
+  "service_id": "switch",
+  "project_root": "/Users/p/Desktop/dashboard",
+  "latest_task": {
+    "timestamp": "2026-05-05T07:24:34Z",
+    "title": "Release manager-wide normalization",
+    "agent": "Codex",
+    "tool": "codex-desktop"
+  },
+  "checks": [
+    {
+      "check_id": "tasks_completed_exists",
+      "status": "ok",
+      "message": "Canonical task ledger exists."
+    },
+    {
+      "check_id": "latest_task_exists",
+      "status": "ok",
+      "message": "At least one task entry exists."
+    },
+    {
+      "check_id": "latest_task_required_fields",
+      "status": "ok",
+      "message": "Latest task has required fields."
+    },
+    {
+      "check_id": "ledger_recorded_as_changed",
+      "status": "ok",
+      "message": "Latest task records the canonical ledger as changed."
+    },
+    {
+      "check_id": "scope_tag_has_entries",
+      "status": "ok",
+      "message": "Scope-tagged tasks include Scope Entries."
+    },
+    {
+      "check_id": "manifest_exists",
+      "status": "ok",
+      "message": "switchboard/node.manifest.json exists."
+    },
+    {
+      "check_id": "completed_tasks_json_exists",
+      "status": "ok",
+      "message": "switchboard/evidence/completed-tasks.json exists."
+    },
+    {
+      "check_id": "scope_snapshot_exists",
+      "status": "ok",
+      "message": "switchboard/evidence/scope.snapshot.json exists."
+    },
+    {
+      "check_id": "latest_timestamp_parseable",
+      "status": "ok",
+      "message": "Latest task timestamp is parseable."
+    },
+    {
+      "check_id": "manifest_fresh",
+      "status": "ok",
+      "message": "switchboard/node.manifest.json is newer than the latest task entry."
+    },
+    {
+      "check_id": "completed_tasks_json_fresh",
+      "status": "ok",
+      "message": "switchboard/evidence/completed-tasks.json is newer than the latest task entry."
+    },
+    {
+      "check_id": "scope_snapshot_fresh",
+      "status": "ok",
+      "message": "switchboard/evidence/scope.snapshot.json is newer than the latest task entry."
+    },
+    {
+      "check_id": "scope_entries_present",
+      "status": "ok",
+      "message": "Scope snapshot has at least one scope entry."
+    },
+    {
+      "check_id": "scope_entries_safe",
+      "status": "ok",
+      "message": "No suspicious enabled pull entries."
+    },
+    {
+      "check_id": "agent_contract_files_present",
+      "status": "ok",
+      "message": "All Switchboard agent contract files exist."
+    }
+  ]
+}
